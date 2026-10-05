@@ -1,0 +1,10 @@
+# 1:1 mixing only, for comparison with DMFB literature (SPEC 5.2).
+name: dmfb_m2
+max_mix_volume: 2
+min_mix_volume: 2
+unit_volume: 1
+min_droplet_volume: 1
+allow_partial_take: true
+storage_capacity: 10
+max_denominator: 256
+allow_same_composition_merge: false

@@ -1,0 +1,4 @@
+benchmark: tiny_exact_v1
+deterministic: true           # argmax; set false for sampling
+best_of_k: 1
+baselines: [naive]

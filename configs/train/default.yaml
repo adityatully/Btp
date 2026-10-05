@@ -1,0 +1,5 @@
+device: cuda                  # training runs on the RTX A5000 workstation
+log_dir: tensorboard
+use_wandb: false
+checkpoint_every_updates: 50
+eval_every_updates: 50

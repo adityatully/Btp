@@ -1,0 +1,15 @@
+# Curriculum stage 1: dilution, one target, M = 2 (DMFB-like), small accuracy (SPEC 8.3).
+defaults:
+  - override /chip@_global_.chip: dmfb_m2
+
+name: tiny_dilution
+num_fluids: {samples: 1, reagents: 0, buffers: 1}
+num_experiments: [1, 1]
+targets_per_experiment: [1, 1]
+composition_sampler: dirichlet_snapped
+accuracy_denominator: 16
+support_size: 2
+demand: [1, 1]
+droplet_volume: 1
+tolerance: 0
+step_limit: 16

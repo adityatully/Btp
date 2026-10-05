@@ -1,0 +1,14 @@
+outputs/
+multirun/
+wandb/
+.venv/
+__pycache__/
+*.py[cod]
+*.ckpt
+*.pt
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.hypothesis/
+.ipynb_checkpoints/
+.DS_Store

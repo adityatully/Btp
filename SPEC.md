@@ -1,0 +1,927 @@
+# MEDA Design Automation — Codebase Specification
+
+Version 0.4 · 2026-10-06
+
+Changes in 0.4 (M3): env constructor, episode-end semantics and info keys (9.1); observation
+dtypes and row layout (9.2); exact feature definitions (9.3); Mix sources listed in canonical
+order (5.6); `SolveResult` fields and the `failed` status (10.1); `dilution_grid` (8.1); the
+`slow` test marker (17).
+
+Changes in 0.3 (M2): DAG builder, validator modes and check names, JSON `format` key (7.1–7.4).
+
+Changes in 0.2 (M1): exact rational cost weights (6.3); `Output` may take from a reservoir and
+uses `Source` (5.5); partial-take rule applies to outputs and equivalent actions are listed once
+(5.6); shared id counter for droplet uids and DAG node ids (5.4, 7.1); `check_legal`,
+`terminal_status`, `replay` (5.7, 5.8); `unit_volume` is informational (5.2).
+
+This document specifies the research codebase for RL-based design automation of MEDA
+(Micro-Electrode-Dot-Array) digital microfluidic biochips. The first and current target is
+the **sample-preparation agent**: given fluids and target mixtures for many experiments,
+produce one mixing DAG (with shared intermediates) that meets every target at low cost.
+Later stages (scheduling, routing, washing, and a full-chip cost oracle) get their own
+packages; their place is reserved here but they are not built yet.
+
+Read sections 1–5 before writing any code. Implement in the milestone order of section 16.
+
+---
+
+## 1. Goals and non-goals
+
+### Goals
+1. An **exact rules engine** for MEDA sample preparation: integer volumes, exact rational
+   compositions, k:l mixing with k + l ≤ M, storage limits. No floating point in the rules.
+2. A **Gymnasium-compatible environment** on top of it, with action masking, for training
+   RL agents over a distribution of problems.
+3. A **problem generator** (the start-state distribution p(s₀)) and **versioned benchmark sets**.
+4. **Reference solvers**: an exact search for small instances (the "answer key") and classical
+   baselines behind one interface.
+5. **Agents**: random, tabular Q-learning (tiny instances), PPO with a permutation-invariant
+   set encoder and masked candidate scoring. Room for MCTS / AlphaZero-style search later.
+6. An **evaluation harness** that compares any agent or baseline on any benchmark set with the
+   same metrics.
+7. A **shared mixing-DAG format** that every solver and agent outputs, and that later stages
+   (scheduler, router) will consume.
+
+### Non-goals (for now)
+- No grid, droplet positions, routing, electrode degradation, contamination or runtime faults
+  inside the sample-prep environment. Those belong to later packages.
+- No hardware interface.
+- No hyperparameter-tuning framework beyond config overrides.
+
+---
+
+## 2. Hard design rules (apply everywhere)
+
+1. **The environment does all arithmetic. The network only scores.** Compositions, volumes,
+   feasibility, costs and resulting states are computed exactly in `meda.core`. Networks never
+   compute a ratio.
+2. **No floats in `meda.core`.** Compositions are exact rationals (integer numerators over a
+   common integer denominator). Floats appear only when building observations for networks.
+3. **No `torch` (or any ML library) import in `meda.core`, `meda.generators`, `meda.solvers`.**
+   These must be usable by classical code and tests without a GPU.
+4. **Hard constraints are enforced by masking, never by reward penalties.** An illegal action
+   must be impossible to select.
+5. **Core state is immutable and hashable; transitions are pure functions.**
+   `apply(state, action) -> (next_state, step_cost)` with no hidden side effects. This is
+   required for exact search, tabular methods, MCTS and caching.
+6. **Determinism.** Same instance + same action sequence → same states and costs, bit for bit.
+   All randomness goes through a passed-in `numpy.random.Generator`.
+7. **Every solver and agent outputs the same `MixingDAG` format** (section 7), validated by the
+   same validator.
+8. **Every open physical assumption is a config value**, not a constant in code (section 15).
+9. **Permutation invariance.** Droplet order and target order carry no meaning. Canonical
+   ordering is used only for hashing and for stable candidate indexing.
+
+---
+
+## 3. Technology stack
+
+Python 3.11 or newer. Use the latest stable releases at setup time; pin them in the lock file.
+
+| Purpose | Library | Notes |
+| --- | --- | --- |
+| Environment manager | `uv` | `pyproject.toml` + `uv.lock`. Plain pip also works |
+| Arrays | `numpy` | Observations, vectorised features |
+| Exact arithmetic | Python `int` / `math.gcd` | Arbitrary precision; no `fractions.Fraction` in hot paths (slow) |
+| Env API | `gymnasium` (1.x) | `reset`, `step`, `Dict` observation, `Discrete` action |
+| Deep learning | `torch` | CUDA build matching the workstation driver (RTX A5000) |
+| Config | `hydra-core`, `omegaconf` | Composable YAML configs, command-line overrides, multirun sweeps |
+| Logging | `tensorboard` | Default |
+| Experiment tracking | `wandb` | Optional, off by default |
+| Results | `pandas`, `pyarrow` | Results tables as Parquet |
+| Plots | `matplotlib` | |
+| DAG utilities | `networkx` | Validation, topological order, critical path. Not used in the env hot path |
+| Console | `rich`, `tqdm` | |
+| Tests | `pytest`, `hypothesis` | Property-based tests for conservation and exactness |
+| Lint / format | `ruff` | |
+| Types | `mypy` (or `pyright`) | Strict on `meda.core` |
+| Hooks | `pre-commit` | ruff + mypy + pytest -q on core |
+| Optional baseline trainer | `sb3-contrib` (`MaskablePPO`) | Works because the action is `Discrete` + mask (section 9). The main PPO is in-house |
+| Optional speed-up (later) | `numba` | Only after profiling shows a need |
+
+Why an in-house PPO (CleanRL style) and not only Stable-Baselines3: the policy must score a
+variable list of candidate actions using pointer-style gathers from a set encoder. That is
+simpler to write and debug in a short, single-purpose implementation. `MaskablePPO` is kept as
+an optional cross-check.
+
+---
+
+## 4. Repository layout
+
+```
+meda-da/
+├── CLAUDE.md                  # rules for Claude Code (short; points here)
+├── SPEC.md                    # this document
+├── README.md                  # how to install, run, test
+├── pyproject.toml
+├── uv.lock
+├── .pre-commit-config.yaml
+├── .gitignore                 # outputs/, wandb/, .venv/, __pycache__/, *.ckpt
+├── configs/
+│   ├── config.yaml            # Hydra root: defaults list
+│   ├── chip/                  # physical limits (section 5.2)
+│   │   ├── meda_m8.yaml
+│   │   └── dmfb_m2.yaml       # 1:1 mixing only, for comparison with DMFB literature
+│   ├── costs/
+│   │   └── default.yaml       # cost weights (section 6.5)
+│   ├── generator/             # p(s0) definitions (section 8)
+│   │   ├── tiny_dilution.yaml
+│   │   ├── dilution_multi.yaml
+│   │   ├── mixture_single.yaml
+│   │   └── mixture_multi.yaml
+│   ├── env/
+│   │   └── sample_prep.yaml   # padding sizes, step limit, observation options
+│   ├── agent/
+│   │   ├── random.yaml
+│   │   ├── tabular_q.yaml
+│   │   └── ppo.yaml
+│   ├── train/
+│   │   └── default.yaml
+│   └── eval/
+│       └── default.yaml
+├── benchmarks/                # versioned instance sets (section 8.4), JSON
+│   └── README.md
+├── src/meda/
+│   ├── __init__.py
+│   ├── core/                  # exact rules; no ML imports
+│   │   ├── composition.py     # exact rational composition vectors
+│   │   ├── fluids.py          # Fluid, FluidKind
+│   │   ├── chip.py            # ChipLimits
+│   │   ├── problem.py         # Target, Experiment, Instance
+│   │   ├── state.py           # Droplet, PrepState (immutable, hashable)
+│   │   ├── actions.py         # Mix, Output, Discard (+ canonical keys)
+│   │   ├── rules.py           # legal_actions(), apply(), is_terminal()
+│   │   ├── costs.py           # CostWeights, StepCost, cost accounting
+│   │   ├── dag.py             # MixingDAG, builder, validator, JSON I/O
+│   │   └── noise.py           # NoiseModel interface (phase 2); NoNoise default
+│   ├── envs/
+│   │   ├── sample_prep_env.py # Gymnasium env
+│   │   ├── encoding.py        # state -> padded numpy observation; candidate features
+│   │   └── wrappers.py        # episode stats, curriculum hook, preference weights
+│   ├── generators/
+│   │   ├── sampler.py         # random instances from a generator config
+│   │   ├── synthetic.py       # forward-built instances with a known feasible plan
+│   │   ├── curriculum.py      # staged difficulty schedule
+│   │   └── benchmark_io.py    # read/write versioned benchmark files
+│   ├── solvers/
+│   │   ├── base.py            # Solver protocol
+│   │   ├── exact_search.py    # uniform-cost / A* over canonical states
+│   │   ├── fallback.py        # cheap cost-to-finish estimate (truncation penalty)
+│   │   └── baselines/
+│   │       ├── naive.py       # each target built independently
+│   │       ├── bitscan.py     # 1:1 binary dilution (DMFB classic)
+│   │       └── facda.py       # factorisation-based MEDA dilution (from the paper)
+│   ├── agents/
+│   │   ├── base.py            # Agent protocol
+│   │   ├── random_agent.py
+│   │   ├── tabular_q.py
+│   │   ├── ppo/
+│   │   │   ├── networks.py    # set encoder, candidate scorer, value head
+│   │   │   ├── policy.py      # masked categorical over candidates
+│   │   │   ├── rollout.py     # buffer, GAE
+│   │   │   └── ppo.py         # update loop
+│   │   └── mcts/              # reserved; AlphaZero-style search (milestone 9)
+│   ├── analysis/
+│   │   ├── dag_metrics.py     # proxy and structural metrics of a DAG (section 12)
+│   │   ├── evaluate.py        # run solver/agent on a benchmark -> results table
+│   │   ├── compare.py         # tables: gaps to optimum and to baselines
+│   │   └── plots.py
+│   ├── pipeline/              # reserved for later stages; interfaces only (section 14)
+│   │   └── interfaces.py
+│   ├── utils/
+│   │   ├── seeding.py
+│   │   ├── logging.py
+│   │   └── checkpoint.py
+│   ├── train.py               # Hydra entry point for training
+│   └── evaluate_cli.py        # Hydra entry point for evaluation
+├── scripts/
+│   ├── profile_env.py         # env steps per second
+│   └── make_benchmark.py      # build and freeze a benchmark set
+├── tests/
+│   ├── core/
+│   ├── envs/
+│   ├── generators/
+│   ├── solvers/
+│   ├── agents/
+│   └── analysis/
+├── notebooks/                 # exploration only; never imported by src/
+└── outputs/                   # Hydra run directories (gitignored)
+```
+
+---
+
+## 5. Domain model (`meda.core`)
+
+### 5.1 Fluids and compositions
+
+**Fluid** (`fluids.py`), frozen dataclass:
+- `id: int` — index 0..F−1 within an instance.
+- `name: str`
+- `kind: FluidKind` — `SAMPLE`, `REAGENT`, `BUFFER`.
+
+**Composition** (`composition.py`): an exact point on the probability simplex over the F fluids
+of an instance.
+- Stored as `num: tuple[int, ...]` (length F, all ≥ 0) and `den: int` (> 0), with
+  `sum(num) == den` and `gcd(*num, den) == 1` (canonical, reduced form).
+- Constructors: `pure(fluid_id, F)`, `from_ints(num, den)` (reduces), `from_ratio(parts)`
+  (e.g. `(2, 1, 1)` → 2/4, 1/4, 1/4).
+- `mix(c1, k, c2, l) -> Composition`: exact `(k·c1 + l·c2) / (k + l)`, reduced.
+- `linf_distance(c1, c2) -> Rational`: max over fluids of |c1_f − c2_f|, returned as an exact
+  `Rational`. Never a float.
+- `Rational` (same module): reduced fraction with positive denominator; `+ − ×`, comparisons,
+  `Rational.parse` for config values (int, `"a/b"`, decimal string, or float read through its
+  shortest decimal repr, so `0.1` → 1/10). `float(r)` exists only for observations and rewards.
+- `to_float_array() -> np.ndarray`: only for observations.
+- Hashable and totally ordered (for canonical sorting).
+
+### 5.2 Chip limits
+
+**ChipLimits** (`chip.py`), frozen, loaded from `configs/chip/*.yaml`:
+
+| Field | Meaning | Default (meda_m8) |
+| --- | --- | --- |
+| `max_mix_volume` (M) | Largest volume one mix may produce: k + l ≤ M | 8 |
+| `min_mix_volume` | Smallest mix volume | 2 |
+| `unit_volume` | Volume unit (all volumes are integers in this unit). Informational: the core only counts units | 1 |
+| `min_droplet_volume` | Smallest droplet allowed after any take or split | 1 |
+| `allow_partial_take` | A mix may take k < v units from a droplet of volume v (the rest stays as a droplet) | true |
+| `storage_capacity` | Max number of non-reservoir droplets on chip after any action | 10 |
+| `max_denominator` | Mixes whose result denominator exceeds this are illegal (sets the accuracy level) | 256 |
+| `allow_same_composition_merge` | Allow merging two droplets of equal composition (volume consolidation) | false |
+
+`dmfb_m2.yaml` sets `max_mix_volume: 2`, `min_mix_volume: 2` (1:1 only) for comparison with
+DMFB methods.
+
+### 5.3 Problem instance
+
+**Target** (`problem.py`), frozen:
+- `id: int`
+- `experiment_id: int`
+- `composition: Composition` — the desired ratio vector.
+- `tolerance: Rational` — satisfied if `linf_distance(droplet, target) ≤ tolerance`.
+- `droplet_volume: int` — volume of each delivered droplet, in units.
+- `demand: int` — number of droplets required.
+
+**Instance**, frozen:
+- `instance_id: str`
+- `fluids: tuple[Fluid, ...]`
+- `targets: tuple[Target, ...]`
+- `chip: ChipLimits`
+- `step_limit: int`
+- `metadata: dict` — generator name, seed, generator version, optional known upper bound.
+- JSON round-trip (`to_json`, `from_json`); compositions stored as `{"num": [...], "den": d}`.
+
+### 5.4 State
+
+**Droplet**, frozen:
+- `uid: int` — unique within an episode, assigned in creation order (stable ids for the DAG).
+- `composition: Composition`
+- `volume: int`
+- `dag_node: int` — the DAG node that produced it.
+
+**Reservoirs** are not droplets in the state. Each fluid f is an implicit source with unlimited
+volume and composition `pure(f)`. Actions refer to a reservoir by `Source.reservoir(f)` and to a
+droplet by `Source.droplet(uid)`. Reservoirs never count toward storage.
+
+**PrepState**, frozen and hashable:
+- `droplets: tuple[Droplet, ...]` — kept sorted canonically (by composition, then volume,
+  then uid).
+- `remaining_demand: tuple[int, ...]` — per target.
+- `step: int`
+- `next_uid: int`
+- **Ids:** droplet uids and DAG node ids share one counter, `next_uid`. Reservoir f is DAG node
+  f, so `next_uid` starts at F. Every new MIX, OUTPUT or WASTE node takes the next value; a
+  droplet made by a Mix has `uid == dag_node`. A droplet reduced by a partial take keeps its uid
+  and node.
+- `canonical_key() -> tuple` — multiset of `(composition, volume)` (uids dropped) +
+  `remaining_demand`. Two states with the same key are the same decision situation. Used by
+  exact search, tabular Q and caches. `step` is excluded unless the step limit is binding;
+  provide `canonical_key(include_step: bool)`.
+
+### 5.5 Actions
+
+Three action types (`actions.py`), frozen dataclasses:
+
+1. **Mix(a: Source, k: int, b: Source, l: int)** — take k units from source a and l units from
+   source b, merge and mix. Creates one new droplet of volume k + l and composition
+   `mix(c_a, k, c_b, l)`. A taken droplet's remaining volume (v − k) stays on chip as the same
+   droplet with reduced volume; if it becomes 0, the droplet is removed.
+2. **Output(src: Source, t: target_id)** — deliver `droplet_volume(t)` units of `src` to target
+   t. `src` is a droplet, or a reservoir when the target is that pure fluid within tolerance.
+   Decrements `remaining_demand[t]` by 1. Remainder stays on chip (or is removed if 0).
+3. **Discard(d: uid)** — send the whole droplet d to waste.
+
+Each action has a `canonical_key()` that does not use droplet uids (it uses the referenced
+droplets' `(composition, volume)` plus k, l, target). Tabular methods key on this, never on a
+list index.
+
+Not included in v1 (add only by changing this spec): explicit `Split`, explicit `Dispense`
+(dispensing is implicit in taking from a reservoir), `Store` (storing is implicit: any droplet
+on chip is stored).
+
+### 5.6 Legality (`rules.legal_actions(state, instance) -> tuple[Action, ...]`)
+
+A **Mix(a, k, b, l)** is legal iff all hold:
+- a ≠ b (as sources); a reservoir may not be mixed with the same reservoir.
+- k ≥ 1, l ≥ 1, `min_mix_volume ≤ k + l ≤ max_mix_volume`.
+- For a droplet source with volume v: k ≤ v, and if k < v then `allow_partial_take` is true and
+  v − k ≥ `min_droplet_volume`.
+- The result composition's denominator ≤ `max_denominator`.
+- Storage after the action ≤ `storage_capacity` (count: existing droplets − droplets fully
+  consumed + 1).
+- If `chip.allow_same_composition_merge` is false (default), the result must differ in
+  composition from both sources (no pure merges of equal compositions). Set it to true if plans
+  need to combine two small droplets of the same composition into a larger one.
+- Symmetry: Mix(a, k, b, l) and Mix(b, l, a, k) are the same action. Enumerate only the
+  canonical one: sources in canonical key order, where droplet keys `("D", composition,
+  volume)` sort before reservoir keys `("R", fluid_id)`; for two identical droplets, k ≤ l.
+
+An **Output(src, t)** is legal iff `remaining_demand[t] > 0`, droplet volume ≥ `droplet_volume(t)`,
+and `linf_distance(c_src, c_t) ≤ tolerance(t)`. Taking fewer units than the droplet holds follows
+the same partial-take rule as Mix (`allow_partial_take`, remainder ≥ `min_droplet_volume`).
+Output directly from a reservoir is allowed if the target is a pure fluid within tolerance.
+
+A **Discard(d)** is legal for any droplet on chip.
+
+No action is legal once all demand is met or `step == step_limit`.
+
+**Equivalent actions are listed once.** Two droplets with the same `(composition, volume)` make
+actions with the same canonical key; only the one using the smaller uid is enumerated (`apply`
+still accepts the other, with the same canonical result).
+
+**Order of the returned tuple is canonical and deterministic** (Output actions first, then Mix,
+then Discard; each group sorted by canonical key). The environment's candidate index i refers to
+position i.
+
+Legality is defined once, by predicates shared by `legal_actions` and `check_legal(state,
+action, instance)`, which raises `IllegalActionError` naming the instance, the step and the
+violated rule.
+
+### 5.7 Transition (`rules.apply(state, action, instance) -> tuple[PrepState, StepCost, DagDelta]`)
+
+- Pure function. Raises `IllegalActionError` if the action is not legal (assert in debug, always
+  in tests).
+- Returns the next state, the cost breakdown of this step (section 6), and the DAG nodes/edges
+  this action adds (section 7).
+- `step` increases by 1 for every action.
+- On success, every droplet left on chip goes to WASTE in the same step; the returned state has
+  no droplets.
+- `replay(instance, actions) -> (final_state, total_cost, deltas)` applies a plan from the
+  initial state (tests, solvers).
+- `DagDelta` holds the MIX/OUTPUT/WASTE nodes and edges the action adds. Edges from reservoir f
+  use node id f; RESERVOIR nodes themselves are added by the DAG builder (M2).
+
+### 5.8 Termination
+
+- **Success:** all `remaining_demand` are 0. Droplets still on chip become waste (charged in the
+  final step's cost).
+- **Truncation:** `step == step_limit` without success. The final cost adds a truncation penalty
+  = `fallback.cost_to_finish(state, instance)` (section 10.3), so an unfinished plan is never
+  cheaper than a finished one.
+- **Dead end:** no legal action and not success. Treat as truncation (same penalty). Track the
+  rate in evaluation; a high rate means masking or generation needs work.
+- `rules.terminal_status(state, instance) -> TerminalStatus | None` returns `SUCCESS`,
+  `TRUNCATED` or `DEAD_END` (checked in that order); `is_terminal` is `terminal_status(...) is
+  not None`.
+
+### 5.9 Noise hook (phase 2; implement interface only)
+
+`NoiseModel.apply(rng, mix_result: Droplet, a, k, b, l) -> Droplet`. `NoNoise` returns the input
+unchanged and is the default. A later `SplitErrorNoise` will perturb taken volumes. When any
+noise model other than `NoNoise` is active, the env must report `info["stochastic"] = True` and
+exact search is disabled.
+
+---
+
+## 6. Costs and reward
+
+### 6.1 Cost components per step (`StepCost`, all exact integers or rationals)
+- `reagent_by_fluid: tuple[int, ...]` — units taken from each reservoir in this step.
+- `mix_ops: int` — 1 for a Mix, else 0.
+- `waste_volume: int` — units sent to waste in this step (Discard, final leftovers).
+- `outputs: int` — droplets delivered.
+
+### 6.2 Episode totals
+Sum of step costs, plus derived totals: total reagent, sample volume (fluids of kind SAMPLE),
+total waste, total mixes.
+
+### 6.3 Scalar cost
+```
+cost = Σ_f w_fluid[kind(f)] · reagent_by_fluid[f]  +  w_mix · mix_ops  +  w_waste · waste_volume
+```
+Weights from `configs/costs/default.yaml`:
+```yaml
+w_fluid: {SAMPLE: 10.0, REAGENT: 2.0, BUFFER: 0.5}
+w_mix: 1.0
+w_waste: 1.0
+```
+These defaults are placeholders: the sample is the scarcest fluid. Make every weight overridable.
+
+Weights are **exact rationals** (`CostWeights`, parsed with `Rational.parse`; YAML may use ints,
+decimals such as `0.5`, or strings such as `"1/3"`). The scalar cost is therefore an exact
+`Rational`, and exact search compares plan costs without rounding. Negative weights are rejected
+(search needs nonnegative edge costs).
+
+### 6.4 Reward
+`reward_t = −float(cost_t)` (the float is made from the exact rational cost, in the env only). γ = 1 (episodes always end).
+The return is minus the total plan cost, so maximising return minimises cost.
+
+### 6.5 Preference-conditioned option (multi-objective, later)
+If `env.preference_conditioning: true`, each episode samples a weight vector w from a
+configured distribution, the reward uses w, and w is appended to the observation globals.
+Default false.
+
+### 6.6 No shaping in v1
+No distance-to-target shaping (it can punish building shared intermediates). If shaping is
+added later, it must be potential-based: `F = Φ(s′) − Φ(s)` with Φ defined in one place.
+
+---
+
+## 7. Mixing DAG format (`core/dag.py`)
+
+The single output format for every agent and solver, and the input format for later stages.
+
+### 7.1 Nodes
+| Field | Type | Meaning |
+| --- | --- | --- |
+| `id` | int | Unique in the DAG. Reservoir f has id f; other ids come from the state's `next_uid` counter (5.4) |
+| `type` | enum | `RESERVOIR`, `MIX`, `OUTPUT`, `WASTE` |
+| `fluid_id` | int or null | For `RESERVOIR` |
+| `target_id` | int or null | For `OUTPUT` |
+| `composition` | `{num, den}` | Composition of the fluid at this node |
+| `volume` | int | Volume drawn in total (RESERVOIR), produced (MIX), delivered (OUTPUT) or wasted (WASTE) |
+| `step` | int | Action index that created the node (for ordering); first use for a RESERVOIR |
+
+One `RESERVOIR` node per fluid that is used. One `MIX` node per Mix action. One `OUTPUT` node per
+Output action. One `WASTE` node per Discard and per leftover droplet at the end.
+
+`MixingDAG.from_deltas(instance, deltas, totals, producer)` joins the `DagDelta`s of an episode
+(in order) and adds the RESERVOIR nodes. `totals` is the producer's reported `StepCost` sum.
+
+### 7.2 Edges
+`{src, dst, volume}` — `volume` units flow from node src to node dst.
+
+### 7.3 Validator (`validate(dag, instance, complete=True) -> ValidationReport`)
+The report lists `DagError(check, message)` items; `report.ok`, `report.failed_checks`, and
+`report.raise_if_invalid()` (raises `DagValidationError` naming the instance). With
+`complete=False` (a truncated or dead-end episode) demand may be unmet and MIX droplets may still
+be on chip; every other check is unchanged.
+
+`STRUCTURE` is checked first (unique ids, edges between existing nodes, no edge into a reservoir
+or out of an OUTPUT/WASTE, OUTPUT/WASTE have exactly one parent, `fluid_id`/`target_id` set
+exactly for RESERVOIR/OUTPUT, ids below F only for reservoirs). If it fails, nothing else runs.
+Then, each a separate `DagCheck`:
+1. `ACYCLIC` (if it fails, nothing else runs).
+2. `VOLUME_CONSERVATION`: for every MIX node, inflow = its volume, and its volume = total
+   outflow; OUTPUT/WASTE inflow = volume; RESERVOIR outflow = its drawn volume.
+3. `COMPOSITION`: each MIX node's composition equals the exact volume-weighted mix of its
+   inputs; OUTPUT/WASTE equal their parent; RESERVOIR is the pure fluid.
+4. `MIX_LIMITS`: every MIX node volume within `[min_mix_volume, max_mix_volume]`; exactly two
+   distinct parents in v1; not two equal compositions unless `allow_same_composition_merge`;
+   denominator ≤ `max_denominator`.
+5. `OUTPUT_TOLERANCE`: every OUTPUT node's composition within tolerance of its target and its
+   volume equals the target's droplet volume.
+6. `DEMAND`: number of OUTPUT nodes per target equals its demand.
+7. `TOTALS`: reported totals (reagent by fluid, mixes, waste, outputs) match totals recomputed
+   from the DAG.
+8. `STORAGE`: replaying nodes in `(step, id)` order, the droplets on chip after each step never
+   exceed `storage_capacity`.
+9. `TAKE` (same replay): a node only uses droplets already on chip; a take that leaves a
+   remainder needs `allow_partial_take` and a remainder ≥ `min_droplet_volume`; a WASTE node
+   takes the whole droplet.
+
+### 7.4 I/O
+`to_json(path)`, `from_json(path)`, `to_dict()`/`from_dict()`, `to_networkx()` (networkx is
+imported lazily; analysis only). The JSON header has `format: "meda-mixing-dag/1"`,
+`instance_id`, `producer` (solver or agent name + checkpoint) and the totals; `from_dict` rejects
+any other format.
+
+---
+
+## 8. Problem generation: p(s₀) (`meda.generators`)
+
+### 8.1 Random sampler (`sampler.py`)
+`sample_instance(cfg, rng) -> Instance`. Config fields:
+- `num_fluids`: range, and how many of each kind (`samples`, `reagents`, `buffers`).
+- `num_experiments`: range.
+- `targets_per_experiment`: range.
+- `composition_sampler`: one of
+  - `dirichlet_snapped`: sample on the simplex, then snap to the nearest composition whose
+    denominator divides a chosen accuracy denominator (e.g. 16, 32, 64);
+  - `reachable_walk`: produce compositions by random legal mixes from reservoirs (guarantees
+    reachability under the chip limits);
+  - `fixed_list`: explicit list (for tests).
+- `support_size`: how many fluids may be nonzero in a target (dilution = 2: one sample + buffer).
+- `demand`: range. `droplet_volume`: value or range. `tolerance`: rational or 0.
+- `step_limit`: absolute, or a multiple of a naive-solver plan length.
+- Every instance records its generator name, config hash and seed in `metadata`.
+- `dilution_grid(chip, denominator, step_limit, ...)`: every single-target dilution n/D of one
+  sample with one buffer (the "sweep all targets at an accuracy level" set of 9.2 in
+  PROJECT_CONTEXT). Used for profiling until the sampler exists.
+
+### 8.2 Synthetic solved instances (`synthetic.py`)
+Build a random legal plan forward (random legal mixes from reservoirs, then mark some produced
+droplets as targets). The plan's cost is a known **upper bound** for that instance. Used for
+(a) checking that agents find plans at least this good, and (b) optional imitation warm-start
+(the AlphaTensor idea: generating a solved problem forward is easy; solving it backward is hard).
+
+### 8.3 Curriculum (`curriculum.py`)
+A list of stages, each a generator config; promotion rule: success rate ≥ x and mean cost within
+y of a reference over the last N episodes. Stage order (matches the research ladder):
+1. Dilution, one target, M = 2 (DMFB-like), small accuracy.
+2. Dilution, one target, M = 8.
+3. Dilution, many targets with demand (sharing becomes useful).
+4. Mixture (3+ fluids), one target.
+5. Mixture, many targets, many experiments.
+
+### 8.4 Benchmarks (`benchmark_io.py`, `scripts/make_benchmark.py`, `benchmarks/`)
+A benchmark set is a frozen JSON file: `name`, `version`, generator config, seeds, and the
+instances. Never regenerate a published version; create a new version. Planned sets:
+- `tiny_exact_v1` — small enough for exact search; every instance has its optimum stored.
+- `val_<stage>_v1` — in-distribution validation per curriculum stage.
+- `unseen_ratios_v1` — compositions excluded from training.
+- `larger_v1` — more targets / fluids than any training stage (generalisation test).
+- `literature_v1` — instances transcribed by hand from published papers (WSPM, FacDA, Kundu
+  et al.), with the paper's reported results stored for comparison. Filled manually.
+
+Train/test separation: training draws from the sampler; evaluation uses only frozen sets.
+Provide a check that no evaluation instance appears in training (by canonical instance hash).
+
+---
+
+## 9. Environment (`meda.envs.sample_prep_env.SamplePrepEnv`)
+
+### 9.1 API (Gymnasium)
+```python
+env = SamplePrepEnv(env_config, instance_source, cost_weights, cost_to_finish)
+# instance_source(rng) -> Instance: sampler, curriculum stage, or FixedInstances(list)
+# cost_to_finish(state, instance) -> Rational: truncation penalty (solvers.fallback, M5)
+obs, info = env.reset(seed=None, options=None) # options may pass a specific Instance
+obs, reward, terminated, truncated, info = env.step(action_index)
+mask = env.action_masks()                      # bool[L_max]; same as obs["action_mask"]
+```
+- `action_space = Discrete(L_max)`. The action is an **index into the current candidate list**,
+  which is `rules.legal_actions(state)` in canonical order, padded to `L_max`.
+- If the number of legal actions exceeds `L_max`, raise a clear error naming the instance (do
+  not truncate silently). `L_max` is a config value.
+- Selecting an index that is not a legal candidate raises `IllegalActionError`.
+- `reset` raises (naming the instance) if the instance does not fit the padding sizes, if a
+  target's `droplet_volume` exceeds `max_mix_volume`, or if no action is legal at the start.
+  `reset(options={"instance": inst})` runs a specific instance.
+- Episode end: success → `terminated`; dead end → `terminated` + penalty; step limit →
+  `truncated` + penalty. The penalty already estimates the remaining cost, so agents must not
+  bootstrap a value after a truncated step.
+- `info` contains: `instance_id`, `cost_breakdown` (this step), `legal_count`, `stochastic`, and
+  at episode end `status` (`TerminalStatus`), `success`, `dead_end`, `episode_totals`,
+  `plan_cost` and `penalty` (exact `Rational`s), and the `MixingDAG` (as an object, not in obs).
+- The env also exposes `env.state`, `env.instance` and `env.legal` (read-only) for solvers,
+  tests and search, and `env.set_instance_source(source)` (used by the curriculum wrapper).
+- The step limit belongs to each instance (set by the generator), not to the env config.
+
+### 9.2 Observation (`gymnasium.spaces.Dict`, padded, float32 unless noted)
+| Key | Shape | Content |
+| --- | --- | --- |
+| `sources` | [S_max, D_src] | One row per reservoir (rows 0..F−1) and per droplet on chip (rows F..F+n−1, canonical order) |
+| `source_mask` | [S_max] int8 0/1 | Valid rows |
+| `targets` | [T_max, D_tgt] | One row per target |
+| `target_mask` | [T_max] int8 0/1 | Valid rows |
+| `candidates` | [L_max, D_cand] | Features of each legal action (below) |
+| `cand_index` | [L_max, 3] int32 | (op, row of src_a or droplet, row of src_b or target index); op 0 = Mix, 1 = Output, 2 = Discard; −1 if unused |
+| `action_mask` | [L_max] int8 0/1 | Valid candidates (`env.action_masks()` returns the same as bool) |
+| `globals` | [D_glob] | Step fraction, storage fraction, remaining demand fraction, optional preference weights |
+
+`S_max = F_max + storage_capacity_max`. Compositions are padded to `F_max` fluids. All sizes come
+from `configs/env/sample_prep.yaml`. Every float feature lies in [0, 1]; volumes are divided by M.
+
+### 9.3 Features (`encoding.py`) — the network never does arithmetic
+
+Every result composition and distance is formed as exact integers (numpy int64) and divided
+only at the end, so each float is the correctly rounded exact value; "satisfies" flags are
+compared exactly in integers. To keep int64 exact, `max_denominator` and every target
+composition/tolerance denominator must be ≤ 2^20 (checked at reset), and tolerances ≤ 1. The
+denominator feature is `1 − 1/den` (bounded, 0 for pure fluids).
+
+**Source row:** composition (F_max floats), volume / M (1 for reservoirs), is_reservoir,
+fluid-kind one-hot (reservoirs only), denominator feature, L∞ distance to each open target
+(T_max; 1 for met or padded targets), "satisfies open target t" flags (T_max), age (actions
+since the droplet was made, / step limit).
+
+**Target row:** composition, tolerance, droplet volume / M, remaining demand / demand, met flag.
+
+**Candidate row (afterstate features):** op one-hot; k, l, k + l (scaled; for Output k is the
+delivered volume, for Discard the droplet volume); the **resulting** composition (exact, then
+converted to float); its denominator feature; L∞ distance from the result to each open target;
+whether the result satisfies any open target; this action's reagent units by fluid kind (/ M);
+waste it creates (/ M); storage after the action (/ capacity). Providing the result of each candidate is the
+"afterstate" idea (TD-Gammon): the network judges outcomes instead of predicting them.
+
+### 9.4 Vectorisation and speed
+- Must work with `gymnasium.vector.AsyncVectorEnv` (picklable, no global state).
+- `scripts/profile_env.py` reports steps/second for each generator config.
+- Target: at least 10,000 env steps/second in total with 16–32 async workers on the
+  workstation for curriculum stages 1–3. Optimise only after profiling (cache legal-action
+  enumeration per canonical state; `numba` only if needed).
+
+### 9.5 Wrappers (`wrappers.py`)
+- `EpisodeStats`: accumulates totals for logging.
+- `CurriculumWrapper`: switches generator stage on promotion.
+- `PreferenceWrapper`: samples w per episode when multi-objective mode is on.
+
+---
+
+## 10. Solvers (`meda.solvers`)
+
+### 10.1 Interface (`base.py`)
+```python
+class Solver(Protocol):
+    name: str
+    def solve(self, instance: Instance, budget: SolveBudget) -> SolveResult: ...
+# SolveResult: instance_id, producer, status, dag: MixingDAG | None, totals: StepCost | None,
+#   cost: Rational | None (exact plan cost, no penalty), wall_time, nodes_expanded
+# status: "optimal" | "feasible" | "timeout" | "infeasible" (solvers) | "failed" (an agent
+#   episode that did not meet all demand; not a proof of infeasibility)
+```
+
+### 10.2 Exact search (`exact_search.py`)
+Uniform-cost search (Dijkstra) over `PrepState.canonical_key()`, edge cost = scalar step cost
+(non-negative), goal = success. Optional A* with an admissible heuristic (start with h = 0; add a
+lower bound later, e.g. the cheapest reagent cost to make each remaining target ignoring
+sharing). Budget: max nodes, max wall time. Returns `optimal` only if search completed. This is
+the answer key for `tiny_exact_v1`.
+
+### 10.3 Fallback cost-to-finish (`fallback.py`)
+A fast, always-feasible upper estimate of the cost to finish from a state (for example: build
+each remaining target droplet independently with the naive baseline from reservoirs). Used for
+the truncation penalty and as a baseline. Must never return less than a feasible completion's
+true cost when it returns a plan.
+
+### 10.4 Baselines (`baselines/`)
+- `naive.py`: each target droplet made independently (no sharing). Always available.
+- `bitscan.py`: classic 1:1 binary dilution for two-fluid targets (DMFB literature). Valid only
+  under `dmfb_m2`.
+- `facda.py`: factorisation-based MEDA dilution, implemented from the paper. Mark as
+  **unverified** until it reproduces the paper's reported numbers on `literature_v1`.
+- Further published methods (multi-target MEDA mixing, demand-driven mixture preparation) are
+  added later behind the same interface, each with a reproduction test.
+
+---
+
+## 11. Agents (`meda.agents`)
+
+### 11.1 Interface (`base.py`)
+```python
+class Agent(Protocol):
+    name: str
+    def act(self, obs, mask, deterministic: bool) -> int: ...
+    def save(self, path) -> None: ...
+    @classmethod
+    def load(cls, path) -> "Agent": ...
+```
+Plus a helper `run_episode(agent, env, instance, deterministic=True) -> SolveResult` so every
+agent is evaluated exactly like a solver (it returns the episode's `MixingDAG`, complete or not).
+
+### 11.2 Random agent
+Uniform over legal candidates. Used to test the env and as the weakest baseline.
+
+### 11.3 Tabular Q-learning (`tabular_q.py`)
+For `tiny_exact_v1`-size problems only. Keys: `state.canonical_key()` and
+`action.canonical_key()` (never the candidate index, whose meaning depends on the state).
+ε-greedy with a decay schedule; step size α constant or 1/N(s, a). Acceptance: matches the exact
+optimum on every tiny instance it is trained on.
+
+### 11.4 PPO with a set encoder (`ppo/`)
+**Network (`networks.py`):**
+1. Source encoder: MLP on each source row → d_model.
+2. Target encoder: MLP on each target row → d_model.
+3. A learned global token.
+4. Set encoder: Transformer encoder (2–4 layers, 4–8 heads, **no positional encoding**) over
+   [global token; sources; targets] with key padding masks. Output: contextual embeddings.
+5. Candidate scorer: for each candidate, gather the embeddings referenced by `cand_index`
+   (source a, source b or target), concatenate with the candidate's own features, MLP → logit.
+6. Masked categorical: set logits of invalid candidates to a large negative value before
+   softmax (`policy.py`).
+7. Value head: MLP on the global token → scalar.
+
+**Algorithm (`ppo.py`, CleanRL style):** vectorised rollouts; GAE(λ); clipped surrogate;
+value loss (optionally clipped); entropy bonus; gradient-norm clipping; learning-rate
+annealing; several epochs of minibatches per rollout. γ = 1.0 by default (finite episodes).
+
+**Default hyperparameters (`configs/agent/ppo.yaml`), starting points only:**
+```yaml
+d_model: 128
+n_layers: 3
+n_heads: 4
+num_envs: 32
+rollout_steps: 128
+gamma: 1.0
+gae_lambda: 0.95
+clip_coef: 0.2
+ent_coef: 0.01
+vf_coef: 0.5
+max_grad_norm: 0.5
+lr: 3.0e-4
+update_epochs: 4
+num_minibatches: 8
+total_env_steps: 5_000_000
+```
+
+**Logged every update:** mean episode return, success rate, dead-end rate, mean cost and each
+cost component, policy entropy, approximate KL, clip fraction, value explained variance,
+legal-candidate count, env steps/second.
+
+### 11.5 Reserved: search (`mcts/`, milestone 9)
+AlphaZero-style MCTS (PUCT) using the PPO network's policy and value, on `core.apply` (pure,
+so trees can be expanded without copying envs). Trained by making the policy match search visit
+counts. Not built now; keep `core` pure so it can be added without refactoring.
+
+### 11.6 Optional cross-check
+A thin adapter so `sb3_contrib.MaskablePPO` can train on the same env with a custom feature
+extractor. Useful to confirm the in-house PPO is not buggy.
+
+---
+
+## 12. Metrics and evaluation (`meda.analysis`)
+
+### 12.1 DAG metrics (`dag_metrics.py`)
+**Proxy metrics** (what the sample-prep literature reports): mix operations, total reagent,
+reagent by fluid kind, sample volume, waste volume, number of distinct intermediates, sharing
+count (intermediates feeding more than one target).
+
+**Structural metrics** (predict how hard the plan is to execute on the chip; no grid needed):
+an abstract list schedule of the DAG with configurable per-operation durations and a limit on
+concurrent mixes, giving: makespan in slots, peak number of droplets alive, storage occupancy ×
+duration, critical-path length. These are the "tier-1" quantities and are cheap to compute.
+
+### 12.2 Evaluation (`evaluate.py`, `evaluate_cli.py`)
+`evaluate(producer, benchmark, cfg) -> pandas.DataFrame`, one row per instance: instance id,
+producer, status, success, cost, every metric above, wall time, and gaps:
+- `gap_to_optimal` = (cost − optimal) / optimal, where an optimum is stored.
+- `gap_to_<baseline>` for each configured baseline.
+
+Every produced DAG is validated (section 7.3); a failed validation is a hard error, not a
+metric.
+
+Outputs per run: `results.parquet`, `summary.md` (mean, median, 90th percentile per metric),
+and plots (cost vs baseline scatter, gap histogram, cost vs number of targets).
+
+### 12.3 Evaluation protocol
+- Agents evaluated deterministically (argmax) and optionally with sampling (best of k).
+- Fixed seeds; at least 3 training seeds per reported configuration.
+- Report on all frozen sets of section 8.4, including `larger_v1` for generalisation.
+
+---
+
+## 13. Configuration, runs and reproducibility
+
+- Hydra root `configs/config.yaml` with defaults: chip, costs, generator, env, agent, train, eval.
+- Example commands:
+  ```bash
+  python -m meda.train agent=ppo generator=dilution_multi chip=meda_m8
+  python -m meda.train -m agent.lr=1e-4,3e-4 seed=0,1,2        # sweep
+  python -m meda.evaluate_cli producer=ppo checkpoint=outputs/.../best.pt benchmark=tiny_exact_v1
+  ```
+- Each run directory stores: the resolved config, git commit hash and dirty flag, seed, library
+  versions, TensorBoard logs, checkpoints (`last.pt`, `best.pt` by validation cost), and
+  evaluation results.
+- `utils/seeding.py` seeds Python, NumPy and Torch, and creates per-worker generators.
+- Checkpoints contain model weights, optimiser state, step counters and the config, so training
+  can resume.
+
+---
+
+## 14. Reserved later stages (`meda.pipeline`)
+
+Do not implement yet. Define only these interfaces in `pipeline/interfaces.py` so the DAG format
+is designed with them in mind:
+```python
+class Scheduler(Protocol):
+    def schedule(self, dag: MixingDAG, chip_spec) -> "Schedule": ...      # start time + resource per node
+class Router(Protocol):
+    def route(self, requests: list["RouteRequest"], chip_state) -> "RouteResult": ...  # (droplet, source, target) list per time slot
+class CostOracle(Protocol):
+    def evaluate(self, dag: MixingDAG) -> "TrueCost": ...                 # completion time, washes, ...
+```
+A `CostOracle` result will later replace or refine the reward (tier-2 cost). Plan for it: cache
+results by DAG hash, and allow a learned surrogate to predict it.
+
+---
+
+## 15. Open physical decisions (all must stay configurable)
+
+| Decision | Default here | Where it lives | To confirm with |
+| --- | --- | --- | --- |
+| Maximum mix volume M on the target platform | 8 | `chip.max_mix_volume` | Supervisor |
+| Whether partial takes (pseudo-dispense) are physically allowed, and minimum droplet volume | allowed, 1 | `chip.allow_partial_take`, `chip.min_droplet_volume` | Supervisor |
+| Storage limit as droplet count vs total volume | droplet count | `chip.storage_capacity` | Supervisor |
+| Accuracy (max denominator) and tolerance metric (L∞) | 256, L∞ | `chip.max_denominator`, target tolerance | Assay requirements |
+| Cost weights per fluid kind | 10 / 2 / 0.5 | `costs` | Supervisor, assay |
+| Dilution first or mixture first | dilution first (curriculum) | `generator` | Supervisor |
+| Whether a mix may take inputs from more than two sources | no | `rules` (would change the action set) | Later |
+| Split-error model for phase 2 | none | `core/noise.py` | Literature / hardware data |
+
+---
+
+## 16. Milestones and acceptance criteria
+
+Implement strictly in order. Each milestone ends with all tests passing, `ruff` and `mypy` clean.
+
+**M0 — Scaffold.** Layout of section 4, `pyproject.toml`, pre-commit, Hydra root config, empty
+modules with docstrings, CI-style `make test` (or `uv run pytest`).
+*Accept:* `uv run pytest` runs (with placeholder tests); `python -m meda.train --help` works.
+
+**M1 — Exact core.** `composition`, `fluids`, `chip`, `problem`, `state`, `actions`, `rules`,
+`costs`, `noise` (NoNoise).
+*Accept:* all core tests in section 17.1 pass, including the property tests.
+
+**M2 — DAG.** Builder (from `DagDelta`s), validator, JSON I/O, networkx export.
+*Accept:* replaying any legal random episode yields a DAG that validates; tampering with any
+volume or composition makes the validator fail with the right error.
+
+**M3 — Environment.** `SamplePrepEnv`, `encoding`, wrappers; random agent.
+*Accept:* passes `gymnasium.utils.env_checker.check_env`; random agent runs 10,000 episodes on
+`tiny_dilution` with no exception; every chosen action is legal; observation shapes fixed;
+`profile_env.py` reports steps/second.
+
+**M4 — Generators and benchmarks.** Sampler, synthetic generator, curriculum, benchmark I/O,
+`make_benchmark.py`; create `tiny_exact_v1` and `val_stage1_v1`.
+*Accept:* same seed gives identical instances; every sampled instance is solvable (checked with
+the naive solver); no overlap between training samples and frozen sets.
+
+**M5 — Solvers.** Exact search, fallback, naive, bitscan; `facda` as a stub marked unverified.
+*Accept:* hand-checked cases in section 17.3 give the stated optima; exact search stores optima
+for all of `tiny_exact_v1`.
+
+**M6 — Tabular Q-learning.**
+*Accept:* reaches the exact optimum on each `tiny_exact_v1` instance it is trained on.
+
+**M7 — Evaluation harness.** `dag_metrics`, `evaluate`, `compare`, `plots`, CLI.
+*Accept:* produces `results.parquet` and `summary.md` for random agent, naive, exact search on
+`tiny_exact_v1`; gaps computed correctly.
+
+**M8 — PPO with set encoder.** Networks, masked policy, rollout, PPO, training entry point,
+checkpointing, logging.
+*Accept:* (a) overfits a single fixed tiny instance to its optimum; (b) on curriculum stage 1,
+success rate > 95% and mean gap to optimal < 5% on `val_stage1_v1`; (c) a run resumes from a
+checkpoint with identical subsequent metrics (same seed).
+
+**M9 — Reserved.** MCTS / AlphaZero-style search; literature baselines with reproduction tests;
+preference-conditioned training; noise model; pipeline interfaces to scheduler/router.
+
+---
+
+## 17. Tests
+
+### 17.1 Core (unit + property-based with `hypothesis`)
+- Composition: canonical form invariants (sum = den, reduced); `mix` exactness; mixing is
+  symmetric (`mix(a,k,b,l) == mix(b,l,a,k)`); mixing a composition with itself returns it.
+- Volume conservation: for any random legal action sequence, total reagent taken = volume on
+  chip + volume output + volume wasted, after every step.
+- Composition sum: every droplet composition sums to exactly 1 after every step.
+- Legality soundness: every action in `legal_actions` applies without error; a sample of
+  illegal actions (wrong volumes, M exceeded, storage exceeded, out-of-tolerance outputs)
+  raises `IllegalActionError`.
+- Determinism: same instance and action sequence → identical states, costs and DAG.
+- Canonical keys: permuting droplet uids does not change `canonical_key()`.
+- No float type appears anywhere in `PrepState` or `StepCost` (type check in a test).
+
+### 17.2 Environment
+- `check_env` passes; mask equals the legal set; padded rows are masked; selecting a masked
+  index raises; episode ends exactly on success, truncation or dead end; truncation penalty
+  applied.
+
+### 17.3 Hand-checked solver cases (fluids: S = sample at 1.0, B = buffer; one-unit outputs; tolerance 0)
+1. **Target 1/4, M = 2 (1:1 only).** Optimal mix count = 2: (S1 + B1 → 1/2, volume 2), then
+   (1 unit of 1/2 + B1 → 1/4, volume 2), output 1 unit. Reagent: S = 1, B = 2. Waste at end: 2
+   units (1 of 1/2, 1 of 1/4).
+2. **Target 1/4, M = 4.** One mix suffices: S1 + B3 → 1/4 (volume 4); output 1 unit; waste 3.
+   Which of cases 1 and 2 is cheaper depends on weights: test both weightings and check the exact
+   search picks accordingly.
+3. **Target 3/10, M = 8.** Not reachable in one mix (denominators ≤ 8). Reachable in two:
+   S2 + B3 → 2/5 (volume 5); then 3 units of 2/5 + B1 → 3/10 (volume 4). Exact search must find a
+   2-mix plan. Under `dmfb_m2` with tolerance 0 it must be infeasible (3/10 is not a dyadic
+   fraction).
+4. **Sharing: targets 3/4 and 1/4, one droplet each, M = 2.** Optimal = 3 mixes: S1 + B1 → 1/2
+   (volume 2); 1 unit of 1/2 + S1 → 3/4; 1 unit of 1/2 + B1 → 1/4. Without sharing the naive
+   baseline uses 4 mixes. The exact search must find 3.
+
+### 17.4 Slow tests
+Long acceptance runs (e.g. M3's 10,000 random episodes) carry `@pytest.mark.slow` and are
+skipped by default; run them with `uv run pytest -m slow` when closing a milestone.
+
+### 17.5 Agents and evaluation
+- Tabular Q converges on cases 1–4.
+- PPO smoke test: 2,000 steps on a tiny instance without NaNs; loss decreases.
+- Evaluation: a hand-made results table gives the expected gaps.
+
+---
+
+## 18. Coding conventions
+
+- Type hints everywhere; `mypy --strict` on `meda.core`.
+- Frozen dataclasses (`slots=True`) for domain objects.
+- Docstrings state units (volume units, not microlitres) and invariants.
+- No silent clipping, truncation or fallback: raise with a message that names the instance and
+  the violated limit.
+- Public functions in `core`, `envs`, `solvers` get a unit test before or with the implementation.
+- Notebooks may import from `src/meda`; `src/meda` never imports from notebooks.
+- Any change to a public interface or to the DAG format updates this SPEC in the same commit.

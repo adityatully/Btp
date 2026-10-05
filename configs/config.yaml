@@ -1,0 +1,12 @@
+# Hydra root config (SPEC section 13).
+defaults:
+  - chip: meda_m8
+  - costs: default
+  - generator: tiny_dilution
+  - env: sample_prep
+  - agent: random
+  - train: default
+  - eval: default
+  - _self_
+
+seed: 0

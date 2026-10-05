@@ -1,0 +1,8 @@
+# Tabular Q-learning (SPEC 11.3). Tiny instances only.
+name: tabular_q
+episodes: 20000
+epsilon_start: 1.0
+epsilon_end: 0.05
+epsilon_decay_episodes: 10000
+step_size: visit_count          # "visit_count" (1/N(s,a)) or a constant float
+gamma: 1.0

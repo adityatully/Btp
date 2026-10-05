@@ -1,0 +1,12 @@
+# Curriculum stage 3: dilution, many targets with demand (sharing becomes useful) (SPEC 8.3).
+name: dilution_multi
+num_fluids: {samples: 1, reagents: 0, buffers: 1}
+num_experiments: [1, 3]
+targets_per_experiment: [1, 3]
+composition_sampler: dirichlet_snapped
+accuracy_denominator: 64
+support_size: 2
+demand: [1, 3]
+droplet_volume: 1
+tolerance: 0
+step_limit: 64

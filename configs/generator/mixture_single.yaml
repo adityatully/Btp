@@ -1,0 +1,12 @@
+# Curriculum stage 4: mixture (3+ fluids), one target (SPEC 8.3).
+name: mixture_single
+num_fluids: {samples: 1, reagents: [1, 2], buffers: 1}
+num_experiments: [1, 1]
+targets_per_experiment: [1, 1]
+composition_sampler: reachable_walk
+accuracy_denominator: 64
+support_size: 3
+demand: [1, 1]
+droplet_volume: 1
+tolerance: 0
+step_limit: 48

@@ -1,0 +1,10 @@
+# MEDA chip limits (SPEC 5.2). All values are open physical decisions (SPEC 15); confirm with supervisor.
+name: meda_m8
+max_mix_volume: 8            # M: k + l <= M
+min_mix_volume: 2
+unit_volume: 1               # all volumes are integers in this unit
+min_droplet_volume: 1        # smallest droplet after any take or split
+allow_partial_take: true     # pseudo-dispense: take k < v units from a droplet
+storage_capacity: 10         # max non-reservoir droplets on chip (count)
+max_denominator: 256         # accuracy level: larger result denominators are illegal
+allow_same_composition_merge: false

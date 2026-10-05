@@ -1,0 +1,25 @@
+# ruff + mypy + core tests (SPEC section 3). Uses the project's own uv environment.
+repos:
+  - repo: local
+    hooks:
+      - id: ruff
+        name: ruff
+        entry: uv run ruff check
+        language: system
+        types: [python]
+      - id: ruff-format
+        name: ruff format
+        entry: uv run ruff format --check
+        language: system
+        types: [python]
+      - id: mypy-core
+        name: mypy (meda.core)
+        entry: uv run mypy src/meda/core
+        language: system
+        pass_filenames: false
+        files: ^src/meda/core/
+      - id: pytest-core
+        name: pytest (core)
+        entry: uv run pytest -q tests/core
+        language: system
+        pass_filenames: false

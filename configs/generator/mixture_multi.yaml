@@ -1,0 +1,12 @@
+# Curriculum stage 5: mixture, many targets, many experiments (SPEC 8.3).
+name: mixture_multi
+num_fluids: {samples: 1, reagents: [1, 2], buffers: 1}
+num_experiments: [2, 4]
+targets_per_experiment: [1, 3]
+composition_sampler: reachable_walk
+accuracy_denominator: 64
+support_size: 3
+demand: [1, 3]
+droplet_volume: 1
+tolerance: 0
+step_limit: 128

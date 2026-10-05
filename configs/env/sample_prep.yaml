@@ -1,0 +1,7 @@
+# Environment padding sizes and options (SPEC 9). Exceeding any limit raises an error naming the instance.
+# The step limit belongs to each instance (set by the generator).
+F_max: 4                      # max fluids per instance
+T_max: 8                      # max targets per instance
+storage_capacity_max: 10      # S_max = F_max + storage_capacity_max
+L_max: 2048                   # max legal candidate actions per step
+preference_conditioning: false

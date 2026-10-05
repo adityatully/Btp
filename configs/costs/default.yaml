@@ -1,0 +1,8 @@
+# Cost weights (SPEC 6.3). Placeholders: the sample is the scarcest fluid.
+# Read as exact rationals: ints, decimals (0.5) or strings ("1/3") are all fine.
+w_fluid:
+  SAMPLE: 10.0
+  REAGENT: 2.0
+  BUFFER: 0.5
+w_mix: 1.0
+w_waste: 1.0
