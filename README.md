@@ -50,4 +50,5 @@ Configs live in `configs/` (Hydra); override any value on the command line. Run 
 
 ## Status
 
-Milestones M0–M3 (scaffold, exact core, mixing DAG, environment) are done. See SPEC section 16 for the milestone order.
+Milestones M0–M4 (scaffold, exact core, mixing DAG, environment, generators and benchmarks)
+are done. See SPEC section 16 for the milestone order.

@@ -1,6 +1,12 @@
 # MEDA Design Automation — Codebase Specification
 
-Version 0.4 · 2026-10-06
+Version 0.5 · 2026-10-10
+
+Changes in 0.5 (M4): `GeneratorConfig` fields and the feasibility witness every instance carries
+(8.1); recipes (8.2); `Curriculum` and the fifth stage config `dilution_single` (8.3); the
+benchmark file format, canonical `instance_hash` and `exclude` holdouts (8.4); `naive.py` and
+`PlanBuilder` moved to M4, which needs them (10.1, 10.4, 16); `configs/chip/meda_m4.yaml`;
+`env.T_max` raised to 12 to cover `mixture_multi`.
 
 Changes in 0.4 (M3): env constructor, episode-end semantics and info keys (9.1); observation
 dtypes and row layout (9.2); exact feature definitions (9.3); Mix sources listed in canonical
@@ -501,51 +507,108 @@ any other format.
 ## 8. Problem generation: p(s₀) (`meda.generators`)
 
 ### 8.1 Random sampler (`sampler.py`)
-`sample_instance(cfg, rng) -> Instance`. Config fields:
-- `num_fluids`: range, and how many of each kind (`samples`, `reagents`, `buffers`).
-- `num_experiments`: range.
-- `targets_per_experiment`: range.
+`sample_instance(cfg: GeneratorConfig, chip, rng, weights=None, exclude=None) -> Instance`.
+`GeneratorConfig.from_dict` reads one `configs/generator/*.yaml` and validates it; unknown keys
+are an error. Fields:
+- `num_fluids`: how many of each kind (`samples`, `reagents`, `buffers`), each a fixed count or
+  a `[low, high]` range drawn per instance. Fluid 0 is always a SAMPLE.
+- `num_experiments`, `targets_per_experiment`, `demand`, `walk_mixes`: `[low, high]` ranges.
 - `composition_sampler`: one of
-  - `dirichlet_snapped`: sample on the simplex, then snap to the nearest composition whose
-    denominator divides a chosen accuracy denominator (e.g. 16, 32, 64);
-  - `reachable_walk`: produce compositions by random legal mixes from reservoirs (guarantees
-    reachability under the chip limits);
-  - `fixed_list`: explicit list (for tests).
-- `support_size`: how many fluids may be nonzero in a target (dilution = 2: one sample + buffer).
-- `demand`: range. `droplet_volume`: value or range. `tolerance`: rational or 0.
-- `step_limit`: absolute, or a multiple of a naive-solver plan length.
-- Every instance records its generator name, config hash and seed in `metadata`.
-- `dilution_grid(chip, denominator, step_limit, ...)`: every single-target dilution n/D of one
-  sample with one buffer (the "sweep all targets at an accuracy level" set of 9.2 in
-  PROJECT_CONTEXT). Used for profiling until the sampler exists.
+  - `dirichlet_snapped`: sample on the simplex over `support_size` fluids, then snap to
+    `accuracy_denominator` by largest-remainder rounding, every share at least one unit (so the
+    support size is exact). Fluid 0 is always in the support.
+  - `reachable_walk`: compositions produced by random legal mixes from the reservoirs
+    (`generators.synthetic`), so they are reachable under the chip limits. Redrawn until the
+    support really has `support_size` fluids, since a short walk can leave one unused.
+  - `fixed_list`: explicit `fixed_compositions` (for tests).
+- `support_size`: how many fluids are nonzero in a target (dilution = 2: one sample + buffer).
+- `droplet_volume`, `tolerance`.
+- `step_limit`: an absolute value, or `null` to size it as `step_limit_multiple` times the
+  witness plan length. A step limit below the witness length is an error.
 
-### 8.2 Synthetic solved instances (`synthetic.py`)
-Build a random legal plan forward (random legal mixes from reservoirs, then mark some produced
-droplets as targets). The plan's cost is a known **upper bound** for that instance. Used for
-(a) checking that agents find plans at least this good, and (b) optional imitation warm-start
-(the AlphaTensor idea: generating a solved problem forward is easy; solving it backward is hard).
+**Every sampled instance is solvable by construction.** The sampler builds a *feasibility
+witness* — a legal plan meeting all demand — before returning, and raises an error naming the
+instance if it cannot. The witness comes from the walk's own recipes (`reachable_walk`, stored
+in `metadata["recipes"]` so it stays re-derivable from the frozen instance) or from the naive
+construction (10.4). `metadata` records the generator name and version, the config hash, the
+composition sampler, `witness_actions`, `witness_source` and, when `weights` is given,
+`known_upper_bound` (the witness cost as an exact `"a/b"` string).
+
+`exclude` is a set of canonical instance hashes (8.4) to avoid. A small stage needs it: stage 1
+holds only 31 distinct problems, so training must be told which ones the frozen evaluation sets
+hold. A stage with nothing left to draw raises rather than looping.
+
+`sample_instances(..., count, unique=True, exclude=None)` draws several; with `unique` it
+resamples duplicates and raises if the stage is too small to supply `count` distinct problems.
+
+`dilution_grid(chip, denominator, step_limit, ...)`: every single-target dilution n/D of one
+sample with one buffer, deduplicated (the "sweep all targets at an accuracy level" set of 9.2 in
+PROJECT_CONTEXT). A deterministic helper, not a p(s₀).
+
+### 8.2 Recipes and synthetic solved instances (`synthetic.py`)
+A **recipe** is a mix tree built by random legal mixes from the reservoirs:
+- `Draw(fluid_id)` — units taken straight from a reservoir (unlimited);
+- `Blend(a, k, b, l)` — build `a`, take k units; build `b`, take l units; mix. The partial take
+  is what lets a recipe reach compositions like 3/10 (take 3 of a 5-unit droplet).
+
+A sub-recipe's leftover is discarded, and a recipe used twice is simply built twice: recipes
+never share a droplet, which is what makes them *naive* witnesses. `composition_of` gives the
+exact product; `witness_plan(instance, recipes)` emits the plan that delivers every target from
+its recipe and checks each product lies within the target's tolerance.
+
+`synthetic_instance(...)` marks the products of random recipes as targets, so the plan's cost is
+a known **upper bound**. Used for (a) checking agents find plans at least this good, (b) the
+`reachable_walk` sampler, and (c) optional imitation warm-start (the AlphaTensor idea:
+generating a solved problem forward is easy; solving it backward is hard).
 
 ### 8.3 Curriculum (`curriculum.py`)
-A list of stages, each a generator config; promotion rule: success rate ≥ x and mean cost within
-y of a reference over the last N episodes. Stage order (matches the research ladder):
-1. Dilution, one target, M = 2 (DMFB-like), small accuracy.
-2. Dilution, one target, M = 8.
-3. Dilution, many targets with demand (sharing becomes useful).
-4. Mixture (3+ fluids), one target.
-5. Mixture, many targets, many experiments.
+`Curriculum(stages, rng, weights)` matches the protocol `envs.wrappers.CurriculumWrapper`
+expects: `source()` returns an instance source for the current stage, `record(info)` takes one
+finished episode's `info`. Each `Stage` is a generator config plus its chip and its exit rule:
+`min_success_rate` and, optionally, a mean plan cost within `cost_within` of `reference_cost`,
+over the last `window` finished episodes. Promotion only ever moves forward — the stages are a
+syllabus, not a controller. `state_dict` / `load_state_dict` carry the stage across checkpoints.
+
+Stage order (matches the research ladder), one config file each:
+1. `tiny_dilution` — dilution, one target, M = 2 (DMFB-like), accuracy 32.
+2. `dilution_single` — dilution, one target, M = 8.
+3. `dilution_multi` — dilution, many targets with demand (sharing becomes useful).
+4. `mixture_single` — mixture (3+ fluids), one target.
+5. `mixture_multi` — mixture, many targets, many experiments.
+
+An accuracy denominator must factorise into mix volumes the chip allows, or the naive witness
+cannot build it (32 = 2⁵ under M = 2; 64 = 8·8 under M = 8).
 
 ### 8.4 Benchmarks (`benchmark_io.py`, `scripts/make_benchmark.py`, `benchmarks/`)
-A benchmark set is a frozen JSON file: `name`, `version`, generator config, seeds, and the
-instances. Never regenerate a published version; create a new version. Planned sets:
-- `tiny_exact_v1` — small enough for exact search; every instance has its optimum stored.
-- `val_<stage>_v1` — in-distribution validation per curriculum stage.
+A benchmark set is a frozen JSON file (`format: "meda-benchmark/1"`) holding `name`, `version`,
+`description`, the generator config it came from, `seeds`, `reference` and the `instances`.
+`BenchmarkSet.write` refuses to overwrite a published version (bump `version` instead);
+`BenchmarkSet.read(name)` takes a file stem (`tiny_exact_v1`) or a name (newest version).
+
+`reference` maps an instance id to an `InstanceReference(cost, status, producer, detail)`: the
+stored answer key. M4 stores the naive witness cost with status `feasible` (an upper bound); M5
+replaces it with the exact optimum (status `optimal`) through `with_reference`.
+
+`instance_hash(instance)` is the canonical identity of a *problem*: the fluid kinds, the multiset
+of targets and the chip limits. It deliberately ignores the instance id, the metadata and the
+step limit, so a training draw cannot slip past the overlap check by being renamed or given more
+steps. `check_no_overlap(training, frozen_sets)` raises and names every clash.
+
+Planned sets:
+- `tiny_exact_v1` — small enough for exact search; every instance has its optimum stored (M5).
+  Contents: the four hand-checked cases of 17.3 (so M5's two acceptance criteria are one check)
+  plus every distinct dilution n/8 at M = 2. Mixed chips, since 17.3 needs M = 2, 4 and 8.
+- `val_<stage>_v1` — in-distribution validation per curriculum stage. `val_stage1_v1` holds 8
+  of stage 1's 31 problems, disjoint from `tiny_exact_v1`, leaving 16 for training.
 - `unseen_ratios_v1` — compositions excluded from training.
 - `larger_v1` — more targets / fluids than any training stage (generalisation test).
 - `literature_v1` — instances transcribed by hand from published papers (WSPM, FacDA, Kundu
   et al.), with the paper's reported results stored for comparison. Filled manually.
 
 Train/test separation: training draws from the sampler; evaluation uses only frozen sets.
-Provide a check that no evaluation instance appears in training (by canonical instance hash).
+`check_no_overlap` verifies it by canonical instance hash. On a small stage the separation is
+not automatic — training **must** pass the frozen sets' hashes as `exclude`, or it will redraw
+the held-out instances.
 
 ---
 
@@ -636,6 +699,9 @@ waste it creates (/ M); storage after the action (/ capacity). Providing the res
 class Solver(Protocol):
     name: str
     def solve(self, instance: Instance, budget: SolveBudget) -> SolveResult: ...
+
+class PlanBuilder:   # shared by the solvers and by the generators' feasibility witnesses
+    """Emits a plan through `core.rules.apply`, so every plan is legal by construction."""
 # SolveResult: instance_id, producer, status, dag: MixingDAG | None, totals: StepCost | None,
 #   cost: Rational | None (exact plan cost, no penalty), wall_time, nodes_expanded
 # status: "optimal" | "feasible" | "timeout" | "infeasible" (solvers) | "failed" (an agent
@@ -656,7 +722,19 @@ the truncation penalty and as a baseline. Must never return less than a feasible
 true cost when it returns a plan.
 
 ### 10.4 Baselines (`baselines/`)
-- `naive.py`: each target droplet made independently (no sharing). Always available.
+- `naive.py` (built in M4, which needs it for acceptance): each target droplet made
+  independently, no sharing. Two exact constructions — it hits the target composition even when
+  tolerance > 0:
+  1. **chain** (any number of fluids), when `composition.den <= max_mix_volume`: draw `num[f]`
+     units of each fluid in turn, mixing the running droplet with the next reservoir;
+  2. **mixed radix** (two fluids), when `den` factorises into factors within
+     `[min_mix_volume, max_mix_volume]`: write n in that mixed radix and build
+     `s_i = (a_i + s_{i-1}) / e_i` with two 2-input mixes per digit. Under M = 2 this *is*
+     bit-scanning. It needs partial takes (it carries 1 unit of the previous droplet).
+
+  Outside that scope (a mixture whose denominator exceeds M, or a prime factor above M)
+  `naive_plan` returns `None`: **not found**, never a claim of infeasibility. `NaiveSolver`
+  reports status `infeasible` for it, which means only that this construction found nothing.
 - `bitscan.py`: classic 1:1 binary dilution for two-fluid targets (DMFB literature). Valid only
   under `dmfb_m2`.
 - `facda.py`: factorisation-based MEDA dilution, implemented from the paper. Mark as
@@ -842,12 +920,15 @@ volume or composition makes the validator fail with the right error.
 `tiny_dilution` with no exception; every chosen action is legal; observation shapes fixed;
 `profile_env.py` reports steps/second.
 
-**M4 — Generators and benchmarks.** Sampler, synthetic generator, curriculum, benchmark I/O,
-`make_benchmark.py`; create `tiny_exact_v1` and `val_stage1_v1`.
-*Accept:* same seed gives identical instances; every sampled instance is solvable (checked with
-the naive solver); no overlap between training samples and frozen sets.
+**M4 — Generators and benchmarks.** Sampler, recipes, curriculum, benchmark I/O,
+`make_benchmark.py`; create `tiny_exact_v1` and `val_stage1_v1`. Includes `naive.py` and
+`PlanBuilder` (moved here from M5): the acceptance criterion needs the naive construction.
+*Accept:* same seed gives identical instances; every sampled instance is solvable (its witness
+replays to success and its DAG validates); training draws can be held off the frozen sets
+(`exclude` + `check_no_overlap`); every stage fits the env padding sizes.
 
-**M5 — Solvers.** Exact search, fallback, naive, bitscan; `facda` as a stub marked unverified.
+**M5 — Solvers.** Exact search, fallback, bitscan; `facda` as a stub marked unverified (naive
+landed in M4).
 *Accept:* hand-checked cases in section 17.3 give the stated optima; exact search stores optima
 for all of `tiny_exact_v1`.
 

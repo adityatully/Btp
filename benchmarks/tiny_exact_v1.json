@@ -1,0 +1,647 @@
+{
+ "format": "meda-benchmark/1",
+ "name": "tiny_exact",
+ "version": 1,
+ "description": "Instances small enough for exact search. Optima are stored by the exact search in M5; until then each instance carries the naive witness cost as an upper bound.",
+ "generator": {
+  "builder": "scripts/make_benchmark.py:build_tiny_exact",
+  "chips": [
+   "dmfb_m2",
+   "meda_m4",
+   "meda_m8"
+  ],
+  "contents": "SPEC 17.3 hand-checked cases + every distinct dilution n/8 at M = 2"
+ },
+ "seeds": [],
+ "reference": {
+  "tiny-grid-m2-1of2": {
+   "cost": "25/2",
+   "status": "feasible",
+   "producer": "naive",
+   "detail": {
+    "witness_actions": 2
+   }
+  },
+  "tiny-grid-m2-1of8": {
+   "cost": "35/2",
+   "status": "feasible",
+   "producer": "naive",
+   "detail": {
+    "witness_actions": 6
+   }
+  },
+  "tiny-grid-m2-3of4": {
+   "cost": "49/2",
+   "status": "feasible",
+   "producer": "naive",
+   "detail": {
+    "witness_actions": 4
+   }
+  },
+  "tiny-grid-m2-3of8": {
+   "cost": "27",
+   "status": "feasible",
+   "producer": "naive",
+   "detail": {
+    "witness_actions": 6
+   }
+  },
+  "tiny-grid-m2-5of8": {
+   "cost": "27",
+   "status": "feasible",
+   "producer": "naive",
+   "detail": {
+    "witness_actions": 6
+   }
+  },
+  "tiny-grid-m2-7of8": {
+   "cost": "73/2",
+   "status": "feasible",
+   "producer": "naive",
+   "detail": {
+    "witness_actions": 6
+   }
+  },
+  "tiny-quarter-m2": {
+   "cost": "15",
+   "status": "feasible",
+   "producer": "naive",
+   "detail": {
+    "witness_actions": 4
+   }
+  },
+  "tiny-quarter-m4": {
+   "cost": "31/2",
+   "status": "feasible",
+   "producer": "naive",
+   "detail": {
+    "witness_actions": 2
+   }
+  },
+  "tiny-sharing-m2": {
+   "cost": "79/2",
+   "status": "feasible",
+   "producer": "naive",
+   "detail": {
+    "witness_actions": 9
+   }
+  },
+  "tiny-three-tenths-m8": {
+   "cost": "30",
+   "status": "feasible",
+   "producer": "naive",
+   "detail": {
+    "witness_actions": 5
+   }
+  }
+ },
+ "instances": [
+  {
+   "instance_id": "tiny-quarter-m2",
+   "fluids": [
+    {
+     "id": 0,
+     "name": "S",
+     "kind": "SAMPLE"
+    },
+    {
+     "id": 1,
+     "name": "B",
+     "kind": "BUFFER"
+    }
+   ],
+   "targets": [
+    {
+     "id": 0,
+     "experiment_id": 0,
+     "composition": {
+      "num": [
+       1,
+       3
+      ],
+      "den": 4
+     },
+     "tolerance": {
+      "num": 0,
+      "den": 1
+     },
+     "droplet_volume": 1,
+     "demand": 1
+    }
+   ],
+   "chip": {
+    "name": "dmfb_m2",
+    "max_mix_volume": 2,
+    "min_mix_volume": 2,
+    "unit_volume": 1,
+    "min_droplet_volume": 1,
+    "allow_partial_take": true,
+    "storage_capacity": 10,
+    "max_denominator": 256,
+    "allow_same_composition_merge": false
+   },
+   "step_limit": 8,
+   "metadata": {
+    "generator": "hand",
+    "note": "SPEC 17.3 case 1: optimum 2 mixes",
+    "witness_actions": 4,
+    "known_upper_bound": "15",
+    "witness_source": "naive"
+   }
+  },
+  {
+   "instance_id": "tiny-quarter-m4",
+   "fluids": [
+    {
+     "id": 0,
+     "name": "S",
+     "kind": "SAMPLE"
+    },
+    {
+     "id": 1,
+     "name": "B",
+     "kind": "BUFFER"
+    }
+   ],
+   "targets": [
+    {
+     "id": 0,
+     "experiment_id": 0,
+     "composition": {
+      "num": [
+       1,
+       3
+      ],
+      "den": 4
+     },
+     "tolerance": {
+      "num": 0,
+      "den": 1
+     },
+     "droplet_volume": 1,
+     "demand": 1
+    }
+   ],
+   "chip": {
+    "name": "meda_m4",
+    "max_mix_volume": 4,
+    "min_mix_volume": 2,
+    "unit_volume": 1,
+    "min_droplet_volume": 1,
+    "allow_partial_take": true,
+    "storage_capacity": 10,
+    "max_denominator": 256,
+    "allow_same_composition_merge": false
+   },
+   "step_limit": 4,
+   "metadata": {
+    "generator": "hand",
+    "note": "SPEC 17.3 case 2: optimum 1 mix",
+    "witness_actions": 2,
+    "known_upper_bound": "31/2",
+    "witness_source": "naive"
+   }
+  },
+  {
+   "instance_id": "tiny-three-tenths-m8",
+   "fluids": [
+    {
+     "id": 0,
+     "name": "S",
+     "kind": "SAMPLE"
+    },
+    {
+     "id": 1,
+     "name": "B",
+     "kind": "BUFFER"
+    }
+   ],
+   "targets": [
+    {
+     "id": 0,
+     "experiment_id": 0,
+     "composition": {
+      "num": [
+       3,
+       7
+      ],
+      "den": 10
+     },
+     "tolerance": {
+      "num": 0,
+      "den": 1
+     },
+     "droplet_volume": 1,
+     "demand": 1
+    }
+   ],
+   "chip": {
+    "name": "meda_m8",
+    "max_mix_volume": 8,
+    "min_mix_volume": 2,
+    "unit_volume": 1,
+    "min_droplet_volume": 1,
+    "allow_partial_take": true,
+    "storage_capacity": 10,
+    "max_denominator": 256,
+    "allow_same_composition_merge": false
+   },
+   "step_limit": 10,
+   "metadata": {
+    "generator": "hand",
+    "note": "SPEC 17.3 case 3: optimum 2 mixes; infeasible under dmfb_m2",
+    "witness_actions": 5,
+    "known_upper_bound": "30",
+    "witness_source": "naive"
+   }
+  },
+  {
+   "instance_id": "tiny-sharing-m2",
+   "fluids": [
+    {
+     "id": 0,
+     "name": "S",
+     "kind": "SAMPLE"
+    },
+    {
+     "id": 1,
+     "name": "B",
+     "kind": "BUFFER"
+    }
+   ],
+   "targets": [
+    {
+     "id": 0,
+     "experiment_id": 0,
+     "composition": {
+      "num": [
+       3,
+       1
+      ],
+      "den": 4
+     },
+     "tolerance": {
+      "num": 0,
+      "den": 1
+     },
+     "droplet_volume": 1,
+     "demand": 1
+    },
+    {
+     "id": 1,
+     "experiment_id": 0,
+     "composition": {
+      "num": [
+       1,
+       3
+      ],
+      "den": 4
+     },
+     "tolerance": {
+      "num": 0,
+      "den": 1
+     },
+     "droplet_volume": 1,
+     "demand": 1
+    }
+   ],
+   "chip": {
+    "name": "dmfb_m2",
+    "max_mix_volume": 2,
+    "min_mix_volume": 2,
+    "unit_volume": 1,
+    "min_droplet_volume": 1,
+    "allow_partial_take": true,
+    "storage_capacity": 10,
+    "max_denominator": 256,
+    "allow_same_composition_merge": false
+   },
+   "step_limit": 18,
+   "metadata": {
+    "generator": "hand",
+    "note": "SPEC 17.3 case 4: optimum 3 mixes, naive 4",
+    "witness_actions": 9,
+    "known_upper_bound": "79/2",
+    "witness_source": "naive"
+   }
+  },
+  {
+   "instance_id": "tiny-grid-m2-1of8",
+   "fluids": [
+    {
+     "id": 0,
+     "name": "S",
+     "kind": "SAMPLE"
+    },
+    {
+     "id": 1,
+     "name": "B",
+     "kind": "BUFFER"
+    }
+   ],
+   "targets": [
+    {
+     "id": 0,
+     "experiment_id": 0,
+     "composition": {
+      "num": [
+       1,
+       7
+      ],
+      "den": 8
+     },
+     "tolerance": {
+      "num": 0,
+      "den": 1
+     },
+     "droplet_volume": 1,
+     "demand": 1
+    }
+   ],
+   "chip": {
+    "name": "dmfb_m2",
+    "max_mix_volume": 2,
+    "min_mix_volume": 2,
+    "unit_volume": 1,
+    "min_droplet_volume": 1,
+    "allow_partial_take": true,
+    "storage_capacity": 10,
+    "max_denominator": 256,
+    "allow_same_composition_merge": false
+   },
+   "step_limit": 12,
+   "metadata": {
+    "generator": "hand",
+    "note": "dilution sweep at denominator 8",
+    "witness_actions": 6,
+    "known_upper_bound": "35/2",
+    "witness_source": "naive"
+   }
+  },
+  {
+   "instance_id": "tiny-grid-m2-3of8",
+   "fluids": [
+    {
+     "id": 0,
+     "name": "S",
+     "kind": "SAMPLE"
+    },
+    {
+     "id": 1,
+     "name": "B",
+     "kind": "BUFFER"
+    }
+   ],
+   "targets": [
+    {
+     "id": 0,
+     "experiment_id": 0,
+     "composition": {
+      "num": [
+       3,
+       5
+      ],
+      "den": 8
+     },
+     "tolerance": {
+      "num": 0,
+      "den": 1
+     },
+     "droplet_volume": 1,
+     "demand": 1
+    }
+   ],
+   "chip": {
+    "name": "dmfb_m2",
+    "max_mix_volume": 2,
+    "min_mix_volume": 2,
+    "unit_volume": 1,
+    "min_droplet_volume": 1,
+    "allow_partial_take": true,
+    "storage_capacity": 10,
+    "max_denominator": 256,
+    "allow_same_composition_merge": false
+   },
+   "step_limit": 12,
+   "metadata": {
+    "generator": "hand",
+    "note": "dilution sweep at denominator 8",
+    "witness_actions": 6,
+    "known_upper_bound": "27",
+    "witness_source": "naive"
+   }
+  },
+  {
+   "instance_id": "tiny-grid-m2-1of2",
+   "fluids": [
+    {
+     "id": 0,
+     "name": "S",
+     "kind": "SAMPLE"
+    },
+    {
+     "id": 1,
+     "name": "B",
+     "kind": "BUFFER"
+    }
+   ],
+   "targets": [
+    {
+     "id": 0,
+     "experiment_id": 0,
+     "composition": {
+      "num": [
+       1,
+       1
+      ],
+      "den": 2
+     },
+     "tolerance": {
+      "num": 0,
+      "den": 1
+     },
+     "droplet_volume": 1,
+     "demand": 1
+    }
+   ],
+   "chip": {
+    "name": "dmfb_m2",
+    "max_mix_volume": 2,
+    "min_mix_volume": 2,
+    "unit_volume": 1,
+    "min_droplet_volume": 1,
+    "allow_partial_take": true,
+    "storage_capacity": 10,
+    "max_denominator": 256,
+    "allow_same_composition_merge": false
+   },
+   "step_limit": 4,
+   "metadata": {
+    "generator": "hand",
+    "note": "dilution sweep at denominator 8",
+    "witness_actions": 2,
+    "known_upper_bound": "25/2",
+    "witness_source": "naive"
+   }
+  },
+  {
+   "instance_id": "tiny-grid-m2-5of8",
+   "fluids": [
+    {
+     "id": 0,
+     "name": "S",
+     "kind": "SAMPLE"
+    },
+    {
+     "id": 1,
+     "name": "B",
+     "kind": "BUFFER"
+    }
+   ],
+   "targets": [
+    {
+     "id": 0,
+     "experiment_id": 0,
+     "composition": {
+      "num": [
+       5,
+       3
+      ],
+      "den": 8
+     },
+     "tolerance": {
+      "num": 0,
+      "den": 1
+     },
+     "droplet_volume": 1,
+     "demand": 1
+    }
+   ],
+   "chip": {
+    "name": "dmfb_m2",
+    "max_mix_volume": 2,
+    "min_mix_volume": 2,
+    "unit_volume": 1,
+    "min_droplet_volume": 1,
+    "allow_partial_take": true,
+    "storage_capacity": 10,
+    "max_denominator": 256,
+    "allow_same_composition_merge": false
+   },
+   "step_limit": 12,
+   "metadata": {
+    "generator": "hand",
+    "note": "dilution sweep at denominator 8",
+    "witness_actions": 6,
+    "known_upper_bound": "27",
+    "witness_source": "naive"
+   }
+  },
+  {
+   "instance_id": "tiny-grid-m2-3of4",
+   "fluids": [
+    {
+     "id": 0,
+     "name": "S",
+     "kind": "SAMPLE"
+    },
+    {
+     "id": 1,
+     "name": "B",
+     "kind": "BUFFER"
+    }
+   ],
+   "targets": [
+    {
+     "id": 0,
+     "experiment_id": 0,
+     "composition": {
+      "num": [
+       3,
+       1
+      ],
+      "den": 4
+     },
+     "tolerance": {
+      "num": 0,
+      "den": 1
+     },
+     "droplet_volume": 1,
+     "demand": 1
+    }
+   ],
+   "chip": {
+    "name": "dmfb_m2",
+    "max_mix_volume": 2,
+    "min_mix_volume": 2,
+    "unit_volume": 1,
+    "min_droplet_volume": 1,
+    "allow_partial_take": true,
+    "storage_capacity": 10,
+    "max_denominator": 256,
+    "allow_same_composition_merge": false
+   },
+   "step_limit": 8,
+   "metadata": {
+    "generator": "hand",
+    "note": "dilution sweep at denominator 8",
+    "witness_actions": 4,
+    "known_upper_bound": "49/2",
+    "witness_source": "naive"
+   }
+  },
+  {
+   "instance_id": "tiny-grid-m2-7of8",
+   "fluids": [
+    {
+     "id": 0,
+     "name": "S",
+     "kind": "SAMPLE"
+    },
+    {
+     "id": 1,
+     "name": "B",
+     "kind": "BUFFER"
+    }
+   ],
+   "targets": [
+    {
+     "id": 0,
+     "experiment_id": 0,
+     "composition": {
+      "num": [
+       7,
+       1
+      ],
+      "den": 8
+     },
+     "tolerance": {
+      "num": 0,
+      "den": 1
+     },
+     "droplet_volume": 1,
+     "demand": 1
+    }
+   ],
+   "chip": {
+    "name": "dmfb_m2",
+    "max_mix_volume": 2,
+    "min_mix_volume": 2,
+    "unit_volume": 1,
+    "min_droplet_volume": 1,
+    "allow_partial_take": true,
+    "storage_capacity": 10,
+    "max_denominator": 256,
+    "allow_same_composition_merge": false
+   },
+   "step_limit": 12,
+   "metadata": {
+    "generator": "hand",
+    "note": "dilution sweep at denominator 8",
+    "witness_actions": 6,
+    "known_upper_bound": "73/2",
+    "witness_source": "naive"
+   }
+  }
+ ]
+}
