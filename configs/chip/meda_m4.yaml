@@ -1,0 +1,11 @@
+# MEDA chip with a smaller mixing limit (SPEC 5.2). Used by the hand-checked case
+# "target 1/4, M = 4" (SPEC 17.3 case 2), where one mix suffices.
+name: meda_m4
+max_mix_volume: 4
+min_mix_volume: 2
+unit_volume: 1
+min_droplet_volume: 1
+allow_partial_take: true
+storage_capacity: 10
+max_denominator: 256
+allow_same_composition_merge: false

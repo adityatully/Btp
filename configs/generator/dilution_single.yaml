@@ -1,0 +1,13 @@
+# Curriculum stage 2: dilution, one target, M = 8 (SPEC 8.3).
+name: dilution_single
+num_fluids: {samples: 1, reagents: 0, buffers: 1}
+num_experiments: [1, 1]
+targets_per_experiment: [1, 1]
+composition_sampler: dirichlet_snapped
+accuracy_denominator: 64        # 64 = 8 * 8: factorises into mix volumes the chip allows
+support_size: 2
+demand: [1, 1]
+droplet_volume: 1
+tolerance: 0
+step_limit: null                # sized from the witness plan
+step_limit_multiple: 2.0

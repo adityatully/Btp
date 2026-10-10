@@ -9,4 +9,5 @@ support_size: 2
 demand: [1, 3]
 droplet_volume: 1
 tolerance: 0
-step_limit: 64
+step_limit: null                # sized from the witness plan
+step_limit_multiple: 2.0

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from collections.abc import Sequence
+from dataclasses import replace
 
 import gymnasium as gym
 import numpy as np
@@ -12,6 +13,7 @@ from meda.core.problem import Instance
 from meda.core.state import PrepState
 from meda.envs.sample_prep_env import EnvConfig, FixedInstances, SamplePrepEnv
 from meda.generators.sampler import dilution_grid
+from meda.solvers.baselines.naive import naive_plan
 from tests.core.helpers import chip, default_weights, load_yaml
 
 
@@ -41,10 +43,17 @@ def make_env(
     )
 
 
-def tiny_grid() -> list[Instance]:
-    """Stand-in for the tiny_dilution stage until the M4 sampler: all n/16, M = 2."""
-    gen = load_yaml("generator/tiny_dilution.yaml")
-    return dilution_grid(chip("dmfb_m2"), gen["accuracy_denominator"], gen["step_limit"])
+def tiny_grid(denominator: int = 16) -> list[Instance]:
+    """Every dilution n/denominator at M = 2, each with a step limit twice its naive plan.
+
+    A deterministic, complete stand-in for stage 1 in env tests (the sampler is random).
+    """
+    out = []
+    for inst in dilution_grid(chip("dmfb_m2"), denominator, step_limit=10_000):
+        plan = naive_plan(inst)
+        assert plan is not None, inst.instance_id
+        out.append(replace(inst, step_limit=2 * len(plan)))
+    return out
 
 
 def make_tiny_env() -> SamplePrepEnv:

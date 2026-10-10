@@ -4,15 +4,17 @@ Usage:
     uv run python scripts/profile_env.py generator=tiny_dilution
     uv run python scripts/profile_env.py generator=dilution_multi +steps=50000 +workers=16
 
-Until the M4 sampler exists, instances are the dilution grid n/D of the generator's
-`accuracy_denominator` under the configured chip, and the truncation penalty is 0. Actions are
-uniformly random legal candidates. With `+workers=N` (N > 0) the run uses
-`gymnasium.vector.AsyncVectorEnv` with N processes and reports the total rate.
+Instances come from the generator stage itself (the real p(s0), SPEC 8.1), drawn once up front
+with the run's seed. Actions are uniformly random legal candidates. With `+workers=N` (N > 0)
+the run uses `gymnasium.vector.AsyncVectorEnv` with N processes and reports the total rate.
+The truncation penalty is 0 here: the real estimate is `solvers.fallback` (M5), and it would
+only change rewards, not the step rate.
 """
 
 from __future__ import annotations
 
 import time
+from functools import partial
 from typing import Any
 
 import hydra
@@ -25,7 +27,7 @@ from meda.core.costs import CostWeights
 from meda.core.problem import Instance
 from meda.core.state import PrepState
 from meda.envs.sample_prep_env import EnvConfig, FixedInstances, SamplePrepEnv
-from meda.generators.sampler import dilution_grid
+from meda.generators.sampler import GeneratorConfig, sample_instances
 
 
 def zero_penalty(state: PrepState, instance: Instance) -> Rational:
@@ -33,10 +35,18 @@ def zero_penalty(state: PrepState, instance: Instance) -> Rational:
     return ZERO
 
 
-def make_env(cfg: dict[str, Any]) -> SamplePrepEnv:
-    chip = ChipLimits.from_dict(cfg["chip"])
-    gen = cfg["generator"]
-    instances = dilution_grid(chip, int(gen["accuracy_denominator"]), int(gen["step_limit"]))
+def make_instances(cfg: dict[str, Any], count: int, seed: int) -> list[Instance]:
+    return sample_instances(
+        GeneratorConfig.from_dict(cfg["generator"]),
+        ChipLimits.from_dict(cfg["chip"]),
+        np.random.default_rng(seed),
+        count=count,
+        weights=CostWeights.from_dict(cfg["costs"]),
+        unique=False,  # a speed measurement does not need distinct instances
+    )
+
+
+def make_env(cfg: dict[str, Any], instances: list[Instance]) -> SamplePrepEnv:
     return SamplePrepEnv(
         EnvConfig.from_dict(cfg["env"]),
         FixedInstances(instances),
@@ -45,8 +55,8 @@ def make_env(cfg: dict[str, Any]) -> SamplePrepEnv:
     )
 
 
-def profile_single(cfg: dict[str, Any], steps: int, seed: int) -> None:
-    env = make_env(cfg)
+def profile_single(cfg: dict[str, Any], instances: list[Instance], steps: int, seed: int) -> None:
+    env = make_env(cfg, instances)
     rng = np.random.default_rng(seed)
     env.reset(seed=seed)
     episodes, max_legal = 0, 0
@@ -65,10 +75,12 @@ def profile_single(cfg: dict[str, Any], steps: int, seed: int) -> None:
     )
 
 
-def profile_vector(cfg: dict[str, Any], steps: int, workers: int, seed: int) -> None:
+def profile_vector(
+    cfg: dict[str, Any], instances: list[Instance], steps: int, workers: int, seed: int
+) -> None:
     from gymnasium.vector import AsyncVectorEnv
 
-    venv = AsyncVectorEnv([lambda: make_env(cfg) for _ in range(workers)])
+    venv = AsyncVectorEnv([partial(make_env, cfg, instances) for _ in range(workers)])
     rng = np.random.default_rng(seed)
     obs, _ = venv.reset(seed=seed)
     start = time.perf_counter()
@@ -90,13 +102,16 @@ def main(cfg: DictConfig) -> None:
     assert isinstance(data, dict)
     steps = int(cfg.get("steps", 20_000))
     workers = int(cfg.get("workers", 0))
+    seed = int(cfg.seed)
+    instances = make_instances(data, int(cfg.get("instances", 32)), seed)  # type: ignore[arg-type]
+    limits = [i.step_limit for i in instances]
     print(
-        f"generator={cfg.generator.name} chip={cfg.chip.name} (instances: dilution grid "
-        f"1/{cfg.generator.accuracy_denominator}..; random legal actions)"
+        f"generator={cfg.generator.name} chip={cfg.chip.name}: {len(instances)} sampled "
+        f"instances, step limits {min(limits)}-{max(limits)}; random legal actions"
     )
-    profile_single(data, steps, int(cfg.seed))  # type: ignore[arg-type]
+    profile_single(data, instances, steps, seed)  # type: ignore[arg-type]
     if workers > 0:
-        profile_vector(data, steps, workers, int(cfg.seed))  # type: ignore[arg-type]
+        profile_vector(data, instances, steps, workers, seed)  # type: ignore[arg-type]
 
 
 if __name__ == "__main__":

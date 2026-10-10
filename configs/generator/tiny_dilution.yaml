@@ -7,9 +7,10 @@ num_fluids: {samples: 1, reagents: 0, buffers: 1}
 num_experiments: [1, 1]
 targets_per_experiment: [1, 1]
 composition_sampler: dirichlet_snapped
-accuracy_denominator: 16
+accuracy_denominator: 32        # 31 distinct targets: room for a train/val split (SPEC 8.4)
 support_size: 2
 demand: [1, 1]
 droplet_volume: 1
 tolerance: 0
-step_limit: 16
+step_limit: null                # sized from the witness plan
+step_limit_multiple: 2.0
