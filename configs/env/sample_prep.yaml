@@ -5,4 +5,5 @@ F_max: 4                      # max fluids per instance (mixture_*: 1 sample + 2
 T_max: 12                     # max targets per instance (mixture_multi: 4 experiments x 3)
 storage_capacity_max: 10      # S_max = F_max + storage_capacity_max
 L_max: 2048                   # max legal candidate actions per step
+                              # (mixture stages peak near 1600; lower it per stage to shrink obs)
 preference_conditioning: false

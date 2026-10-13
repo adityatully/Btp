@@ -40,7 +40,8 @@ uv run pytest -m slow
 ## Run
 
 ```bash
-uv run python -m meda.train agent=ppo generator=tiny_dilution
+uv run python -m meda.train agent=tabular_q          # trains and reports gaps to the optima
+uv run python -m meda.train agent=ppo generator=tiny_dilution   # M8
 uv run python -m meda.evaluate_cli producer=<name> benchmark=<set>
 uv run python scripts/profile_env.py generator=<name>
 ```
@@ -50,5 +51,8 @@ Configs live in `configs/` (Hydra); override any value on the command line. Run 
 
 ## Status
 
-Milestones M0–M4 (scaffold, exact core, mixing DAG, environment, generators and benchmarks)
-are done. See SPEC section 16 for the milestone order.
+Milestones M0–M6 are done: scaffold, exact core, mixing DAG, environment, generators and
+benchmarks, solvers, tabular Q-learning. See SPEC section 16 for the milestone order.
+
+Tabular Q reaches the proved optimum on 9 of the 10 `tiny_exact_v1` instances. The tenth
+(3/10 at M = 8) is where a table stops working, which is what motivates PPO in M8.

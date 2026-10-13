@@ -1,5 +1,11 @@
-device: cuda                  # training runs on the RTX A5000 workstation
+device: cuda                  # training runs on the RTX A5000 workstation (used from M8)
 log_dir: tensorboard
 use_wandb: false
 checkpoint_every_updates: 50
 eval_every_updates: 50
+# Tabular Q (M6) trains on a frozen benchmark set rather than the sampler: it keys on exact
+# states, so it only makes sense on instances it will see again.
+benchmark: tiny_exact_v1
+instances: null               # null = every instance in the set; or a list of instance ids
+per_instance: true            # one table per instance (the M6 acceptance criterion)
+log_every: 2000

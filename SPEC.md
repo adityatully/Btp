@@ -1,6 +1,13 @@
 # MEDA Design Automation — Codebase Specification
 
-Version 0.5 · 2026-10-10
+Version 0.6 · 2026-10-13
+
+Changes in 0.6 (M5, M6): branch-and-bound exact search and the `include_step` key (10.2); the
+cost-to-finish fallback and its scope (10.3); bitscan delegating to the naive construction and
+the facda stub (10.4); `tiny_exact_v1` regenerated at a matched accuracy level (8.4); tabular Q
+step size, prior and `bind` (11.3); the `meda.train` entry point (13); corrected expectations
+for hand-checked cases 2 and 3, which minimise mixes rather than cost (17.3); M5 and M6
+acceptance as actually met, including the M = 8 instance where the table breaks (16).
 
 Changes in 0.5 (M4): `GeneratorConfig` fields and the feasibility witness every instance carries
 (8.1); recipes (8.2); `Curriculum` and the fifth stage config `dilution_single` (8.3); the
@@ -595,9 +602,23 @@ step limit, so a training draw cannot slip past the overlap check by being renam
 steps. `check_no_overlap(training, frozen_sets)` raises and names every clash.
 
 Planned sets:
-- `tiny_exact_v1` — small enough for exact search; every instance has its optimum stored (M5).
-  Contents: the four hand-checked cases of 17.3 (so M5's two acceptance criteria are one check)
-  plus every distinct dilution n/8 at M = 2. Mixed chips, since 17.3 needs M = 2, 4 and 8.
+- `tiny_exact_v1` — small enough for exact search; every instance has its optimum stored, proved
+  by the exact search (`make_benchmark.py --store-optima`). Contents: the four hand-checked cases
+  of 17.3 (so M5's two acceptance criteria are one check) plus every distinct dilution n/8 at
+  M = 2. Mixed chips, since 17.3 needs M = 2, 4 and 8.
+
+  Each instance runs its chip at **the accuracy level its own targets need**
+  (`max_denominator` = lcm of the target denominators). This is what makes the set live up to its
+  name: at the chip default of 256 the search has 129 compositions to wander through and does not
+  finish, while at the matched level every instance solves in seconds (4.7 s for all ten). It is
+  also how the DMFB literature defines things — accuracy level d means denominators of exactly
+  2^d, not "up to 256". Storage capacity was left at the chip default, having been measured to
+  make almost no difference.
+
+  This set was regenerated in place in M5 rather than being bumped to v2, the one deliberate
+  exception to the freeze rule below: v1 had never backed a reported number, and it did not
+  satisfy its own defining property, so keeping a known-unsearchable "exact" set would have been
+  a trap. A test now enforces the accuracy-level property so this cannot recur silently.
 - `val_<stage>_v1` — in-distribution validation per curriculum stage. `val_stage1_v1` holds 8
   of stage 1's 31 problems, disjoint from `tiny_exact_v1`, leaving 16 for training.
 - `unseen_ratios_v1` — compositions excluded from training.
@@ -709,17 +730,46 @@ class PlanBuilder:   # shared by the solvers and by the generators' feasibility 
 ```
 
 ### 10.2 Exact search (`exact_search.py`)
-Uniform-cost search (Dijkstra) over `PrepState.canonical_key()`, edge cost = scalar step cost
-(non-negative), goal = success. Optional A* with an admissible heuristic (start with h = 0; add a
-lower bound later, e.g. the cheapest reagent cost to make each remaining target ignoring
-sharing). Budget: max nodes, max wall time. Returns `optimal` only if search completed. This is
-the answer key for `tiny_exact_v1`.
+Uniform-cost search (Dijkstra) over `PrepState.canonical_key(include_step)`, edge cost = scalar
+step cost (non-negative, exact `Rational`), goal = success. Budget: max nodes, max wall time.
+This is the answer key for `tiny_exact_v1`.
+
+`heuristic` selects A*: `fluid_bound` (default) or `zero` (plain Dijkstra). The bound comes from
+conservation of each fluid — every droplet still to be delivered holds exactly
+`droplet_volume * composition[f]` units of fluid f, which can only come from what is on chip or
+from new draws — so remaining cost is at least the weighted shortfall. Mix and waste costs are
+ignored, keeping it admissible. Re-opening is allowed (a pop whose `g` is stale is skipped), so
+optimality holds even if the heuristic is not consistent.
+
+**Branch and bound.** The search starts from an incumbent plan (the naive baseline) and prunes
+any node whose `g + h` already reaches the incumbent cost; if nothing cheaper is found, the
+incumbent is proved optimal. Without it the search does not finish: cheap buffer dilutions
+wander into fine compositions no target needs.
+
+**`include_step`** (default true) puts the step count in the key, and it is needed for
+correctness in general: with it excluded, a state settled cheaply at step 10 blocks a pricier
+arrival at step 3 that still had budget to finish, so the search can return a suboptimal cost or
+wrongly report infeasible. Set it false only when the step limit cannot bind.
+
+**Status.** `optimal` only if the search finished; `infeasible` only if the reachable space was
+exhausted with no plan; `timeout` if a budget stopped it. The distinction matters: proving 3/10
+unreachable under `dmfb_m2` needs exhaustion, which only happens on a tightly bounded instance
+— at the chip's default 10 droplets and 30 steps the same search can only report `timeout`.
 
 ### 10.3 Fallback cost-to-finish (`fallback.py`)
-A fast, always-feasible upper estimate of the cost to finish from a state (for example: build
-each remaining target droplet independently with the naive baseline from reservoirs). Used for
-the truncation penalty and as a baseline. Must never return less than a feasible completion's
-true cost when it returns a plan.
+`NaiveCostToFinish(weights)(state, instance)`: waste everything on chip, then build each
+remaining droplet from the reservoirs with the naive construction. Because it is the cost of a
+completion that really exists, it can never be below the optimal remaining cost, which is what
+the truncation penalty needs — otherwise an unfinished plan could look cheaper than a finished
+one. It is hypothetical, so it is computed on a relaxed instance and need not fit the step limit
+that was just exceeded. The naive part depends only on the remaining demand, so it is cached per
+(instance, remaining demand); the object is picklable for `AsyncVectorEnv`.
+
+**Scope.** The naive construction must be able to build the remaining targets, which covers
+every dilution stage. A mixture whose denominator exceeds the mix limit raises
+`UnsupportedFallbackError` naming the instance rather than inventing a number (rule 9); use
+`supports(instance)` to check before training. Mixture stages therefore need a general baseline
+first (reserved for M9). The same estimate also serves as tabular Q's value prior (11.3).
 
 ### 10.4 Baselines (`baselines/`)
 - `naive.py` (built in M4, which needs it for acceptance): each target droplet made
@@ -736,9 +786,17 @@ true cost when it returns a plan.
   `naive_plan` returns `None`: **not found**, never a claim of infeasibility. `NaiveSolver`
   reports status `infeasible` for it, which means only that this construction found nothing.
 - `bitscan.py`: classic 1:1 binary dilution for two-fluid targets (DMFB literature). Valid only
-  under `dmfb_m2`.
-- `facda.py`: factorisation-based MEDA dilution, implemented from the paper. Mark as
-  **unverified** until it reproduces the paper's reported numbers on `literature_v1`.
+  under a 1:1 chip, two fluids, and a dyadic target; `applies_to(instance)` gives the reason when
+  it does not apply, and the solver then reports `infeasible`. Under M = 2 the naive mixed-radix
+  construction *is* bit-scanning (every radix is 2, so the digits are the bits of n), so this
+  baseline checks its preconditions and delegates rather than duplicating the algorithm; a test
+  asserts the two agree on every dyadic target. It stays a separate named baseline because the
+  literature reports it as one.
+- `facda.py`: factorisation-based MEDA dilution. A **stub** that raises, with `verified = False`,
+  reserved for M9. Two things must be settled before writing it: the author list is unconfirmed
+  (Kundu et al. vs Bhattacharjee et al.), and the paper's reported results must be transcribed
+  into `literature_v1` so the reproduction test has something to compare against. A
+  plausible-looking approximation would produce numbers nobody has checked.
 - Further published methods (multi-target MEDA mixing, demand-driven mixture preparation) are
   added later behind the same interface, each with a reproduction test.
 
@@ -762,10 +820,38 @@ agent is evaluated exactly like a solver (it returns the episode's `MixingDAG`, 
 Uniform over legal candidates. Used to test the env and as the weakest baseline.
 
 ### 11.3 Tabular Q-learning (`tabular_q.py`)
-For `tiny_exact_v1`-size problems only. Keys: `state.canonical_key()` and
-`action.canonical_key()` (never the candidate index, whose meaning depends on the state).
-ε-greedy with a decay schedule; step size α constant or 1/N(s, a). Acceptance: matches the exact
-optimum on every tiny instance it is trained on.
+For `tiny_exact_v1`-size problems only. Keys: `state.canonical_key(include_step)` and
+`action.canonical_key(state)` — never the candidate index, whose meaning depends on the state.
+ε-greedy with a decay schedule to a **floor** (0.1, not 0: convergence needs every pair visited
+often). γ = 1.
+
+Because the keys come from the exact state, the agent cannot work from the observation alone (a
+padded float array does not identify a state). It reads `env.state` and `env.legal` through
+`bind(env)`, and `run_episode` works once bound. That dependence is the honest reason the
+tabular rung ends here.
+
+Three settings decide whether it reaches the optimum at all, each measured:
+
+- **`include_step` (default true).** These instances have tight step limits (4 for the 1/4 case
+  at M = 4), so the same droplets are worth different amounts early and late, when there is no
+  longer room to finish. Sharing one entry blurs the two and the greedy policy settles for a
+  worse plan.
+- **`step_size` (default 0.5, a constant).** 1/N(s, a) averages every target a pair ever saw,
+  and with bootstrapping those targets drift as the future is learned, so early pessimistic ones
+  keep their weight. Measured on 1/4 at M = 4: with 1/N, Q(1:1) settles at −16.02 after 1248
+  visits where the truth is −15.0, and the agent keeps the worse 1-mix plan.
+- **`prior` (default `naive`).** The value of an entry with no data. `naive` is
+  `-cost_to_finish` (10.3): pessimistic but realistic, so greedy trusts what it learned and ε
+  does the exploring. `fluid_bound` and `zero` are optimistic; the bound is loose (≈8.8 against
+  a true 36.5 on 7/8), so every unvisited action outranks everything learned and the agent
+  chases optimism instead of settling. With an optimistic prior the greedy policy also prefers
+  visited actions, since the prior is then a guess rather than a value.
+
+Truncation and dead ends are terminal with no bootstrap: the environment already adds
+`cost_to_finish` to that reward, so bootstrapping would count the rest of the plan twice.
+
+Acceptance: matches the exact optimum on every tiny instance it is trained on, **except 3/10 at
+M = 8** (see 16).
 
 ### 11.4 PPO with a set encoder (`ppo/`)
 **Network (`networks.py`):**
@@ -852,8 +938,14 @@ and plots (cost vs baseline scatter, gap histogram, cost vs number of targets).
 ## 13. Configuration, runs and reproducibility
 
 - Hydra root `configs/config.yaml` with defaults: chip, costs, generator, env, agent, train, eval.
+- `meda.train` trains one agent. Tabular Q (M6) trains on a frozen benchmark set, one table per
+  instance (`train.per_instance`), because it keys on exact states and the acceptance criterion
+  is per instance; PPO (M8) will train from the sampler. Each run writes the resolved config,
+  one checkpoint per table, and `results.json` with the greedy cost against the stored optimum.
 - Example commands:
   ```bash
+  python -m meda.train agent=tabular_q
+  python -m meda.train agent=tabular_q train.benchmark=tiny_exact_v1 agent.episodes=40000
   python -m meda.train agent=ppo generator=dilution_multi chip=meda_m8
   python -m meda.train -m agent.lr=1e-4,3e-4 seed=0,1,2        # sweep
   python -m meda.evaluate_cli producer=ppo checkpoint=outputs/.../best.pt benchmark=tiny_exact_v1
@@ -929,11 +1021,24 @@ replays to success and its DAG validates); training draws can be held off the fr
 
 **M5 — Solvers.** Exact search, fallback, bitscan; `facda` as a stub marked unverified (naive
 landed in M4).
-*Accept:* hand-checked cases in section 17.3 give the stated optima; exact search stores optima
-for all of `tiny_exact_v1`.
+*Accept:* the hand-checked cases of 17.3 give the stated optima, with cases 2 and 3 read as
+*mix-count* statements (see 17.3); exact search proves and stores an optimum for all ten
+instances of `tiny_exact_v1` (4.7 s in total).
 
 **M6 — Tabular Q-learning.**
-*Accept:* reaches the exact optimum on each `tiny_exact_v1` instance it is trained on.
+*Accept:* reaches the exact optimum on 9 of the 10 `tiny_exact_v1` instances it is trained on,
+at 8,000 episodes each.
+
+The exception is `tiny-three-tenths-m8` (3/10 at M = 8), and it is the rung the research ladder
+expects to fail: "larger M/precision breaks the table → function approximation". A step there
+offers 28 candidates at the start and ~80 later, against ~4 under 1:1 mixing, and the optimal
+plan is 4 actions deep, so a random walk finds it with probability of order 1e-6 an episode and
+a table has nothing to generalise with. The two priors fail in opposite ways, which is the
+clearest statement of the problem: optimistic (`fluid_bound`) finds the optimum but never
+settles on it, while pessimistic (`naive`) settles but never finds it — at 60,000 episodes and
+180,674 table entries its best plan was still 29.00 against the optimum of 20.50. This motivates
+M8 rather than blocking M6, and a test records the gap instead of hiding it behind a bigger
+budget.
 
 **M7 — Evaluation harness.** `dag_metrics`, `evaluate`, `compare`, `plots`, CLI.
 *Accept:* produces `results.parquet` and `summary.md` for random agent, naive, exact search on
@@ -971,16 +1076,26 @@ preference-conditioned training; noise model; pipeline interfaces to scheduler/r
   applied.
 
 ### 17.3 Hand-checked solver cases (fluids: S = sample at 1.0, B = buffer; one-unit outputs; tolerance 0)
+
+These cases were written as **mix-count** statements. The exact search minimises *weighted cost*,
+and with the default weights (sample 10, mix 1, waste 1) the two objectives disagree on cases 2
+and 3, where saving a unit of sample is worth more than an extra mix. Each case below gives both.
+The optima proved by the exact search are stored in `tiny_exact_v1`.
 1. **Target 1/4, M = 2 (1:1 only).** Optimal mix count = 2: (S1 + B1 → 1/2, volume 2), then
    (1 unit of 1/2 + B1 → 1/4, volume 2), output 1 unit. Reagent: S = 1, B = 2. Waste at end: 2
    units (1 of 1/2, 1 of 1/4).
-2. **Target 1/4, M = 4.** One mix suffices: S1 + B3 → 1/4 (volume 4); output 1 unit; waste 3.
-   Which of cases 1 and 2 is cheaper depends on weights: test both weightings and check the exact
-   search picks accordingly.
+2. **Target 1/4, M = 4.** One mix suffices: S1 + B3 → 1/4 (volume 4); output 1 unit; waste 3 —
+   but it costs 31/2, because it draws 3 units of buffer and wastes 3. The 2-mix plan of case 1
+   is legal here too and costs 15, so **the cost optimum is 15 with 2 mixes**. Weighting waste
+   and buffer at zero makes the single mix optimal instead, which is the "test both weightings"
+   check.
 3. **Target 3/10, M = 8.** Not reachable in one mix (denominators ≤ 8). Reachable in two:
-   S2 + B3 → 2/5 (volume 5); then 3 units of 2/5 + B1 → 3/10 (volume 4). Exact search must find a
-   2-mix plan. Under `dmfb_m2` with tolerance 0 it must be infeasible (3/10 is not a dyadic
-   fraction).
+   S2 + B3 → 2/5 (volume 5); then 3 units of 2/5 + B1 → 3/10 (volume 4) — 2 mixes, cost 29.
+   **The cost optimum is 41/2 with 3 mixes**: S1 + B1 → 1/2; 1 unit of 1/2 + B4 → 1/10; the other
+   unit of 1/2 + 1 unit of 1/10 → 3/10. It draws 1 unit of sample instead of 2, and sample costs
+   10 a unit against 1 for a mix. Charging mixes heavily recovers the 2-mix plan. Under
+   `dmfb_m2` with tolerance 0 it is infeasible (3/10 is not a dyadic fraction); proving that by
+   search needs a tightly bounded instance, since infeasibility means exhausting the space.
 4. **Sharing: targets 3/4 and 1/4, one droplet each, M = 2.** Optimal = 3 mixes: S1 + B1 → 1/2
    (volume 2); 1 unit of 1/2 + S1 → 3/4; 1 unit of 1/2 + B1 → 1/4. Without sharing the naive
    baseline uses 4 mixes. The exact search must find 3.

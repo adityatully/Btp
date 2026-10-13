@@ -1,8 +1,25 @@
 # Tabular Q-learning (SPEC 11.3). Tiny instances only.
 name: tabular_q
-episodes: 20000
+episodes: 8000
 epsilon_start: 1.0
-epsilon_end: 0.05
-epsilon_decay_episodes: 10000
-step_size: visit_count          # "visit_count" (1/N(s,a)) or a constant float
+epsilon_end: 0.1               # a floor, not 0: convergence needs every pair visited often
+epsilon_decay_episodes: 4800
 gamma: 1.0
+
+# A constant step size, not 1/N(s, a). SPEC 11.3 allows either, but 1/N averages every target
+# the pair ever saw, and with bootstrapping the targets drift as the future is learned: early
+# pessimistic targets then dominate for good. Measured on the 1/4 case at M = 4, 1/N settles
+# Q(1:1) at -16.02 after 1248 visits where the truth is -15.0, so the agent keeps the worse
+# 1-mix plan. A constant alpha tracks the moving target and reaches the optimum.
+step_size: 0.5
+
+# Key on the step count as well as the droplets. These instances have tight step limits (4 for
+# the 1/4 case at M = 4), so the same droplets are worth different amounts early and late, and
+# sharing one entry blurs the two.
+include_step: true
+
+# Value of an entry with no data yet. "naive" = -cost_to_finish, the cost of really finishing
+# from here (SPEC 10.3): pessimistic but realistic, so greedy trusts what it learned and epsilon
+# does the exploring. "fluid_bound" and "zero" are optimistic; the bound is loose (about 8.8
+# against a true 36.5 on the 7/8 case), so every unvisited action outranks everything learned.
+prior: naive
