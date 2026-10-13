@@ -2,7 +2,7 @@
  "format": "meda-benchmark/1",
  "name": "tiny_exact",
  "version": 1,
- "description": "Instances small enough for exact search. Optima are stored by the exact search in M5; until then each instance carries the naive witness cost as an upper bound.",
+ "description": "Instances small enough for exact search: each runs its chip at the accuracy level its own targets need, which is what lets the search finish. Optima are proved by the exact search and stored in `reference` (--store-optima).",
  "generator": {
   "builder": "scripts/make_benchmark.py:build_tiny_exact",
   "chips": [
@@ -10,88 +10,109 @@
    "meda_m4",
    "meda_m8"
   ],
+  "accuracy": "max_denominator per instance = lcm of its target denominators",
   "contents": "SPEC 17.3 hand-checked cases + every distinct dilution n/8 at M = 2"
  },
  "seeds": [],
  "reference": {
   "tiny-grid-m2-1of2": {
    "cost": "25/2",
-   "status": "feasible",
-   "producer": "naive",
+   "status": "optimal",
+   "producer": "exact_search",
    "detail": {
-    "witness_actions": 2
+    "mix_ops": 1,
+    "nodes_expanded": 2,
+    "search_exhausted": false
    }
   },
   "tiny-grid-m2-1of8": {
    "cost": "35/2",
-   "status": "feasible",
-   "producer": "naive",
+   "status": "optimal",
+   "producer": "exact_search",
    "detail": {
-    "witness_actions": 6
+    "mix_ops": 3,
+    "nodes_expanded": 22,
+    "search_exhausted": false
    }
   },
   "tiny-grid-m2-3of4": {
    "cost": "49/2",
-   "status": "feasible",
-   "producer": "naive",
+   "status": "optimal",
+   "producer": "exact_search",
    "detail": {
-    "witness_actions": 4
+    "mix_ops": 2,
+    "nodes_expanded": 14,
+    "search_exhausted": false
    }
   },
   "tiny-grid-m2-3of8": {
-   "cost": "27",
-   "status": "feasible",
-   "producer": "naive",
+   "cost": "16",
+   "status": "optimal",
+   "producer": "exact_search",
    "detail": {
-    "witness_actions": 6
+    "mix_ops": 3,
+    "nodes_expanded": 12,
+    "search_exhausted": false
    }
   },
   "tiny-grid-m2-5of8": {
-   "cost": "27",
-   "status": "feasible",
-   "producer": "naive",
+   "cost": "51/2",
+   "status": "optimal",
+   "producer": "exact_search",
    "detail": {
-    "witness_actions": 6
+    "mix_ops": 3,
+    "nodes_expanded": 151,
+    "search_exhausted": false
    }
   },
   "tiny-grid-m2-7of8": {
    "cost": "73/2",
-   "status": "feasible",
-   "producer": "naive",
+   "status": "optimal",
+   "producer": "exact_search",
    "detail": {
-    "witness_actions": 6
+    "mix_ops": 3,
+    "nodes_expanded": 3791,
+    "search_exhausted": false
    }
   },
   "tiny-quarter-m2": {
    "cost": "15",
-   "status": "feasible",
-   "producer": "naive",
+   "status": "optimal",
+   "producer": "exact_search",
    "detail": {
-    "witness_actions": 4
+    "mix_ops": 2,
+    "nodes_expanded": 5,
+    "search_exhausted": false
    }
   },
   "tiny-quarter-m4": {
-   "cost": "31/2",
-   "status": "feasible",
-   "producer": "naive",
+   "cost": "15",
+   "status": "optimal",
+   "producer": "exact_search",
    "detail": {
-    "witness_actions": 2
+    "mix_ops": 2,
+    "nodes_expanded": 11,
+    "search_exhausted": false
    }
   },
   "tiny-sharing-m2": {
-   "cost": "79/2",
-   "status": "feasible",
-   "producer": "naive",
+   "cost": "26",
+   "status": "optimal",
+   "producer": "exact_search",
    "detail": {
-    "witness_actions": 9
+    "mix_ops": 3,
+    "nodes_expanded": 38,
+    "search_exhausted": false
    }
   },
   "tiny-three-tenths-m8": {
-   "cost": "30",
-   "status": "feasible",
-   "producer": "naive",
+   "cost": "41/2",
+   "status": "optimal",
+   "producer": "exact_search",
    "detail": {
-    "witness_actions": 5
+    "mix_ops": 3,
+    "nodes_expanded": 1519,
+    "search_exhausted": false
    }
   }
  },
@@ -137,7 +158,7 @@
     "min_droplet_volume": 1,
     "allow_partial_take": true,
     "storage_capacity": 10,
-    "max_denominator": 256,
+    "max_denominator": 4,
     "allow_same_composition_merge": false
    },
    "step_limit": 8,
@@ -190,7 +211,7 @@
     "min_droplet_volume": 1,
     "allow_partial_take": true,
     "storage_capacity": 10,
-    "max_denominator": 256,
+    "max_denominator": 4,
     "allow_same_composition_merge": false
    },
    "step_limit": 4,
@@ -243,7 +264,7 @@
     "min_droplet_volume": 1,
     "allow_partial_take": true,
     "storage_capacity": 10,
-    "max_denominator": 256,
+    "max_denominator": 10,
     "allow_same_composition_merge": false
    },
    "step_limit": 10,
@@ -313,7 +334,7 @@
     "min_droplet_volume": 1,
     "allow_partial_take": true,
     "storage_capacity": 10,
-    "max_denominator": 256,
+    "max_denominator": 4,
     "allow_same_composition_merge": false
    },
    "step_limit": 18,
@@ -366,7 +387,7 @@
     "min_droplet_volume": 1,
     "allow_partial_take": true,
     "storage_capacity": 10,
-    "max_denominator": 256,
+    "max_denominator": 8,
     "allow_same_composition_merge": false
    },
    "step_limit": 12,
@@ -419,7 +440,7 @@
     "min_droplet_volume": 1,
     "allow_partial_take": true,
     "storage_capacity": 10,
-    "max_denominator": 256,
+    "max_denominator": 8,
     "allow_same_composition_merge": false
    },
    "step_limit": 12,
@@ -472,7 +493,7 @@
     "min_droplet_volume": 1,
     "allow_partial_take": true,
     "storage_capacity": 10,
-    "max_denominator": 256,
+    "max_denominator": 2,
     "allow_same_composition_merge": false
    },
    "step_limit": 4,
@@ -525,7 +546,7 @@
     "min_droplet_volume": 1,
     "allow_partial_take": true,
     "storage_capacity": 10,
-    "max_denominator": 256,
+    "max_denominator": 8,
     "allow_same_composition_merge": false
    },
    "step_limit": 12,
@@ -578,7 +599,7 @@
     "min_droplet_volume": 1,
     "allow_partial_take": true,
     "storage_capacity": 10,
-    "max_denominator": 256,
+    "max_denominator": 4,
     "allow_same_composition_merge": false
    },
    "step_limit": 8,
@@ -631,7 +652,7 @@
     "min_droplet_volume": 1,
     "allow_partial_take": true,
     "storage_capacity": 10,
-    "max_denominator": 256,
+    "max_denominator": 8,
     "allow_same_composition_merge": false
    },
    "step_limit": 12,

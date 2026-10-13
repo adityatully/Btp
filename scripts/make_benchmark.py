@@ -9,15 +9,16 @@ given, and the right move after a definition changes is to bump the version. Chi
 configs are read straight from `configs/`, because a set may mix chips (the hand-checked cases
 of SPEC 17.3 use M = 2, M = 4 and M = 8).
 
-Optima are **not** stored here: `tiny_exact_v1` gets its answer key from the exact search in M5
-(`BenchmarkSet.with_reference`). This script stores the naive witness cost, a feasible upper
-bound, for every instance it writes.
+`--store-optima` runs the exact search over an existing set and rewrites its `reference` with
+proved optima (status `optimal`). The instances themselves are untouched.
 """
 
 from __future__ import annotations
 
 import argparse
 from collections.abc import Callable
+from dataclasses import replace
+from math import lcm
 from pathlib import Path
 from typing import Any
 
@@ -32,7 +33,9 @@ from meda.core.problem import Instance, Target
 from meda.core.rules import replay
 from meda.generators.benchmark_io import BenchmarkSet, InstanceReference, instance_hash
 from meda.generators.sampler import GeneratorConfig, dilution_grid, sample_instances
+from meda.solvers.base import SolveBudget
 from meda.solvers.baselines.naive import naive_plan
+from meda.solvers.exact_search import ExactSearch
 
 ROOT = Path(__file__).resolve().parents[1]
 CONFIGS = ROOT / "configs"
@@ -65,6 +68,19 @@ def load_generator(name: str) -> tuple[GeneratorConfig, str]:
     return GeneratorConfig.from_dict(data), chip  # type: ignore[arg-type]
 
 
+def at_accuracy(chip: ChipLimits, targets: tuple[Target, ...]) -> ChipLimits:
+    """The chip at the accuracy level these targets need: `max_denominator` = lcm of their
+    denominators.
+
+    This is what makes a set exactly searchable, and it is the only deviation these instances
+    make from the chip configs. At `max_denominator: 256` the search wanders through 129
+    compositions no target needs and does not finish; at the matched level every instance of
+    `tiny_exact_v1` solves in seconds. It is also how the DMFB literature defines things: an
+    accuracy level of d means denominators of exactly 2^d, not "up to 256".
+    """
+    return replace(chip, max_denominator=lcm(*[t.composition.den for t in targets]))
+
+
 def dilution(
     instance_id: str,
     shares: list[tuple[int, int]],
@@ -73,11 +89,13 @@ def dilution(
     droplet_volume: int = 1,
     note: str = "",
 ) -> Instance:
-    """A sample+buffer instance whose step limit is twice its naive witness plan."""
+    """A sample+buffer instance at its own accuracy level, with a step limit twice its naive
+    witness plan."""
     targets = tuple(
         Target(i, 0, Composition.from_ints((n, d - n), d), ZERO, droplet_volume, demand)
         for i, (n, d) in enumerate(shares)
     )
+    chip = at_accuracy(chip, targets)
     probe = Instance(instance_id, SB, targets, chip, 10_000)
     actions = naive_plan(probe)
     if actions is None:
@@ -130,11 +148,13 @@ def build_tiny_exact() -> BenchmarkSet:
         generator={
             "builder": "scripts/make_benchmark.py:build_tiny_exact",
             "chips": ["dmfb_m2", "meda_m4", "meda_m8"],
+            "accuracy": "max_denominator per instance = lcm of its target denominators",
             "contents": "SPEC 17.3 hand-checked cases + every distinct dilution n/8 at M = 2",
         },
         description=(
-            "Instances small enough for exact search. Optima are stored by the exact search in "
-            "M5; until then each instance carries the naive witness cost as an upper bound."
+            "Instances small enough for exact search: each runs its chip at the accuracy level "
+            "its own targets need, which is what lets the search finish. Optima are proved by "
+            "the exact search and stored in `reference` (--store-optima)."
         ),
     )
 
@@ -179,6 +199,39 @@ BUILDERS: dict[str, Callable[[], BenchmarkSet]] = {
 }
 
 
+def store_optima(name: str, out: Path, seconds: float, overwrite: bool) -> None:
+    """Prove and store the optimum of every instance in a set (SPEC 10.2, M5 acceptance)."""
+    bench = BenchmarkSet.read(name, out)
+    solver = ExactSearch(load_weights())
+    reference: dict[str, InstanceReference] = {}
+    for inst in bench.instances:
+        result = solver.solve(inst, SolveBudget(max_seconds=seconds))
+        stats = solver.last_stats
+        if result.status != "optimal" or result.cost is None:
+            raise RuntimeError(
+                f"instance '{inst.instance_id}': exact search returned {result.status} after "
+                f"{result.wall_time:.1f}s. A set named *_exact must be searchable; lower its "
+                f"accuracy level or shrink the instance."
+            )
+        reference[inst.instance_id] = InstanceReference(
+            cost=result.cost,
+            status="optimal",
+            producer=solver.name,
+            detail={
+                "mix_ops": result.totals.mix_ops if result.totals else None,
+                "nodes_expanded": result.nodes_expanded,
+                "search_exhausted": bool(stats and stats.exhausted),
+            },
+        )
+        print(
+            f"  {inst.instance_id:24s} optimum {result.cost!s:>7s} "
+            f"({result.totals.mix_ops if result.totals else '?'} mixes, "
+            f"{result.wall_time:.2f}s)"
+        )
+    path = bench.with_reference(reference).write(out, overwrite=True)
+    print(f"stored {len(reference)} optima in {path}")
+
+
 def summarise(bench: BenchmarkSet) -> str:
     lines = [f"{bench.full_name}: {len(bench)} instances"]
     for inst in bench.instances:
@@ -196,10 +249,19 @@ def main() -> None:
     parser.add_argument("set", nargs="?", choices=sorted(BUILDERS), help="which set to build")
     parser.add_argument("--overwrite", action="store_true", help="replace a frozen version")
     parser.add_argument("--list", action="store_true", help="show the sets without writing")
+    parser.add_argument(
+        "--store-optima",
+        action="store_true",
+        help="prove and store the optimum of each instance in an existing set",
+    )
+    parser.add_argument("--seconds", type=float, default=120.0, help="exact-search budget each")
     parser.add_argument("--out", type=Path, default=ROOT / "benchmarks")
     args = parser.parse_args()
     if args.list or args.set is None:
         print("available sets:", ", ".join(sorted(BUILDERS)))
+        return
+    if args.store_optima:
+        store_optima(args.set, args.out, args.seconds, args.overwrite)
         return
     bench = BUILDERS[args.set]()
     reference = {

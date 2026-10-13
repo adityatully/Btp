@@ -157,9 +157,15 @@ def test_frozen_set_loads_and_is_solvable(name: str) -> None:
         assert result.status == "feasible", inst.instance_id
         assert result.dag is not None
         validate(result.dag, inst).raise_if_invalid()
-        stored = bench.reference[inst.instance_id]
-        assert stored.cost == result.cost  # the stored upper bound is this naive plan
+        # metadata keeps the naive witness cost; `reference` holds whatever the best known
+        # answer is -- an upper bound when the set is built (M4), the proved optimum once the
+        # exact search has run over it (M5), which can only be lower.
         assert Rational.parse(inst.metadata["known_upper_bound"]) == result.cost
+        stored = bench.reference[inst.instance_id]
+        assert stored.status in ("feasible", "optimal")
+        assert stored.cost <= result.cost
+        if stored.status == "feasible":
+            assert stored.cost == result.cost
 
 
 @pytest.mark.parametrize("name", FROZEN)
@@ -174,6 +180,18 @@ def test_frozen_sets_are_disjoint() -> None:
     tiny = BenchmarkSet.read("tiny_exact_v1", BENCHMARKS_DIR)
     val = BenchmarkSet.read("val_stage1_v1", BENCHMARKS_DIR)
     assert tiny.hashes().isdisjoint(val.hashes())
+
+
+def test_tiny_exact_stores_proved_optima() -> None:
+    """After M5 every instance of the exact set carries an optimum, not an upper bound."""
+    tiny = BenchmarkSet.read("tiny_exact_v1", BENCHMARKS_DIR)
+    assert len(tiny.reference) == len(tiny)
+    for inst in tiny.instances:
+        stored = tiny.reference[inst.instance_id]
+        assert stored.status == "optimal", inst.instance_id
+        assert stored.producer == "exact_search"
+        assert stored.detail["search_exhausted"] in (True, False)
+        assert stored.detail["mix_ops"] >= 0
 
 
 def test_tiny_exact_holds_the_hand_checked_cases() -> None:
