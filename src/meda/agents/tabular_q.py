@@ -1,5 +1,5 @@
 """Tabular Q-learning for tiny instances (SPEC 11.3).
-
+only for testing the env
 Keys are `state.canonical_key(include_step)` and `action.canonical_key(state)`, **never the
 candidate index**: index i means a different action in a different state, so a table keyed on it
 would learn nothing transferable. Keying on canonical keys also means two states that differ
