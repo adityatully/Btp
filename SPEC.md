@@ -4,8 +4,8 @@ Version 0.7 (draft) · 2026-10-15
 
 Changes in 0.7 (planning before M7; no code yet): benchmark tiers 0–6 and their claim rules
 (8.4); an optional `lower_bound` on `InstanceReference` and `SolveResult` (8.4, 10.1); exact
-search returns a proved lower bound on timeout, and the branch-and-bound pruning the code does
-not yet perform is recorded as a known mismatch (10.2); interval gaps `gap_to_lower_bound`,
+search returns a proved lower bound on timeout, and the branch-and-bound pruning is now in the
+code (10.2); `Curriculum(..., exclude=)` and `problem_hash` close the train/benchmark leak (8.3, 8.4); interval gaps `gap_to_lower_bound`,
 `gap_to_best_known` and `bound_ratio` (12.2); tier labels and wall time in reports (12.3).
 `val_stage1_v1` timeout findings recorded (8.4).
 
@@ -576,12 +576,13 @@ a known **upper bound**. Used for (a) checking agents find plans at least this g
 generating a solved problem forward is easy; solving it backward is hard).
 
 ### 8.3 Curriculum (`curriculum.py`)
-`Curriculum(stages, rng, weights)` matches the protocol `envs.wrappers.CurriculumWrapper`
+`Curriculum(stages, rng, weights, exclude=None)` matches the protocol `envs.wrappers.CurriculumWrapper`
 expects: `source()` returns an instance source for the current stage, `record(info)` takes one
 finished episode's `info`. Each `Stage` is a generator config plus its chip and its exit rule:
 `min_success_rate` and, optionally, a mean plan cost within `cost_within` of `reference_cost`,
 over the last `window` finished episodes. Promotion only ever moves forward — the stages are a
-syllabus, not a controller. `state_dict` / `load_state_dict` carry the stage across checkpoints.
+syllabus, not a controller. `exclude` is the frozen sets' hashes (`BenchmarkSet.hashes()`); every
+draw avoids them. `state_dict` / `load_state_dict` carry the stage across checkpoints.
 
 Stage order (matches the research ladder), one config file each:
 1. `tiny_dilution` — dilution, one target, M = 2 (DMFB-like), accuracy 32.
@@ -708,8 +709,11 @@ Sets per tier:
 
 Train/test separation: training draws from the sampler; evaluation uses only frozen sets.
 `check_no_overlap` verifies it by canonical instance hash. On a small stage the separation is
-not automatic — training **must** pass the frozen sets' hashes as `exclude`, or it will redraw
-the held-out instances.
+not automatic — training **must** pass the frozen sets' hashes as `exclude` (the `Curriculum`
+does), or it will redraw the held-out instances. `BenchmarkSet.hashes()` returns both
+`instance_hash` and `problem_hash`; the latter ignores `max_denominator`, because
+`tiny_exact_v1` sets it per instance and the same dilution would otherwise hash differently
+there and in a stage-1 draw. `check_no_overlap` compares `problem_hash`.
 
 ---
 
@@ -827,11 +831,9 @@ any node whose `g + h` already reaches the incumbent cost; if nothing cheaper is
 incumbent is proved optimal. Without it the search does not finish: cheap buffer dilutions
 wander into fine compositions no target needs.
 
-*Known mismatch (found in M7 planning, to fix in M7):* the code computes the incumbent but never
-prunes against it. The incumbent is only returned when the space is exhausted. The stored
-`tiny_exact_v1` optima are unaffected, because a scratch copy with pruning gives the same ten
-values. Pruning alone does not rescue the four `val_stage1_v1` timeouts, because naive is too
-loose an incumbent there.
+The pruning was added after M7 planning (it was documented but missing). It leaves the ten
+`tiny_exact_v1` optima unchanged, and it does not rescue the four `val_stage1_v1` timeouts,
+because naive is too loose an incumbent there.
 
 **Lower bound on timeout (planned, M7).** When a budget stops the search, it returns
 `lower_bound = min(f_min, incumbent cost)` instead of nothing, where `f_min` is the smallest

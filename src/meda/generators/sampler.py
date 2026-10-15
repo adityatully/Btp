@@ -297,21 +297,27 @@ def sample_instance(
     `metadata` holds the generator name and version, the config hash, the witness plan length
     and, when `weights` is given, `known_upper_bound` (the witness cost as an exact `"a/b"`).
 
-    `exclude` is a set of canonical instance hashes to avoid (see
-    `generators.benchmark_io.instance_hash`). Training passes a frozen evaluation set's hashes
-    so a small stage cannot leak its own held-out instances; a stage with nothing left to draw
-    raises rather than looping forever.
+    `exclude` is a set of canonical hashes to avoid (`generators.benchmark_io.instance_hash` or
+    `problem_hash`; `BenchmarkSet.hashes()` gives both). Training passes a frozen evaluation
+    set's hashes so a small stage cannot leak its own held-out instances; a stage with nothing
+    left to draw raises rather than looping forever.
     """
     if exclude is not None:
         for _ in range(max_tries):
             candidate = _sample_once(cfg, chip, rng, weights, instance_id)
-            if _hash_of(candidate) not in exclude:
+            if not _is_excluded(candidate, exclude):
                 return candidate
         raise RuntimeError(
             f"generator '{cfg.name}': every one of {max_tries} draws was in the excluded set. "
             f"This stage is too small to hold out that many instances."
         )
     return _sample_once(cfg, chip, rng, weights, instance_id)
+
+
+def _is_excluded(instance: Instance, exclude: Container[str]) -> bool:
+    from meda.generators.benchmark_io import instance_hash, problem_hash
+
+    return instance_hash(instance) in exclude or problem_hash(instance) in exclude
 
 
 def _hash_of(instance: Instance) -> str:

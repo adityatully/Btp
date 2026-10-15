@@ -12,7 +12,7 @@ stages are a syllabus, not a controller.
 from __future__ import annotations
 
 from collections import deque
-from collections.abc import Mapping, Sequence
+from collections.abc import Container, Mapping, Sequence
 from dataclasses import dataclass, field
 from typing import Any
 
@@ -92,19 +92,26 @@ class StageStats:
 
 
 class Curriculum:
-    """Draws instances from the current stage and promotes when its rule is met."""
+    """Draws instances from the current stage and promotes when its rule is met.
+
+    `exclude` holds the frozen sets' hashes (`BenchmarkSet.hashes()`); every draw avoids them, so
+    training never sees a benchmark problem. Without it a small stage redraws its own held-out
+    instances.
+    """
 
     def __init__(
         self,
         stages: Sequence[Stage],
         rng: np.random.Generator,
         weights: CostWeights | None = None,
+        exclude: Container[str] | None = None,
     ) -> None:
         if not stages:
             raise ValueError("a curriculum needs at least one stage")
         self.stages = tuple(stages)
         self.rng = rng
         self.weights = weights
+        self.exclude = exclude
         self.index = 0
         self.stats = StageStats(self.stages[0].window)
         self.promotions: list[dict[str, Any]] = []
@@ -122,7 +129,9 @@ class Curriculum:
         stage = self.stage
 
         def draw(rng: np.random.Generator) -> Instance:
-            return sample_instance(stage.config, stage.chip, rng, self.weights)
+            return sample_instance(
+                stage.config, stage.chip, rng, self.weights, exclude=self.exclude
+            )
 
         return draw
 

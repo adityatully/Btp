@@ -27,9 +27,8 @@ BENCHMARK_FORMAT = "meda-benchmark/1"
 BENCHMARKS_DIR = Path(__file__).resolve().parents[3] / "benchmarks"
 
 
-def instance_hash(instance: Instance) -> str:
-    """Canonical hash of the problem: fluid kinds, target multiset, chip limits."""
-    targets = sorted(
+def _targets_payload(instance: Instance) -> list[Any]:
+    return sorted(
         (
             list(t.composition.num),
             t.composition.den,
@@ -39,10 +38,30 @@ def instance_hash(instance: Instance) -> str:
         )
         for t in instance.targets
     )
+
+
+def instance_hash(instance: Instance) -> str:
+    """Canonical hash of the problem: fluid kinds, target multiset, chip limits."""
     payload = {
         "fluids": [f.kind.value for f in instance.fluids],
-        "targets": targets,
+        "targets": _targets_payload(instance),
         "chip": instance.chip.to_dict(),
+    }
+    return hashlib.sha256(json.dumps(payload, sort_keys=True).encode()).hexdigest()
+
+
+def problem_hash(instance: Instance) -> str:
+    """Like `instance_hash` but blind to `max_denominator` (an accuracy ceiling, not the problem).
+
+    `tiny_exact_v1` sets each instance's `max_denominator` to the lcm of its targets, so the
+    same dilution has a different `instance_hash` there than in a stage-1 draw. Holding a
+    problem out of training has to compare this hash.
+    """
+    chip = {k: v for k, v in instance.chip.to_dict().items() if k != "max_denominator"}
+    payload = {
+        "fluids": [f.kind.value for f in instance.fluids],
+        "targets": _targets_payload(instance),
+        "chip": chip,
     }
     return hashlib.sha256(json.dumps(payload, sort_keys=True).encode()).hexdigest()
 
@@ -103,7 +122,10 @@ class BenchmarkSet:
         return len(self.instances)
 
     def hashes(self) -> set[str]:
-        return {instance_hash(i) for i in self.instances}
+        """`instance_hash`es plus `problem_hash`es; pass as `exclude` to hold the set out."""
+        return {instance_hash(i) for i in self.instances} | {
+            problem_hash(i) for i in self.instances
+        }
 
     def by_id(self, instance_id: str) -> Instance:
         for inst in self.instances:
@@ -183,11 +205,11 @@ def check_no_overlap(
     index: dict[str, tuple[str, str]] = {}
     for bench in sets:
         for inst in bench.instances:
-            index[instance_hash(inst)] = (bench.full_name, inst.instance_id)
+            index[problem_hash(inst)] = (bench.full_name, inst.instance_id)
     clashes = [
-        (inst.instance_id, *index[instance_hash(inst)])
+        (inst.instance_id, *index[problem_hash(inst)])
         for inst in training
-        if instance_hash(inst) in index
+        if problem_hash(inst) in index
     ]
     if clashes:
         lines = "\n".join(f"  {t} == {name}:{i}" for t, name, i in clashes[:10])

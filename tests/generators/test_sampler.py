@@ -417,3 +417,26 @@ def test_many_sampled_instances_are_all_solvable(name: str) -> None:
         assert state.is_success, f"{name} draw {n}: {inst.instance_id} unmet"
         assert len(plan) <= inst.step_limit
         validate(MixingDAG.from_deltas(inst, deltas, totals, "witness"), inst).raise_if_invalid()
+
+
+def test_curriculum_never_draws_a_held_out_problem() -> None:
+    """Training must not see frozen-set problems, including `tiny_exact_v1`'s, which differ
+    from stage-1 draws only in `max_denominator`."""
+    from meda.generators.benchmark_io import BENCHMARKS_DIR, BenchmarkSet, check_no_overlap
+
+    frozen = [BenchmarkSet.read(n, BENCHMARKS_DIR) for n in ("tiny_exact_v1", "val_stage1_v1")]
+    held_out: set[str] = set()
+    for bench in frozen:
+        held_out |= bench.hashes()
+    stage_configs = [load_stage("tiny_dilution")]
+    stages_list = [Stage(cfg, chip_limits) for cfg, chip_limits in stage_configs]
+    cur = Curriculum(stages_list, np.random.default_rng(0), WEIGHTS, exclude=held_out)
+    draw = cur.source()
+    rng = np.random.default_rng(1)
+    drawn = [draw(rng) for _ in range(200)]
+    check_no_overlap(drawn, frozen)
+
+    unguarded = Curriculum(stages_list, np.random.default_rng(0), WEIGHTS).source()
+    leaked = [unguarded(rng) for _ in range(200)]
+    with pytest.raises(ValueError, match="overlap"):
+        check_no_overlap(leaked, frozen)
