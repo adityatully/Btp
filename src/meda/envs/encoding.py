@@ -1,5 +1,6 @@
 """State -> padded numpy observation, including per-candidate afterstate features (SPEC 9.2-9.3).
-
+# this file is used to encode the state into a padded numpy observation which will
+#  be used to train the policy network and is the input to the agent when making a decision
 The network never does arithmetic: every result composition, distance and "satisfies target"
 flag is computed here from the exact integer compositions of `meda.core`. Results are formed as
 exact integer numerators over an integer denominator (numpy int64) and only then divided, so each
