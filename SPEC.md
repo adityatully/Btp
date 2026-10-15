@@ -1,6 +1,13 @@
 # MEDA Design Automation — Codebase Specification
 
-Version 0.7 (draft) · 2026-10-15
+Version 0.8 · 2026-10-16
+
+Changes in 0.8 (M7): the evaluation harness is built. `dag_metrics` with exact definitions and
+the list-schedule config (12.1); `Producer`, `evaluate`, the gap columns and where each is
+filled (12.2); `InstanceReference.lower_bound` now exists, written to JSON only when set (8.4);
+`evaluate_cli` takes `eval.producers` (12.2, 13); `meda.train` grades tabular Q through
+`evaluate` and writes `results.parquet` + `summary.md` instead of `results.json` (13); M7
+acceptance as met (16). The exact-search timeout bound and `val_stage1_v2` are still to do.
 
 Changes in 0.7 (planning before M7; no code yet): benchmark tiers 0–6 and their claim rules
 (8.4); an optional `lower_bound` on `InstanceReference` and `SolveResult` (8.4, 10.1); exact
@@ -604,11 +611,12 @@ A benchmark set is a frozen JSON file (`format: "meda-benchmark/1"`) holding `na
 stored answer key. M4 stores the naive witness cost with status `feasible` (an upper bound); M5
 replaces it with the exact optimum (status `optimal`) through `with_reference`.
 
-**Lower bounds (planned, M7).** `InstanceReference` gains an optional `lower_bound: Rational`
-with its own `lower_bound_producer` in `detail`. A reference is then an interval
+**Lower bounds.** `InstanceReference` has an optional `lower_bound: Rational` (M7; written to
+JSON only when set, so older files are unchanged, and never above `cost`), with its producer
+named in `detail["lower_bound_producer"]`. A reference is then an interval
 [`lower_bound`, `cost`] on the true optimum: `optimal` means the two are equal, `feasible`
-means only the upper end is a real plan. Exact search supplies the bound when it times out
-(10.2). Every set beyond tier 0 below will hold instances that exact search cannot finish, and
+means only the upper end is a real plan. Exact search is to supply the bound when it times
+out (10.2, not yet built). Every set beyond tier 0 below will hold instances that exact search cannot finish, and
 without a bound such an instance can only be graded against another heuristic. A bound is
 stored only if it comes from an admissible method; a guessed or extrapolated number is never
 written as one (rule 9).
@@ -1008,39 +1016,66 @@ extractor. Useful to confirm the in-house PPO is not buggy.
 ## 12. Metrics and evaluation (`meda.analysis`)
 
 ### 12.1 DAG metrics (`dag_metrics.py`)
-**Proxy metrics** (what the sample-prep literature reports): mix operations, total reagent,
-reagent by fluid kind, sample volume, waste volume, number of distinct intermediates, sharing
-count (intermediates feeding more than one target).
+`dag_metrics(dag, instance, schedule) -> DagMetrics`, all exact integers, computed from the DAG
+alone (totals are recounted from the nodes, not read from the producer's report).
+
+**Proxy metrics** (what the sample-prep literature reports): `mix_ops`, `outputs`,
+`total_reagent` and drawn volume by kind (`sample_volume`, `reagent_volume`, `buffer_volume`),
+`waste_volume`, `distinct_intermediates` (distinct MIX compositions) and `sharing_count` (MIX
+nodes whose fluid reaches OUTPUT nodes of two or more distinct targets; naive is always 0).
 
 **Structural metrics** (predict how hard the plan is to execute on the chip; no grid needed):
-an abstract list schedule of the DAG with configurable per-operation durations and a limit on
-concurrent mixes, giving: makespan in slots, peak number of droplets alive, storage occupancy ×
-duration, critical-path length. These are the "tier-1" quantities and are cheap to compute.
-(These cost tiers are unrelated to the benchmark tiers of 8.4.)
+an abstract list schedule. Each MIX or OUTPUT starts as soon as its inputs exist and the mix cap
+allows, ties broken by the plan's own (step, id) order. WASTE is instantaneous and happens once
+every other use of its droplet has started, so it ends a droplet's life but never adds to the
+makespan. Reservoirs are available at slot 0. From it:
+- `makespan`: last MIX/OUTPUT finish, in slots;
+- `critical_path`: the makespan with unlimited concurrent mixes (longest duration chain);
+- `peak_droplets`: most MIX droplets alive at once, a droplet living from its mix's start to
+  the start of its last use (to the end, in an unfinished plan). It may exceed
+  `storage_capacity`, since the schedule runs operations in parallel that the plan ran in turn;
+- `storage_slots`: summed slots that droplets wait on chip between being made and last used.
 
-### 12.2 Evaluation (`evaluate.py`, `evaluate_cli.py`)
-`evaluate(producer, benchmark, cfg) -> pandas.DataFrame`, one row per instance: instance id,
-producer, status, success, cost, every metric above, wall time, and gaps:
-- `gap_to_optimal` = (cost − optimal) / optimal, where an optimum is stored.
-- `gap_to_<baseline>` for each configured baseline.
-- Where the reference is an interval [`lower_bound`, best known] (8.4, planned M7):
-  - `gap_to_lower_bound` = (cost − lower_bound) / lower_bound. This is an **upper bound on the
-    true gap to optimal**, and it is the figure reported when no optimum is proved.
-  - `gap_to_best_known` = (cost − best known) / best known. This can be negative, meaning the
-    producer found a plan cheaper than every stored reference. Such a plan is a candidate for a
-    new `_v<n+1>` answer key and is never written back into a frozen set.
-  - `bound_ratio` = best known / lower_bound, stored per instance. It says how loose the
-    interval is. A large ratio means the instance cannot separate a good producer from a
-    mediocre one, and the summary flags it.
+Config (`eval.schedule`, physical assumptions under rule 8): `mix_duration`,
+`output_duration` (slots, >= 1) and `max_concurrent_mixes` (null = unlimited).
+These are the "tier-1" cost quantities, unrelated to the benchmark tiers of 8.4.
 
-  `gap_to_optimal` stays empty for these instances. A gap against a bound or a heuristic is
-  never written into that column.
+### 12.2 Evaluation (`evaluate.py`, `compare.py`, `plots.py`, `evaluate_cli.py`)
+A `Producer` has a `name` and `produce(instance) -> SolveResult`. `SolverProducer(solver,
+budget)` wraps a solver; `AgentProducer(agent, env, deterministic, best_of_k)` wraps an agent
+through `run_episode` (greedy, or the cheapest successful plan of k sampled episodes; k > 1 with
+`deterministic` is an error). `build_env(cfg, instances)` builds the env both training and
+evaluation use.
 
-Every produced DAG is validated (section 7.3); a failed validation is a hard error, not a
-metric.
+`evaluate(producer, benchmark, schedule) -> pandas.DataFrame`, one row per instance: benchmark,
+instance id, producer, status, `success` (status `optimal` or `feasible`), `cost` (float) and
+`cost_exact` (`"a/b"`), the reference (`reference_cost`, `reference_status`, `lower_bound`),
+`num_targets`, `total_demand`, wall time, nodes expanded, every metric of 12.1, and gaps.
+Gaps are computed exactly from rational costs and only for a successful plan (an unfinished
+plan's cost is not comparable):
+- `gap_to_optimal` = (cost − optimal) / optimal, only where the reference is `optimal`. A gap
+  against a bound or a heuristic is never written into this column.
+- `gap_to_best_known` = (cost − reference cost) / reference cost, for every stored reference
+  (equal to `gap_to_optimal` where that is proved). Negative means the producer found a plan
+  cheaper than every stored reference: a candidate for a new `_v<n+1>` answer key, never
+  written back into a frozen set.
+- `gap_to_lower_bound` = (cost − lower_bound) / lower_bound, where a positive bound is stored.
+  An **upper bound on the true gap to optimal**, the figure reported when no optimum is proved.
+- `bound_ratio` = best known / lower_bound per instance: how loose the interval is. A large
+  ratio means the instance cannot separate a good producer from a mediocre one.
+- `gap_to_<baseline>` for each configured baseline (`compare.add_baseline_gaps`), where both
+  plans succeeded.
 
-Outputs per run: `results.parquet`, `summary.md` (mean, median, 90th percentile per metric),
-and plots (cost vs baseline scatter, gap histogram, cost vs number of targets).
+Every produced DAG is validated (section 7.3), complete if the plan succeeded and partial
+otherwise; a failed validation is a hard error, not a metric.
+
+`evaluate_cli` grades `eval.producers` and `eval.baselines` (random, naive, bitscan,
+exact_search; tabular Q is graded by `meda.train`, PPO joins in M8) on `eval.benchmark`, with
+solvers given `eval.solver_seconds` per instance. Outputs per run: `results.parquet` (one row
+per producer and instance), `summary.md` (the benchmark's tier, success rate, and n / mean /
+median / 90th percentile per metric over successful plans, plus exact costs per instance) and
+`plots/` (cost vs the first baseline, gap-to-best-known histograms with a shared x range, cost
+vs number of targets; each producer has a fixed colour across all figures).
 
 ### 12.3 Evaluation protocol
 - Agents evaluated deterministically (argmax) and optionally with sampling (best of k).
@@ -1058,14 +1093,15 @@ and plots (cost vs baseline scatter, gap histogram, cost vs number of targets).
 - `meda.train` trains one agent. Tabular Q (M6) trains on a frozen benchmark set, one table per
   instance (`train.per_instance`), because it keys on exact states and the acceptance criterion
   is per instance; PPO (M8) will train from the sampler. Each run writes the resolved config,
-  one checkpoint per table, and `results.json` with the greedy cost against the stored optimum.
+  one checkpoint per table, and the greedy policy graded by `evaluate` (12.2):
+  `results.parquet`, with the training statistics as extra columns, and `summary.md`.
 - Example commands:
   ```bash
   python -m meda.train agent=tabular_q
   python -m meda.train agent=tabular_q train.benchmark=tiny_exact_v1 agent.episodes=40000
   python -m meda.train agent=ppo generator=dilution_multi chip=meda_m8
   python -m meda.train -m agent.lr=1e-4,3e-4 seed=0,1,2        # sweep
-  python -m meda.evaluate_cli producer=ppo checkpoint=outputs/.../best.pt benchmark=tiny_exact_v1
+  python -m meda.evaluate_cli eval.producers=[random,naive,exact_search] eval.benchmark=tiny_exact_v1
   ```
 - Each run directory stores: the resolved config, git commit hash and dirty flag, seed, library
   versions, TensorBoard logs, checkpoints (`last.pt`, `best.pt` by validation cost), and
@@ -1160,6 +1196,11 @@ budget.
 **M7 — Evaluation harness.** `dag_metrics`, `evaluate`, `compare`, `plots`, CLI.
 *Accept:* produces `results.parquet` and `summary.md` for random agent, naive, exact search on
 `tiny_exact_v1`; gaps computed correctly.
+
+Met: exact search lands on all ten stored optima (gap 0), naive's gaps equal those computed from
+the stored costs (it matches 5 of 10; 3/8 costs 27 against 16), and random succeeds on 2 of 10
+within the step limits, its failures carrying no gap (`pytest -m slow`, test_evaluate_cli). Still
+to do before M8: the exact-search timeout bound (10.2) and `val_stage1_v2`.
 
 **M8 — PPO with set encoder.** Networks, masked policy, rollout, PPO, training entry point,
 checkpointing, logging.
