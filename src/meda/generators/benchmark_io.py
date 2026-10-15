@@ -68,28 +68,44 @@ def problem_hash(instance: Instance) -> str:
 
 @dataclass(frozen=True, slots=True)
 class InstanceReference:
-    """A stored result for one instance (the "answer key" of a frozen set)."""
+    """A stored result for one instance (the "answer key" of a frozen set).
+
+    `cost` is the best known plan cost. `lower_bound`, when set, is a proved bound on the
+    optimum, so the reference is the interval [lower_bound, cost] (SPEC 8.4); the method that
+    proved it is named in `detail["lower_bound_producer"]`."""
 
     cost: Rational
     status: str  # "optimal" (exact search finished) | "feasible" (an upper bound)
     producer: str
     detail: Mapping[str, Any] = field(default_factory=dict)
+    lower_bound: Rational | None = None
+
+    def __post_init__(self) -> None:
+        if self.lower_bound is not None and self.lower_bound > self.cost:
+            raise ValueError(
+                f"lower bound {self.lower_bound} exceeds the best known cost {self.cost}"
+            )
 
     def to_dict(self) -> dict[str, Any]:
-        return {
+        data = {
             "cost": str(self.cost),
             "status": self.status,
             "producer": self.producer,
             "detail": dict(self.detail),
         }
+        if self.lower_bound is not None:  # absent, not null, so older files stay byte-identical
+            data["lower_bound"] = str(self.lower_bound)
+        return data
 
     @staticmethod
     def from_dict(data: Mapping[str, Any]) -> InstanceReference:
+        bound = data.get("lower_bound")
         return InstanceReference(
             cost=Rational.parse(data["cost"]),
             status=str(data["status"]),
             producer=str(data["producer"]),
             detail=dict(data.get("detail", {})),
+            lower_bound=None if bound is None else Rational.parse(bound),
         )
 
 

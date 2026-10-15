@@ -78,6 +78,11 @@ warn_redundant_casts = true
 warn_unused_ignores = true
 check_untyped_defs = true
 
+# pandas ships no type information (pandas-stubs is not a dependency).
+[[tool.mypy.overrides]]
+module = "pandas"
+ignore_missing_imports = true
+
 # Strict on the exact rules engine (SPEC section 18).
 [[tool.mypy.overrides]]
 module = "meda.core.*"
