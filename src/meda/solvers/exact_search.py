@@ -223,10 +223,14 @@ class ExactSearch:
                 nkey = nxt.canonical_key(step_in_key)
                 if nkey in dist and not cost < dist[nkey]:
                     continue
+                f = cost + heuristic(nxt, instance)
+                # Branch and bound: reaching the incumbent's cost cannot improve on it.
+                if bound is not None and not f < bound:
+                    continue
                 dist[nkey] = cost
                 nodes[nkey] = _Node(nxt, key, action)
                 counter += 1
-                heapq.heappush(frontier, (cost + heuristic(nxt, instance), counter, nkey))
+                heapq.heappush(frontier, (f, counter, nkey))
                 peak = max(peak, len(frontier))
 
         # The space was searched out with nothing cheaper: the incumbent is optimal.
