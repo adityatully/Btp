@@ -1,4 +1,14 @@
-benchmark: tiny_exact_v1
+# Evaluation (SPEC 12). Run: uv run python -m meda.evaluate_cli eval.producers=[random,naive,exact_search]
+benchmark: tiny_exact_v1      # a frozen set in benchmarks/ (file stem or name)
+producers: [naive]            # any of: random, naive, bitscan, exact_search
+baselines: [naive]            # adds gap_to_<name>; run as producers too
 deterministic: true           # argmax; set false for sampling
-best_of_k: 1
-baselines: [naive]
+best_of_k: 1                  # > 1 needs deterministic: false (cheapest of k sampled episodes)
+solver_seconds: 60            # wall-time budget per instance for each solver
+
+# Abstract list schedule for the structural metrics (SPEC 12.1). Physical assumptions, so they
+# live here (rule 8). Durations are in time slots; null = no limit on concurrent mixes.
+schedule:
+  mix_duration: 1
+  output_duration: 1
+  max_concurrent_mixes: null

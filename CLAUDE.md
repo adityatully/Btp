@@ -27,5 +27,5 @@ sample-preparation agent. **`SPEC.md` is the source of truth. Read sections 1–
 ## Commands
 - Tests: `uv run pytest -q`
 - Train: `uv run python -m meda.train agent=ppo generator=tiny_dilution`
-- Evaluate: `uv run python -m meda.evaluate_cli producer=<name> benchmark=<set>`
+- Evaluate: `uv run python -m meda.evaluate_cli eval.producers=[<name>,...] eval.benchmark=<set>`
 - Profile env: `uv run python scripts/profile_env.py generator=<name>`
