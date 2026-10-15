@@ -2,7 +2,7 @@
  "format": "meda-benchmark/1",
  "name": "val_stage1",
  "version": 1,
- "description": "Stage-1 validation: 8 dilutions drawn from tiny_dilution, disjoint from tiny_exact_v1. Stage 1 holds only 15 distinct problems, so training must exclude these hashes.",
+ "description": "Stage-1 validation: 8 dilutions drawn from tiny_dilution, disjoint from tiny_exact_v1. Stage 1 holds only 31 distinct problems, so training must exclude these hashes.",
  "generator": {
   "builder": "scripts/make_benchmark.py:build_val_stage1",
   "stage": "tiny_dilution",

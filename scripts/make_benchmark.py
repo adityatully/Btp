@@ -162,7 +162,7 @@ def build_tiny_exact() -> BenchmarkSet:
 def build_val_stage1() -> BenchmarkSet:
     """In-distribution validation for curriculum stage 1 (`tiny_dilution`).
 
-    Stage 1 has only 15 distinct problems (the reduced fractions n/16), so this set is the part
+    Stage 1 has only 31 distinct problems (the reduced fractions n/32), so this set is the part
     of the stage that is *not* in `tiny_exact_v1`. Training must pass these hashes to the
     sampler as `exclude`.
     """
@@ -187,7 +187,7 @@ def build_val_stage1() -> BenchmarkSet:
         seeds=seeds,
         description=(
             "Stage-1 validation: 8 dilutions drawn from tiny_dilution, disjoint from "
-            "tiny_exact_v1. Stage 1 holds only 15 distinct problems, so training must exclude "
+            "tiny_exact_v1. Stage 1 holds only 31 distinct problems, so training must exclude "
             "these hashes."
         ),
     )
