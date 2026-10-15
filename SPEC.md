@@ -615,8 +615,8 @@ replaces it with the exact optimum (status `optimal`) through `with_reference`.
 JSON only when set, so older files are unchanged, and never above `cost`), with its producer
 named in `detail["lower_bound_producer"]`. A reference is then an interval
 [`lower_bound`, `cost`] on the true optimum: `optimal` means the two are equal, `feasible`
-means only the upper end is a real plan. Exact search is to supply the bound when it times
-out (10.2, not yet built). Every set beyond tier 0 below will hold instances that exact search cannot finish, and
+means only the upper end is a real plan. Exact search supplies the bound when it times out
+(10.2). Every set beyond tier 0 below will hold instances that exact search cannot finish, and
 without a bound such an instance can only be graded against another heuristic. A bound is
 stored only if it comes from an admissible method; a guessed or extrapolated number is never
 written as one (rule 9).
@@ -817,7 +817,7 @@ class PlanBuilder:   # shared by the solvers and by the generators' feasibility 
     """Emits a plan through `core.rules.apply`, so every plan is legal by construction."""
 # SolveResult: instance_id, producer, status, dag: MixingDAG | None, totals: StepCost | None,
 #   cost: Rational | None (exact plan cost, no penalty), wall_time, nodes_expanded,
-#   lower_bound: Rational | None (planned, M7: a proved bound on the optimum; see 10.2)
+#   lower_bound: Rational | None (a proved bound on the optimum when exact search times out; 10.2)
 # status: "optimal" | "feasible" | "timeout" | "infeasible" (solvers) | "failed" (an agent
 #   episode that did not meet all demand; not a proof of infeasibility)
 ```
@@ -843,13 +843,17 @@ The pruning was added after M7 planning (it was documented but missing). It leav
 `tiny_exact_v1` optima unchanged, and it does not rescue the four `val_stage1_v1` timeouts,
 because naive is too loose an incumbent there.
 
-**Lower bound on timeout (planned, M7).** When a budget stops the search, it returns
+**Lower bound on timeout (M7).** When a budget stops the search, it returns
 `lower_bound = min(f_min, incumbent cost)` instead of nothing, where `f_min` is the smallest
 `g + h` on the frontier. This is a proved bound on the optimum: with an admissible `h`, some
 node of an optimal plan is always on the frontier with `f ≤ C*`. Stale heap entries only carry
 a larger `f`, so they cannot lower the minimum. Nodes pruned by the incumbent have
 `f ≥ incumbent`, which is why the incumbent caps the bound. Status stays `timeout`, and the
-result carries `lower_bound` together with the incumbent as the best known plan. With no
+result carries `lower_bound` together with the best known plan. A goal generated more cheaply
+than the incumbent replaces it (after a replay confirms the plan and its cost), which tightens
+the pruning and improves the best known end of the interval. A test stops the search at
+several node budgets on every `tiny_exact_v1` instance and checks the bound never exceeds the
+stored optimum. With no
 search at all, `h(root)` is already a valid but weak bound. Tighter instance-level bounds, such
 as an LP relaxation over fluid flows, can be added behind the same field, each named in
 `lower_bound_producer`. This bound is what lets tiers 1 and 3–6 of 8.4 be graded wherever exact

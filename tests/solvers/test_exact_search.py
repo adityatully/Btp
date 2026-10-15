@@ -321,3 +321,30 @@ def test_naive_is_never_cheaper_than_the_optimum() -> None:
         plan = naive_plan(inst)
         assert plan is not None
         assert cost_of(inst, list(plan)) >= TINY.reference[inst.instance_id].cost
+
+
+@pytest.mark.parametrize("max_nodes", [0, 1, 5, 25, 100])
+def test_timeout_lower_bound_never_exceeds_a_proved_optimum(max_nodes: int) -> None:
+    """Stop the search early on every solved instance: the bound must sit at or below the
+    stored optimum, and any best-known plan must be real and no cheaper than it."""
+    for inst in TINY.instances:
+        optimum = TINY.reference[inst.instance_id].cost
+        result = ExactSearch(WEIGHTS).solve(inst, SolveBudget(max_nodes=max_nodes))
+        if result.status == "optimal":  # finished within the budget
+            assert result.cost == optimum
+            continue
+        assert result.status == "timeout"
+        assert result.lower_bound is not None
+        assert result.lower_bound <= optimum, inst.instance_id
+        if result.dag is not None:
+            assert result.cost is not None and result.cost >= optimum
+            assert result.lower_bound <= result.cost
+            validate(result.dag, inst).raise_if_invalid()
+
+
+def test_bound_before_any_expansion_is_the_root_heuristic() -> None:
+    inst = at_accuracy(dilution([(7, 32)], chip_limits=chip("dmfb_m2")))
+    result = ExactSearch(WEIGHTS, use_incumbent=False).solve(inst, SolveBudget(max_nodes=0))
+    root = PrepState.initial(inst)
+    assert result.status == "timeout" and result.dag is None
+    assert result.lower_bound == fluid_bound_heuristic(WEIGHTS)(root, inst)

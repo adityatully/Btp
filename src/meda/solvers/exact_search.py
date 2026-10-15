@@ -19,6 +19,14 @@ found, the incumbent is proved optimal. This is what makes the search finish: th
 space is finite but vast, since cheap buffer dilutions can wander far into fine compositions
 that no target needs.
 
+**Lower bound on a budget stop.** The search then returns status `timeout` with
+`lower_bound = min(f_min, incumbent)`, where `f_min` is the smallest `g + h` on the frontier.
+With an admissible `h`, some state of an optimal plan always waits on the frontier with
+`f <= C*`, so `f_min <= C*`. Stale heap entries only carry a larger `f`, and states pruned by the
+incumbent have `f >= incumbent`, which is why the incumbent caps the bound. The result also
+carries the best plan known at that point: a goal generated more cheaply than the incumbent
+replaces it (and tightens the pruning), so the upper end improves too.
+
 Costs are exact `Rational`s throughout, so two plans are compared without any rounding.
 """
 
@@ -92,6 +100,8 @@ class SearchStats:
     nodes_generated: int
     peak_frontier: int
     exhausted: bool  # the reachable space was searched out (no budget stop)
+    stopped: bool = False  # a budget stopped the search; the plan returned is only the best known
+    lower_bound: Rational | None = None  # set when `stopped`: a proved bound on the optimum
 
 
 @dataclass(slots=True)
@@ -134,10 +144,10 @@ class ExactSearch:
         wall = time.perf_counter() - start
         self.last_stats = stats
 
+        status: Literal["optimal", "infeasible", "timeout"] = (
+            "timeout" if stats.stopped else "infeasible" if plan is None else "optimal"
+        )
         if plan is None:
-            status: Literal["infeasible", "timeout"] = (
-                "infeasible" if stats.exhausted else "timeout"
-            )
             return SolveResult(
                 instance.instance_id,
                 self.name,
@@ -147,18 +157,20 @@ class ExactSearch:
                 None,
                 wall,
                 stats.nodes_expanded,
+                stats.lower_bound,
             )
         _, totals, deltas = replay(instance, plan)
         assert cost is not None
         return SolveResult(
             instance_id=instance.instance_id,
             producer=self.name,
-            status="optimal",
+            status=status,
             dag=MixingDAG.from_deltas(instance, deltas, totals, self.name),
             totals=totals,
             cost=cost,
             wall_time=wall,
             nodes_expanded=stats.nodes_expanded,
+            lower_bound=stats.lower_bound,
         )
 
     def incumbent(self, instance: Instance) -> tuple[tuple[Action, ...], Rational] | None:
@@ -174,7 +186,10 @@ class ExactSearch:
     def search(
         self, instance: Instance, budget: SolveBudget | None = None
     ) -> tuple[tuple[Action, ...] | None, Rational | None, SearchStats]:
-        """The optimal plan and its exact cost, or None with the reason in the stats."""
+        """The optimal plan and its exact cost, or None with the reason in the stats.
+
+        If a budget stops the search (`stats.stopped`), the plan and cost returned are the best
+        known (None if there is none) and `stats.lower_bound` bounds the optimum from below."""
         budget = budget or SolveBudget()
         deadline = None if budget.max_seconds is None else time.perf_counter() + budget.max_seconds
         step_in_key = self.include_step
@@ -196,10 +211,13 @@ class ExactSearch:
         peak = 1
 
         while frontier:
-            if budget.max_nodes is not None and expanded >= budget.max_nodes:
-                return None, None, SearchStats(expanded, generated, peak, exhausted=False)
-            if deadline is not None and time.perf_counter() > deadline:
-                return None, None, SearchStats(expanded, generated, peak, exhausted=False)
+            if (budget.max_nodes is not None and expanded >= budget.max_nodes) or (
+                deadline is not None and time.perf_counter() > deadline
+            ):
+                f_min = frontier[0][0]
+                lower = f_min if bound is None or f_min < bound else bound
+                stats = SearchStats(expanded, generated, peak, False, True, lower)
+                return best_plan, bound, stats
 
             priority, _, key = heapq.heappop(frontier)
             node = nodes[key]
@@ -232,12 +250,31 @@ class ExactSearch:
                 counter += 1
                 heapq.heappush(frontier, (f, counter, nkey))
                 peak = max(peak, len(frontier))
+                if nxt.is_success:  # a cheaper plan than the incumbent: it becomes the incumbent
+                    best_plan, bound = self._checked(instance, nodes, nkey, cost), cost
 
         # The space was searched out with nothing cheaper: the incumbent is optimal.
         stats = SearchStats(expanded, generated, peak, exhausted=True)
         if best_plan is not None:
             return best_plan, bound, stats
         return None, None, stats
+
+    def _checked(
+        self,
+        instance: Instance,
+        nodes: dict[CanonicalKey, _Node],
+        goal: CanonicalKey,
+        cost: Rational,
+    ) -> tuple[Action, ...]:
+        """The plan to `goal`, replayed to confirm it succeeds at exactly `cost`."""
+        plan = self._reconstruct(nodes, goal)
+        final, totals, _ = replay(instance, plan)
+        if not final.is_success or self.weights.scalar(totals, instance.fluids) != cost:
+            raise RuntimeError(
+                f"instance '{instance.instance_id}': reconstructed plan does not replay to "
+                f"success at cost {cost}"
+            )
+        return plan
 
     @staticmethod
     def _reconstruct(nodes: dict[CanonicalKey, _Node], goal: CanonicalKey) -> tuple[Action, ...]:

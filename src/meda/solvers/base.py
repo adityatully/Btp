@@ -31,7 +31,8 @@ class SolveBudget:
 class SolveResult:
     """`dag`, `totals` and `cost` describe the produced plan (None if there is none).
 
-    `cost` is the exact scalar plan cost under the weights used (no truncation penalty)."""
+    `cost` is the exact scalar plan cost under the weights used (no truncation penalty). On a
+    `timeout`, the plan (if any) is only the best known, and `lower_bound` bounds the optimum."""
 
     instance_id: str
     producer: str
@@ -41,6 +42,7 @@ class SolveResult:
     cost: Rational | None
     wall_time: float
     nodes_expanded: int = 0
+    lower_bound: Rational | None = None  # a proved bound on the optimum (exact search timeout)
 
 
 class Solver(Protocol):
