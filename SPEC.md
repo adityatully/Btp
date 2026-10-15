@@ -1,6 +1,13 @@
 # MEDA Design Automation — Codebase Specification
 
-Version 0.6 · 2026-10-13
+Version 0.7 (draft) · 2026-10-15
+
+Changes in 0.7 (planning before M7; no code yet): benchmark tiers 0–6 and their claim rules
+(8.4); an optional `lower_bound` on `InstanceReference` and `SolveResult` (8.4, 10.1); exact
+search returns a proved lower bound on timeout, and the branch-and-bound pruning the code does
+not yet perform is recorded as a known mismatch (10.2); interval gaps `gap_to_lower_bound`,
+`gap_to_best_known` and `bound_ratio` (12.2); tier labels and wall time in reports (12.3).
+`val_stage1_v1` timeout findings recorded (8.4).
 
 Changes in 0.6 (M5, M6): branch-and-bound exact search and the `include_step` key (10.2); the
 cost-to-finish fallback and its scope (10.3); bitscan delegating to the naive construction and
@@ -596,12 +603,78 @@ A benchmark set is a frozen JSON file (`format: "meda-benchmark/1"`) holding `na
 stored answer key. M4 stores the naive witness cost with status `feasible` (an upper bound); M5
 replaces it with the exact optimum (status `optimal`) through `with_reference`.
 
+**Lower bounds (planned, M7).** `InstanceReference` gains an optional `lower_bound: Rational`
+with its own `lower_bound_producer` in `detail`. A reference is then an interval
+[`lower_bound`, `cost`] on the true optimum: `optimal` means the two are equal, `feasible`
+means only the upper end is a real plan. Exact search supplies the bound when it times out
+(10.2). Every set beyond tier 0 below will hold instances that exact search cannot finish, and
+without a bound such an instance can only be graded against another heuristic. A bound is
+stored only if it comes from an admissible method; a guessed or extrapolated number is never
+written as one (rule 9).
+
 `instance_hash(instance)` is the canonical identity of a *problem*: the fluid kinds, the multiset
 of targets and the chip limits. It deliberately ignores the instance id, the metadata and the
 step limit, so a training draw cannot slip past the overlap check by being renamed or given more
 steps. `check_no_overlap(training, frozen_sets)` raises and names every clash.
 
-Planned sets:
+**Benchmark tiers.** Each tier answers a different question, and a number from one tier is
+never reported as evidence for another tier's question. Tiers 0–1 only show that a producer
+works and is near optimal on problems small enough to prove. They say nothing about the problem
+class this project targets (MTMD mixture preparation on MEDA with a storage limit). That is
+the job of tiers 3–6.
+
+| Tier | Question | Sets | Answer key | Built in |
+|---|---|---|---|---|
+| 0 Correctness | Does the engine/producer reach a proved optimum? | `tiny_exact_v1` | `optimal` | M5 (done) |
+| 1 In-distribution | Does the agent learn its training stage? | `val_stage<k>_v<n>`, k = 1..5 | `optimal`, else [bound, best known] | stage 1: M7–M8; others with their stage |
+| 2 Engine check (DMFB) | Does our core reproduce published 1:1 results? | `dmfb_sweep_v1` | exact search, bitscan, published DMFB numbers | M9 |
+| 3 Literature | Do we reproduce, then beat, MEDA methods on their own problems? | `literature_<paper>_v1` | the paper's reported numbers + our reproduction | M9 |
+| 4 Generalisation | Does the policy transfer to unseen and larger problems? | `unseen_ratios_v1`, `larger_v1` | [bound, best known] | after M8 stage 2 |
+| 5 Frontier | How does the agent do where no published method applies? | `frontier_v1` | [bound, best known] | after a general mixture fallback (10.3) |
+| 6 Assays | Does it work on ratios from real protocols? | `assays_v1` | [bound, best known] | M9 |
+
+Tier 2 and 3 rules:
+- **Tier 2 is a test, not a result.** `dmfb_sweep_v1` holds every n/2^d at d = 4..8 under
+  `dmfb_m2` (15, 31, 63, 127, 255 targets). It checks the core against published DMFB results
+  (bit scanning step counts, GORMA's optimal reactant use, REMIA/WARA/CoDOS from the UCR
+  framework). Under M = 2 our action space is strictly larger than a DMFB method's, so a win
+  here is meaningless and is never reported as one.
+- **Tier 3 is transcribed by hand from the paper PDF**, one set per paper (WSPM, FacDA, MRCM,
+  e-MRCM, then DFMM/MTWM). It records the paper's own protocol: target list or sweep, M or Sc,
+  accuracy δ and rounding, cost or objective, mixing model, and whether a parent may take only
+  1 unit of an intermediate. Many papers report an aggregate over a sweep ("mean operations over
+  all 255 targets at δ = 1/256") rather than per-instance numbers. Those go in a set-level
+  `published` block that names the paper, table and value, and are compared against the same
+  aggregate from `evaluate`. Numbers from memory or from secondary sources are never stored. A
+  baseline counts only after its reimplementation reproduces its `published` block (10.4).
+
+Tier 5 rules:
+- `frontier_v1` is the intersection that BASELINES.md section 1.2 identifies as open: k:l
+  mixing, N ≥ 3 fluids, many targets, a per-target demand vector, and a storage capacity that
+  binds. It is laid out as **scaling axes**, not a random pile. A base instance is varied along
+  one axis at a time: number of targets η, number of reagents N, demand, storage capacity,
+  accuracy level, and M. That gives cost-vs-size and time-vs-size curves, including the point
+  where exact search stops finishing within its budget.
+- The reference for each instance is the interval [lower bound, best known], where best known
+  is the cheapest of naive (which handles demand), exact search at a long budget, and any
+  published method adapted to the instance. Adapted results are labelled `adapted`, for example
+  e-MRCM run per target and then replicated to meet demand, and are never presented as the
+  published method.
+- Before this set can be used, two things are needed: env padding sizes (`F_max`, `T_max`,
+  `storage_capacity_max`, `L_max`) that cover its largest instance, which otherwise raises
+  under rule 9, and a cost-to-finish fallback that supports mixtures (10.3).
+- **Claim rule.** "No published method can attempt these" is false as written. Naive always
+  produces a plan, and an exact solver can attempt any instance given unlimited time. Report
+  what was measured instead: the instance lies outside every published method's input class,
+  exact search did not finish within budget B, and the agent's cost is within x of the lower
+  bound and y below the best adapted baseline, at inference time t.
+
+Tier 6: `assays_v1` uses target ratios from real protocols, with a citation per instance: PCR
+master mix, the colorimetric protein serial dilution, and the scaled Protein 1/4/5/7 family.
+Multiplexed IVD is excluded because it has no splitting and no storage, so it is not a
+sample-preparation problem (PROJECT_CONTEXT 3.2).
+
+Sets per tier:
 - `tiny_exact_v1` — small enough for exact search; every instance has its optimum stored, proved
   by the exact search (`make_benchmark.py --store-optima`). Contents: the four hand-checked cases
   of 17.3 (so M5's two acceptance criteria are one check) plus every distinct dilution n/8 at
@@ -620,11 +693,18 @@ Planned sets:
   satisfy its own defining property, so keeping a known-unsearchable "exact" set would have been
   a trap. A test now enforces the accuracy-level property so this cannot recur silently.
 - `val_<stage>_v1` — in-distribution validation per curriculum stage. `val_stage1_v1` holds 8
-  of stage 1's 31 problems, disjoint from `tiny_exact_v1`, leaving 16 for training.
+  of stage 1's 31 problems, disjoint from `tiny_exact_v1`, leaving 16 for training. Its answer
+  key holds naive costs only. A 60 s exact search proves 4 of the 8 optima (1/16, 9/32, 7/32
+  and 11/16, the last only at a matched accuracy level) and times out on 25/32, 17/32, 19/32
+  and 15/16. Naive is up to 2.1× the optimum (7/32: 83/2 against 39/2). `val_stage1_v2` will
+  store the proved optima and [lower bound, best known] for the rest, so that M8 acceptance (b)
+  can be measured.
+- `dmfb_sweep_v1` — tier 2, see above.
+- `literature_<paper>_v1` — tier 3, one set per paper, filled manually from the PDF.
 - `unseen_ratios_v1` — compositions excluded from training.
 - `larger_v1` — more targets / fluids than any training stage (generalisation test).
-- `literature_v1` — instances transcribed by hand from published papers (WSPM, FacDA, Kundu
-  et al.), with the paper's reported results stored for comparison. Filled manually.
+- `frontier_v1` — tier 5, scaling axes over the MTMD + storage problem class.
+- `assays_v1` — tier 6, protocol-derived ratios.
 
 Train/test separation: training draws from the sampler; evaluation uses only frozen sets.
 `check_no_overlap` verifies it by canonical instance hash. On a small stage the separation is
@@ -724,7 +804,8 @@ class Solver(Protocol):
 class PlanBuilder:   # shared by the solvers and by the generators' feasibility witnesses
     """Emits a plan through `core.rules.apply`, so every plan is legal by construction."""
 # SolveResult: instance_id, producer, status, dag: MixingDAG | None, totals: StepCost | None,
-#   cost: Rational | None (exact plan cost, no penalty), wall_time, nodes_expanded
+#   cost: Rational | None (exact plan cost, no penalty), wall_time, nodes_expanded,
+#   lower_bound: Rational | None (planned, M7: a proved bound on the optimum; see 10.2)
 # status: "optimal" | "feasible" | "timeout" | "infeasible" (solvers) | "failed" (an agent
 #   episode that did not meet all demand; not a proof of infeasibility)
 ```
@@ -745,6 +826,24 @@ optimality holds even if the heuristic is not consistent.
 any node whose `g + h` already reaches the incumbent cost; if nothing cheaper is found, the
 incumbent is proved optimal. Without it the search does not finish: cheap buffer dilutions
 wander into fine compositions no target needs.
+
+*Known mismatch (found in M7 planning, to fix in M7):* the code computes the incumbent but never
+prunes against it. The incumbent is only returned when the space is exhausted. The stored
+`tiny_exact_v1` optima are unaffected, because a scratch copy with pruning gives the same ten
+values. Pruning alone does not rescue the four `val_stage1_v1` timeouts, because naive is too
+loose an incumbent there.
+
+**Lower bound on timeout (planned, M7).** When a budget stops the search, it returns
+`lower_bound = min(f_min, incumbent cost)` instead of nothing, where `f_min` is the smallest
+`g + h` on the frontier. This is a proved bound on the optimum: with an admissible `h`, some
+node of an optimal plan is always on the frontier with `f ≤ C*`. Stale heap entries only carry
+a larger `f`, so they cannot lower the minimum. Nodes pruned by the incumbent have
+`f ≥ incumbent`, which is why the incumbent caps the bound. Status stays `timeout`, and the
+result carries `lower_bound` together with the incumbent as the best known plan. With no
+search at all, `h(root)` is already a valid but weak bound. Tighter instance-level bounds, such
+as an LP relaxation over fluid flows, can be added behind the same field, each named in
+`lower_bound_producer`. This bound is what lets tiers 1 and 3–6 of 8.4 be graded wherever exact
+search does not finish.
 
 **`include_step`** (default true) puts the step count in the key, and it is needed for
 correctness in general: with it excluded, a state settled cheaply at step 10 blocks a pricier
@@ -915,12 +1014,25 @@ count (intermediates feeding more than one target).
 an abstract list schedule of the DAG with configurable per-operation durations and a limit on
 concurrent mixes, giving: makespan in slots, peak number of droplets alive, storage occupancy ×
 duration, critical-path length. These are the "tier-1" quantities and are cheap to compute.
+(These cost tiers are unrelated to the benchmark tiers of 8.4.)
 
 ### 12.2 Evaluation (`evaluate.py`, `evaluate_cli.py`)
 `evaluate(producer, benchmark, cfg) -> pandas.DataFrame`, one row per instance: instance id,
 producer, status, success, cost, every metric above, wall time, and gaps:
 - `gap_to_optimal` = (cost − optimal) / optimal, where an optimum is stored.
 - `gap_to_<baseline>` for each configured baseline.
+- Where the reference is an interval [`lower_bound`, best known] (8.4, planned M7):
+  - `gap_to_lower_bound` = (cost − lower_bound) / lower_bound. This is an **upper bound on the
+    true gap to optimal**, and it is the figure reported when no optimum is proved.
+  - `gap_to_best_known` = (cost − best known) / best known. This can be negative, meaning the
+    producer found a plan cheaper than every stored reference. Such a plan is a candidate for a
+    new `_v<n+1>` answer key and is never written back into a frozen set.
+  - `bound_ratio` = best known / lower_bound, stored per instance. It says how loose the
+    interval is. A large ratio means the instance cannot separate a good producer from a
+    mediocre one, and the summary flags it.
+
+  `gap_to_optimal` stays empty for these instances. A gap against a bound or a heuristic is
+  never written into that column.
 
 Every produced DAG is validated (section 7.3); a failed validation is a hard error, not a
 metric.
@@ -931,7 +1043,10 @@ and plots (cost vs baseline scatter, gap histogram, cost vs number of targets).
 ### 12.3 Evaluation protocol
 - Agents evaluated deterministically (argmax) and optionally with sampling (best of k).
 - Fixed seeds; at least 3 training seeds per reported configuration.
-- Report on all frozen sets of section 8.4, including `larger_v1` for generalisation.
+- Report on all frozen sets of section 8.4, including `larger_v1` for generalisation. Each
+  table states its benchmark tier, and a result answers only its tier's question.
+- Report solver and agent wall time alongside cost on every tier. On tier 5, plot both against
+  each scaling axis.
 
 ---
 
