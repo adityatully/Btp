@@ -25,7 +25,7 @@ from meda.solvers.baselines.naive import NaiveSolver, naive_plan
 from tests.core.helpers import chip, default_weights, dilution, mixture
 from tests.generators.helpers import load_stage
 
-FROZEN = ("tiny_exact_v1", "val_stage1_v1")
+FROZEN = ("tiny_exact_v1", "val_stage1_v1", "val_stage1_v2")
 WEIGHTS = default_weights()
 
 
@@ -164,8 +164,8 @@ def test_frozen_set_loads_and_is_solvable(name: str) -> None:
         stored = bench.reference[inst.instance_id]
         assert stored.status in ("feasible", "optimal")
         assert stored.cost <= result.cost
-        if stored.status == "feasible":
-            assert stored.cost == result.cost
+        if stored.status == "feasible" and stored.lower_bound is None:
+            assert stored.cost == result.cost  # a bare upper bound is the naive witness
 
 
 @pytest.mark.parametrize("name", FROZEN)
@@ -233,3 +233,23 @@ def test_instances_in_frozen_sets_round_trip_as_dags() -> None:
     _, totals, deltas = replay(inst, plan)
     dag = MixingDAG.from_deltas(inst, deltas, totals, "naive")
     assert MixingDAG.from_dict(dag.to_dict()) == dag
+
+
+def test_val_stage1_v2_is_v1_with_a_better_answer_key() -> None:
+    """Same instances (so the same exam), and for each one either a proved optimum or an
+    interval [proved lower bound, best known] with both ends no worse than v1's."""
+    v1 = BenchmarkSet.read("val_stage1_v1", BENCHMARKS_DIR)
+    v2 = BenchmarkSet.read("val_stage1_v2", BENCHMARKS_DIR)
+    assert v2.instances == v1.instances
+    assert v2.hashes() == v1.hashes()
+    assert set(v2.reference) == set(v1.reference)
+    for inst in v2.instances:
+        old, new = v1.reference[inst.instance_id], v2.reference[inst.instance_id]
+        assert new.cost <= old.cost, inst.instance_id
+        if new.status == "optimal":
+            assert new.lower_bound is None and new.producer == "exact_search"
+        else:
+            assert new.status == "feasible"
+            assert new.lower_bound is not None and 0 < new.lower_bound <= new.cost
+            assert new.detail["lower_bound_producer"].startswith("exact_search")
+            assert Rational.parse(new.detail["naive_cost"]) == old.cost

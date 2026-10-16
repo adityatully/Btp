@@ -2,6 +2,7 @@
 
     uv run python scripts/make_benchmark.py tiny_exact_v1
     uv run python scripts/make_benchmark.py val_stage1_v1
+    uv run python scripts/make_benchmark.py val_stage1_v2
     uv run python scripts/make_benchmark.py --list
 
 A published version is frozen: the script refuses to overwrite one unless `--overwrite` is
@@ -28,6 +29,7 @@ from omegaconf import OmegaConf
 from meda.core.chip import ChipLimits
 from meda.core.composition import ZERO, Composition, Rational
 from meda.core.costs import CostWeights
+from meda.core.dag import MixingDAG, validate
 from meda.core.fluids import Fluid, FluidKind
 from meda.core.problem import Instance, Target
 from meda.core.rules import replay
@@ -193,9 +195,92 @@ def build_val_stage1() -> BenchmarkSet:
     )
 
 
+# val_stage1_v2 search budgets, in expanded nodes rather than seconds, so the answer key
+# rebuilds identically on any machine.
+V2_NODES_REAL = 100_000
+V2_NODES_MATCHED = 50_000
+
+
+def build_val_stage1_v2() -> BenchmarkSet:
+    """`val_stage1_v1`'s instances, unchanged, with a better answer key (SPEC 8.4).
+
+    Per instance: if exact search proves the optimum at the instance's own accuracy within
+    `V2_NODES_REAL`, store it as `optimal`. Otherwise store the interval [lower bound, best
+    known]: the bound is the search's proved `lower_bound` at its budget stop, and the best
+    known is the cheapest of the naive plan, the search's own best plan, and a plan found at the
+    matched accuracy level (`max_denominator` = the target's denominator). That last plan is
+    legal on the real instance too, since its denominators stay within the chip's; it is
+    replayed and validated there before it counts.
+    """
+    v1 = BenchmarkSet.read("val_stage1_v1")
+    weights = load_weights()
+    solver = ExactSearch(weights)
+    reference: dict[str, InstanceReference] = {}
+    for inst in v1.instances:
+        iid = inst.instance_id
+        real = solver.solve(inst, SolveBudget(max_nodes=V2_NODES_REAL))
+        if real.status == "optimal":
+            assert real.cost is not None and real.totals is not None
+            reference[iid] = InstanceReference(
+                real.cost,
+                "optimal",
+                solver.name,
+                {"mix_ops": real.totals.mix_ops, "nodes_expanded": real.nodes_expanded},
+            )
+            print(f"  {iid}: optimal {real.cost}", flush=True)
+            continue
+        if real.status != "timeout" or real.lower_bound is None:
+            raise RuntimeError(f"instance '{iid}': exact search returned {real.status}")
+        candidates = [(v1.reference[iid].cost, "naive")]
+        if real.cost is not None:
+            candidates.append((real.cost, "exact_search (best plan at budget stop)"))
+        matched = replace(inst, chip=at_accuracy(inst.chip, inst.targets))
+        plan, _, mstats = solver.search(matched, SolveBudget(max_nodes=V2_NODES_MATCHED))
+        if plan is not None:
+            final, totals, deltas = replay(inst, plan)
+            if not final.is_success:
+                raise RuntimeError(
+                    f"instance '{iid}': matched-accuracy plan fails on the real chip"
+                )
+            dag = MixingDAG.from_deltas(inst, deltas, totals, solver.name)
+            validate(dag, inst).raise_if_invalid()
+            den = matched.chip.max_denominator
+            status = "best plan at budget stop" if mstats.stopped else "optimal there"
+            candidates.append(
+                (
+                    weights.scalar(totals, inst.fluids),
+                    f"exact_search at max_denominator {den} ({status})",
+                )
+            )
+        cost, producer = min(candidates, key=lambda c: c[0])
+        reference[iid] = InstanceReference(
+            cost,
+            "feasible",
+            producer,
+            {
+                "lower_bound_producer": f"exact_search fluid_bound, {V2_NODES_REAL} nodes",
+                "nodes_expanded": real.nodes_expanded,
+                "naive_cost": str(v1.reference[iid].cost),
+            },
+            lower_bound=real.lower_bound,
+        )
+        print(f"  {iid}: [{real.lower_bound}, {cost}] best known from {producer}", flush=True)
+    return replace(
+        v1,
+        version=2,
+        generator={**v1.generator, "answer_key": "scripts/make_benchmark.py:build_val_stage1_v2"},
+        description=(
+            v1.description + " v2 keeps the instances and replaces the answer key: proved optima "
+            "where exact search finishes, else [proved lower bound, best known]."
+        ),
+        reference=reference,
+    )
+
+
 BUILDERS: dict[str, Callable[[], BenchmarkSet]] = {
     "tiny_exact_v1": build_tiny_exact,
     "val_stage1_v1": build_val_stage1,
+    "val_stage1_v2": build_val_stage1_v2,
 }
 
 
@@ -272,7 +357,7 @@ def main() -> None:
             detail={"witness_actions": inst.metadata["witness_actions"]},
         )
         for inst in bench.instances
-        if "known_upper_bound" in inst.metadata
+        if "known_upper_bound" in inst.metadata and inst.instance_id not in bench.reference
     }
     path = bench.with_reference(reference).write(args.out, overwrite=args.overwrite)
     print(summarise(bench))
