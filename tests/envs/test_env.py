@@ -313,3 +313,113 @@ def test_random_agent_10000_episodes_on_tiny_dilution() -> None:
             assert env.observation_space.contains(obs)
         successes += bool(steps[-1][4]["success"])
     assert successes > 0
+
+
+# --------------------------------------------------------------------------- snapshot / restore
+
+
+def _obs_equal(a: dict[str, Any], b: dict[str, Any]) -> bool:
+    return a.keys() == b.keys() and all(np.array_equal(a[k], b[k]) for k in a)
+
+
+def _play(env: SamplePrepEnv, rng: np.random.Generator, steps: int) -> list[Any]:
+    """`steps` random legal actions, resetting from the env's own source after each episode."""
+    out = []
+    for _ in range(steps):
+        obs, reward, terminated, truncated, info = env.step(np.int64(rng.integers(len(env.legal))))
+        out.append((obs, reward, terminated, truncated, info.get("status"), info.get("plan_cost")))
+        if terminated or truncated:
+            obs, info = env.reset()
+            out.append((obs, info["instance_id"]))
+    return out
+
+
+def _same_trace(a: list[Any], b: list[Any]) -> bool:
+    if len(a) != len(b):
+        return False
+    for x, y in zip(a, b, strict=True):
+        if not _obs_equal(x[0], y[0]) or x[1:] != y[1:]:
+            return False
+    return True
+
+
+def test_restore_continues_the_run_exactly() -> None:
+    """Snapshot mid-episode; a fresh env restored from it (through pickle, as a checkpoint
+    would) plays the next steps, across several episode boundaries, exactly like the original."""
+    import pickle
+
+    env = make_tiny_env()
+    env.reset(seed=3)
+    _play(env, np.random.default_rng(1), 23)
+    assert not env._done and env.state.step > 0  # really mid-episode
+    snap = pickle.loads(pickle.dumps(env.snapshot()))
+    obs_at_snap = env.observe()
+
+    straight = _play(env, np.random.default_rng(2), 60)
+
+    resumed_env = make_tiny_env()
+    resumed_env.reset(seed=999)  # a different history: restore must overwrite all of it
+    resumed_env.restore(snap)
+    assert _obs_equal(resumed_env.observe(), obs_at_snap)
+    resumed = _play(resumed_env, np.random.default_rng(2), 60)
+
+    assert sum(1 for x in straight if len(x) == 2) >= 3  # crossed several resets
+    assert _same_trace(straight, resumed)
+
+
+def test_snapshot_is_independent_of_the_env() -> None:
+    env = make_tiny_env()
+    env.reset(seed=0)
+    _play(env, np.random.default_rng(0), 3)
+    snap = env.snapshot()
+    before = (snap.state, snap.born, snap.deltas, snap.rng.bit_generator.state)
+    _play(env, np.random.default_rng(1), 20)
+    assert (snap.state, snap.born, snap.deltas, snap.rng.bit_generator.state) == before
+
+
+def test_restore_rejects_an_instance_that_does_not_fit() -> None:
+    big = make_env([dilution([(1, 4), (3, 8)], demand=2, step_limit=12)])
+    big.reset()
+    small = make_env(tiny_grid(), T_max=1)
+    with pytest.raises(ValueError, match="targets > env T_max"):
+        small.restore(big.snapshot())
+
+
+@pytest.mark.parametrize("vector", ["sync", "async"])
+def test_vector_env_resume_is_exact(vector: str) -> None:
+    """A trainer's checkpoint: per-worker snapshots via `get_attr`, restored into new workers
+    via `set_attr`, observations rebuilt via `call("observe")` (SAME_STEP autoreset)."""
+    from gymnasium.vector import AsyncVectorEnv, AutoresetMode, SyncVectorEnv
+
+    def make() -> Any:
+        cls = SyncVectorEnv if vector == "sync" else AsyncVectorEnv
+        return cls([make_tiny_env] * 3, autoreset_mode=AutoresetMode.SAME_STEP)
+
+    def run(venv: Any, obs: dict[str, Any], rng: np.random.Generator, steps: int) -> list[Any]:
+        trace = []
+        for _ in range(steps):
+            masks = obs["action_mask"].astype(bool)
+            actions = np.array([int(rng.choice(np.flatnonzero(m))) for m in masks])
+            obs, reward, terminated, truncated, _ = venv.step(actions)
+            trace.append((obs, reward.tolist(), terminated.tolist(), truncated.tolist()))
+        return trace
+
+    def stack(obs_list: tuple[dict[str, Any], ...]) -> dict[str, Any]:
+        return {k: np.stack([o[k] for o in obs_list]) for k in obs_list[0]}
+
+    a, b = make(), make()
+    try:
+        obs, _ = a.reset(seed=11)
+        rng = np.random.default_rng(5)
+        obs = run(a, obs, rng, 17)[-1][0]
+        snaps = a.get_attr("env_snapshot")
+        straight = run(a, obs, np.random.default_rng(6), 40)
+
+        b.reset(seed=12)
+        b.set_attr("env_snapshot", list(snaps))
+        assert _obs_equal(stack(b.call("observe")), obs)
+        resumed = run(b, obs, np.random.default_rng(6), 40)
+        assert _same_trace(straight, resumed)
+    finally:
+        a.close()
+        b.close()

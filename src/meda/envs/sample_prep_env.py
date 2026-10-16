@@ -12,10 +12,18 @@
 - `info` every step: `instance_id`, `cost_breakdown`, `legal_count`, `stochastic`. At episode
   end also: `status`, `success`, `dead_end`, `episode_totals`, `plan_cost` (exact, without
   penalty), `penalty` (exact), and `dag` (the episode's `MixingDAG`).
+- `snapshot()` / `restore()` save and put back everything the env holds between steps: the
+  instance, state, candidates, the plan so far and the env's generator. A run resumed from a
+  checkpoint therefore continues its half-finished episodes exactly (SPEC 9.1). Vector envs
+  read and write it per worker as the `env_snapshot` attribute (`get_attr` / `set_attr`), then
+  `call("observe")` rebuilds each worker's current observation. The vector env must use
+  `AutoresetMode.SAME_STEP`: under the default `NEXT_STEP`, an async worker keeps its "reset
+  on the next step" flag in a local variable that no snapshot can reach.
 """
 
 from __future__ import annotations
 
+import copy
 from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass
 from typing import Any, Protocol, cast
@@ -76,6 +84,24 @@ class EnvConfig:
         )
 
 
+@dataclass(frozen=True, slots=True)
+class EnvSnapshot:
+    """Everything `SamplePrepEnv` holds between steps (picklable; nothing is shared with the
+    env it came from). The instance source and cost-to-finish are not included: they are
+    fixed at construction, and the source draws only through `rng`."""
+
+    instance: Instance | None
+    state: PrepState | None
+    legal: tuple[Action, ...]
+    born: tuple[tuple[int, int], ...]
+    deltas: tuple[DagDelta, ...]
+    totals: StepCost | None
+    plan_cost: Rational
+    done: bool
+    rng: np.random.Generator
+    rng_seed: int | None
+
+
 class SamplePrepEnv(gym.Env[Obs, np.int64]):
     metadata: dict[str, Any] = {"render_modes": []}  # noqa: RUF012
 
@@ -131,6 +157,51 @@ class SamplePrepEnv(gym.Env[Obs, np.int64]):
         mask = np.zeros(self.config.sizes.l_max, dtype=bool)
         mask[: len(self._legal)] = True
         return mask
+
+    # ------------------------------------------------------------------ snapshot / restore
+
+    def snapshot(self) -> EnvSnapshot:
+        """The env's full between-step state, for exact resume from a checkpoint."""
+        return EnvSnapshot(
+            instance=self._instance,
+            state=self._state,
+            legal=self._legal,
+            born=tuple(sorted(self._born.items())),
+            deltas=tuple(self._deltas),
+            totals=self._totals,
+            plan_cost=self._plan_cost,
+            done=self._done,
+            rng=copy.deepcopy(self.np_random),
+            rng_seed=self._np_random_seed,
+        )
+
+    def restore(self, snap: EnvSnapshot) -> None:
+        """Put back a `snapshot()`. Raises if its instance does not fit this env's padding."""
+        if snap.instance is not None:
+            self.encoder.check_instance(snap.instance)
+        self._instance = snap.instance
+        self._state = snap.state
+        self._legal = snap.legal
+        self._born = dict(snap.born)
+        self._deltas = list(snap.deltas)
+        self._totals = snap.totals
+        self._plan_cost = snap.plan_cost
+        self._done = snap.done
+        self._np_random = copy.deepcopy(snap.rng)
+        self._np_random_seed = snap.rng_seed
+
+    @property
+    def env_snapshot(self) -> EnvSnapshot:
+        """`snapshot()` as an attribute, so vector envs can get and set it per worker."""
+        return self.snapshot()
+
+    @env_snapshot.setter
+    def env_snapshot(self, snap: EnvSnapshot) -> None:
+        self.restore(snap)
+
+    def observe(self) -> Obs:
+        """The current observation, as the last `reset` or `step` returned it."""
+        return self.encoder.encode(self.state, self.instance, self._legal, self._born)
 
     # ------------------------------------------------------------------ gym API
 

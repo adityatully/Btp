@@ -1,6 +1,9 @@
 # MEDA Design Automation — Codebase Specification
 
-Version 0.8 · 2026-10-16
+Version 0.9 (draft) · 2026-10-16
+
+Changes in 0.9 (M8, in progress): env `snapshot` / `restore` / `observe` for exact resume, and
+the `SAME_STEP` autoreset requirement on vector envs (9.1).
 
 Changes in 0.8 (M7): the evaluation harness is built. `dag_metrics` with exact definitions and
 the list-schedule config (12.1); `Producer`, `evaluate`, the gap columns and where each is
@@ -773,6 +776,17 @@ mask = env.action_masks()                      # bool[L_max]; same as obs["actio
 - The env also exposes `env.state`, `env.instance` and `env.legal` (read-only) for solvers,
   tests and search, and `env.set_instance_source(source)` (used by the curriculum wrapper).
 - The step limit belongs to each instance (set by the generator), not to the env config.
+- **Snapshot and restore (M8).** `env.snapshot() -> EnvSnapshot` holds everything the env keeps
+  between steps: the instance, state, candidate list, droplet birth steps, the DAG deltas and
+  totals so far, the plan cost, the done flag and the env's generator. `env.restore(snap)` puts
+  it back (it raises if the instance does not fit this env's padding), and `env.observe()`
+  rebuilds the current observation. The instance source and `cost_to_finish` are fixed at
+  construction and not part of it. A checkpoint taken mid-rollout stores one snapshot per
+  worker, so a resumed run continues its half-finished episodes exactly (acceptance (c) of
+  M8). Vector envs reach it per worker as the attribute `env_snapshot`
+  (`get_attr` / `set_attr`) plus `call("observe")`, and must use
+  `AutoresetMode.SAME_STEP`: under `NEXT_STEP` an async worker keeps its pending-reset flag in a
+  local variable that cannot be saved.
 
 ### 9.2 Observation (`gymnasium.spaces.Dict`, padded, float32 unless noted)
 | Key | Shape | Content |
