@@ -7,7 +7,9 @@ the list-schedule config (12.1); `Producer`, `evaluate`, the gap columns and whe
 filled (12.2); `InstanceReference.lower_bound` now exists, written to JSON only when set (8.4);
 `evaluate_cli` takes `eval.producers` (12.2, 13); `meda.train` grades tabular Q through
 `evaluate` and writes `results.parquet` + `summary.md` instead of `results.json` (13); M7
-acceptance as met (16). The exact-search timeout bound and `val_stage1_v2` are still to do.
+acceptance as met (16). Then: exact search returns a proved lower bound and its best plan on
+timeout (10.2); `val_stage1_v2`, the same 8 instances with 3 proved optima and 5 intervals
+(8.4); M8 acceptance (b) measured on it as a gap to the best known cost (16).
 
 Changes in 0.7 (planning before M7; no code yet): benchmark tiers 0–6 and their claim rules
 (8.4); an optional `lower_bound` on `InstanceReference` and `SolveResult` (8.4, 10.1); exact
@@ -701,13 +703,31 @@ Sets per tier:
   exception to the freeze rule below: v1 had never backed a reported number, and it did not
   satisfy its own defining property, so keeping a known-unsearchable "exact" set would have been
   a trap. A test now enforces the accuracy-level property so this cannot recur silently.
-- `val_<stage>_v1` — in-distribution validation per curriculum stage. `val_stage1_v1` holds 8
-  of stage 1's 31 problems, disjoint from `tiny_exact_v1`, leaving 16 for training. Its answer
-  key holds naive costs only. A 60 s exact search proves 4 of the 8 optima (1/16, 9/32, 7/32
-  and 11/16, the last only at a matched accuracy level) and times out on 25/32, 17/32, 19/32
-  and 15/16. Naive is up to 2.1× the optimum (7/32: 83/2 against 39/2). `val_stage1_v2` will
-  store the proved optima and [lower bound, best known] for the rest, so that M8 acceptance (b)
-  can be measured.
+- `val_<stage>_v<n>` — in-distribution validation per curriculum stage. `val_stage1_v1` holds
+  8 of stage 1's 31 problems, disjoint from `tiny_exact_v1`, leaving 16 for training. Its answer
+  key holds naive costs only, and naive is up to 2.1× the optimum (7/32: 83/2 against 39/2).
+
+  `val_stage1_v2` keeps the same 8 instances (same hashes) and replaces the answer key
+  (`make_benchmark.py:build_val_stage1_v2`). Budgets are node counts, not seconds, so it rebuilds
+  identically on any machine: 100,000 expanded nodes at the instance's own accuracy (256), and
+  50,000 at the matched accuracy level for a better upper end. A plan found at the matched level
+  is legal on the real chip too, and is replayed and validated there before it counts. Result:
+
+  | Target | v1 (naive) | v2 | best known / lower bound |
+  |---|---|---|---|
+  | 1/16 | 20 | optimal 20 | 1 |
+  | 9/32 | 32 | optimal 39/2 | 1 |
+  | 7/32 | 83/2 | optimal 39/2 | 1 |
+  | 11/16 | 39 | [23, 53/2] | 1.15 |
+  | 17/32 | 32 | [23, 29] | 1.26 |
+  | 19/32 | 83/2 | [23, 29] | 1.26 |
+  | 25/32 | 83/2 | [23, 83/2] | 1.80 |
+  | 15/16 | 97/2 | [47/2, 97/2] | 2.06 |
+
+  11/16's 53/2 was proved optimal only at the matched accuracy (16). The real instance allows
+  256 and so admits more plans, so 53/2 is a best known there, not a proved optimum (an
+  earlier note in this spec had it as proved). The loose intervals (25/32, 15/16) are loose at
+  the upper end: nothing beat naive there.
 - `dmfb_sweep_v1` — tier 2, see above.
 - `literature_<paper>_v1` — tier 3, one set per paper, filled manually from the PDF.
 - `unseen_ratios_v1` — compositions excluded from training.
@@ -1204,13 +1224,17 @@ budget.
 Met: exact search lands on all ten stored optima (gap 0), naive's gaps equal those computed from
 the stored costs (it matches 5 of 10; 3/8 costs 27 against 16), and random succeeds on 2 of 10
 within the step limits, its failures carrying no gap (`pytest -m slow`, test_evaluate_cli). Still
-to do before M8: the exact-search timeout bound (10.2) and `val_stage1_v2`.
+to do before M8: nothing; the exact-search timeout bound (10.2) and `val_stage1_v2` (8.4)
+followed.
 
 **M8 — PPO with set encoder.** Networks, masked policy, rollout, PPO, training entry point,
 checkpointing, logging.
 *Accept:* (a) overfits a single fixed tiny instance to its optimum; (b) on curriculum stage 1,
-success rate > 95% and mean gap to optimal < 5% on `val_stage1_v1`; (c) a run resumes from a
-checkpoint with identical subsequent metrics (same seed).
+success rate > 95% and mean `gap_to_best_known` < 5% on `val_stage1_v2` (on its three proved
+instances that is the gap to optimal; on the other five it is a gap to the best plan known, and
+`gap_to_lower_bound` is reported alongside as the most the true gap could be); (c) a run resumes
+from a checkpoint with identical subsequent metrics (same seed). Training excludes the hashes of
+`tiny_exact_v1` and `val_stage1_v2`.
 
 **M9 — Reserved.** MCTS / AlphaZero-style search; literature baselines with reproduction tests;
 preference-conditioned training; noise model; pipeline interfaces to scheduler/router.
