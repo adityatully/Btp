@@ -41,7 +41,8 @@ uv run pytest -m slow
 
 ```bash
 uv run python -m meda.train agent=tabular_q          # trains and reports gaps to the optima
-uv run python -m meda.train agent=ppo generator=tiny_dilution   # M8
+uv run python -m meda.train agent=ppo "train.instances=[tiny-sharing-m2]" env.L_max=128   # M8 (a)
+uv run python -m meda.train agent=ppo train.resume=<run>/checkpoints/last.pt                 # resume
 uv run python -m meda.evaluate_cli "eval.producers=[random,naive,exact_search]" eval.benchmark=tiny_exact_v1
 uv run python scripts/profile_env.py generator=<name>
 ```

@@ -3,7 +3,9 @@
 Version 0.9 (draft) · 2026-10-16
 
 Changes in 0.9 (M8, in progress): env `snapshot` / `restore` / `observe` for exact resume, and
-the `SAME_STEP` autoreset requirement on vector envs (9.1).
+the `SAME_STEP` autoreset requirement on vector envs (9.1). The parts of M8 that do not depend on
+the stage design are built: network, masked policy, rollout and GAE, trainer, checkpoints,
+logging (11.4); `meda.train agent=ppo` on frozen instances (13); acceptance (a) and (c) met (16).
 
 Changes in 0.8 (M7): the evaluation harness is built. `dag_metrics` with exact definitions and
 the list-schedule config (12.1); `Producer`, `evaluate`, the gap columns and where each is
@@ -1017,6 +1019,34 @@ M = 8** (see 16).
 value loss (optionally clipped); entropy bonus; gradient-norm clipping; learning-rate
 annealing; several epochs of minibatches per rollout. γ = 1.0 by default (finite episodes).
 
+**As built (M8).**
+- `networks.py`: `SetEncoderNet(sizes, NetConfig)`. Input widths come from `EnvSizes`. Source
+  and target MLPs; global token = learned vector + linear projection of `globals`; pre-norm
+  Transformer encoder, dropout 0, key-padding masks from `source_mask` / `target_mask`. The
+  scorer input is [candidate features; embedding of source a; second operand; global token],
+  where the second operand is source b (Mix), the target (Output) or a learned blank (Discard).
+- `policy.py`: masked logits are set to the dtype minimum, so a masked candidate has
+  probability exactly 0. Observations are trimmed to the longest real candidate list in the
+  batch before the network sees them. `PPOAgent` implements `Agent` (`save` / `load` keep the
+  weights and shapes only).
+- `rollout.py`: an episode that ended (success, truncation or dead end) is never bootstrapped,
+  because the env already charged `cost_to_finish`. The only bootstrap is at the end of a
+  rollout, for episodes it cut off. Observations are stored trimmed per step and padded to the
+  widest step of the rollout.
+- `ppo.py`: `PPOConfig.from_dict` (unknown keys raise; `clip_vloss` added to the config);
+  advantages normalised per minibatch. `PPOTrainer` takes the vector env from the caller, so
+  where problems come from is not its concern, and it refuses one that is not `SAME_STEP`.
+  Its randomness is the torch RNG (sampling) and its own numpy generator (minibatch order).
+- `utils/checkpoint.py`: weights, optimiser, counters, torch (and CUDA) RNG, the trainer's
+  generator, one env snapshot per worker (9.1) and a free `extra` slot. Loading checks that
+  config and observation sizes match, and rebuilds the current observations with `observe`.
+- `utils/logging.py`: `metrics.jsonl` (one object per update, the record tests read),
+  TensorBoard, and a console line.
+- Observed on `tiny-sharing-m2`: the greedy plan reaches the optimum by update 10 (8 envs × 64
+  steps). After entropy collapses, the policy occasionally wobbles: with every advantage near 0,
+  per-minibatch normalisation scales noise up. LR annealing damps it, and nothing is tuned for
+  it yet.
+
 **Default hyperparameters (`configs/agent/ppo.yaml`), starting points only:**
 ```yaml
 d_model: 128
@@ -1133,11 +1163,20 @@ vs number of targets; each producer has a fixed colour across all figures).
   is per instance; PPO (M8) will train from the sampler. Each run writes the resolved config,
   one checkpoint per table, and the greedy policy graded by `evaluate` (12.2):
   `results.parquet`, with the training statistics as extra columns, and `summary.md`.
+- `meda.train agent=ppo` (M8, built so far) trains one network on the frozen instances that
+  `train.benchmark` and `train.instances` select (acceptance (a)). It writes `metrics.jsonl`,
+  TensorBoard logs, `checkpoints/last.pt` (every `train.checkpoint_every_updates`, resumable
+  with `train.resume=<path>`) and `checkpoints/agent.pt`, and grades the greedy policy into
+  `results.parquet` and `summary.md`. Every `train.eval_every_updates` it also grades the
+  training instances (`eval/` in the logs). `train.vector` picks `sync` or `async` workers;
+  `train.device: auto` picks CUDA when available, else CPU (MPS is opt-in). Training from a
+  generator, and which sets to validate on, wait for the stage design (8.3).
 - Example commands:
   ```bash
   python -m meda.train agent=tabular_q
   python -m meda.train agent=tabular_q train.benchmark=tiny_exact_v1 agent.episodes=40000
-  python -m meda.train agent=ppo generator=dilution_multi chip=meda_m8
+  python -m meda.train agent=ppo "train.instances=[tiny-sharing-m2]" env.L_max=128
+  python -m meda.train agent=ppo train.resume=outputs/<run>/checkpoints/last.pt
   python -m meda.train -m agent.lr=1e-4,3e-4 seed=0,1,2        # sweep
   python -m meda.evaluate_cli eval.producers=[random,naive,exact_search] eval.benchmark=tiny_exact_v1
   ```
@@ -1249,6 +1288,11 @@ instances that is the gap to optimal; on the other five it is a gap to the best 
 `gap_to_lower_bound` is reported alongside as the most the true gap could be); (c) a run resumes
 from a checkpoint with identical subsequent metrics (same seed). Training excludes the hashes of
 `tiny_exact_v1` and `val_stage1_v2`.
+
+Progress: (a) met. `tiny-quarter-m2` and `tiny-sharing-m2` each reach their proved optimum
+(15 and 26) at 10,240 and 20,480 env steps (8 envs, d_model 64, 2 layers; `pytest -m slow`).
+(c) met: 2 updates, save, load into a fresh trainer and fresh envs, then 2 more updates gives
+the same metrics and weights as 4 straight updates, on CPU. (b) waits for the stage design.
 
 **M9 — Reserved.** MCTS / AlphaZero-style search; literature baselines with reproduction tests;
 preference-conditioned training; noise model; pipeline interfaces to scheduler/router.
