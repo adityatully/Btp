@@ -1,11 +1,14 @@
-device: cuda                  # training runs on the RTX A5000 workstation (used from M8)
+device: auto                  # auto = cuda if available, else cpu; or cuda / mps / cpu (PPO)
+vector: sync                  # PPO vector env: sync (one process) or async (one per env)
+resume: null                  # PPO: path to a checkpoint (last.pt) to continue from
 log_dir: tensorboard
 use_wandb: false
 checkpoint_every_updates: 50
 eval_every_updates: 50
-# Tabular Q (M6) trains on a frozen benchmark set rather than the sampler: it keys on exact
-# states, so it only makes sense on instances it will see again.
+# Training instances from a frozen benchmark set. Tabular Q (M6) needs this: it keys on exact
+# states, so it only learns about instances it will meet again. PPO trains one network on these
+# instances (M8 acceptance (a)); training from a generator follows the stage design.
 benchmark: tiny_exact_v1
 instances: null               # null = every instance in the set; or a list of instance ids
-per_instance: true            # one table per instance (the M6 acceptance criterion)
+per_instance: true            # tabular Q only: one table per instance (M6 acceptance)
 log_every: 2000
