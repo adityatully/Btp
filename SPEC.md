@@ -1,6 +1,20 @@
 # MEDA Design Automation — Codebase Specification
 
-Version 0.9 (draft) · 2026-10-16
+Version 0.10 (draft) · 2026-10-19
+
+Changes in 0.10 (draft, under review): section 1 rewritten around the agent goal: one policy
+for any problem and chip in a stated input space (1.1), the problem class (1.2), which
+parameters are inputs with suggested ranges (1.3), the design rules that follow and where the
+current observation breaks them (1.4), the claim and how it is measured (1.5), known limits
+(1.6) and open decisions (1.7). The earlier goals are kept as infrastructure goals (1.8).
+Then, specified but not built: observation v2 (9.2, 9.3: fluid tokens, composition fraction
+matrices, droplet-target and candidate-target pair matrices, volumes on a relative and an
+absolute scale, M and storage capacity in `globals`, typed operands in `cand_index`; v1 kept as
+9.2a until replaced) and network v2 (11.4: usage-informed fluid embeddings, compositions as
+fraction-weighted sums, relation-biased attention, no parameter shaped by any count). Rule 2.9
+covers fluid order; 8.3 marked for redesign against 1.3; M8 gains acceptance (d) (one network
+across F, T, M and storage) and an ordered remainder, with the general mixture fallback on the
+critical path (16); v2 tests (17.2, 17.5); two supervisor questions (15).
 
 Changes in 0.9 (M8, in progress): env `snapshot` / `restore` / `observe` for exact resume, and
 the `SAME_STEP` autoreset requirement on vector envs (9.1). The parts of M8 that do not depend on
@@ -61,7 +75,108 @@ Read sections 1–5 before writing any code. Implement in the milestone order of
 
 ## 1. Goals and non-goals
 
-### Goals
+*Draft, 2026-10-19. The agent goal (1.1–1.6) is under review: ranges marked "suggested" wait for
+the user's and the supervisor's confirmation. Sections after this one still describe the
+current code, which does not yet meet 1.4 (see the status note there).*
+
+### 1.1 The goal
+**One trained policy that takes a sample-preparation problem and the chip's limits as input
+and returns a valid, low-cost mixing DAG within milliseconds, for any problem in the stated
+input space, without retraining.** No property of the agent may tie it to a particular chip or
+problem size, such as "works for M = 4" or "at most 8 fluids". Within the trained ranges it
+should be near the best known plan; beyond them its behaviour is measured and reported.
+
+### 1.2 Problem class
+In the field's vocabulary (BASELINES.md 1.3): **MTMD mixture preparation on MEDA with a storage
+limit**, with the chip's limits as inputs.
+- **Multi-target (MT):** the targets of all concurrent experiments are merged into one target
+  set and prepared with one mixing DAG that may share intermediates across experiments.
+- **Multi-demand (MD):** a target may need several droplets of the same composition.
+- **Mixture:** a target is a ratio over N ≥ 2 fluids (dilution is the case N = 2 with a buffer).
+- **MEDA:** k:l mixing with k + l ≤ M, and partial takes of a droplet's volume.
+- **Storage limit:** the droplets waiting on chip are bounded.
+
+This conjunction is the gap no published method covers (BASELINES.md 1.2): no MEDA method takes a
+demand vector, almost none has a storage limit, and none has all five.
+
+### 1.3 Inputs the agent must take
+**Inputs** vary per problem, are visible in the observation, are varied in training, and get a
+held-out test axis. **Platform config** is fixed per chip and asked of the supervisor (section 15).
+
+| Parameter | Kind | Suggested training range | Held-out test axis |
+|---|---|---|---|
+| Number of fluids F, and each fluid's kind (sample / reagent / buffer) | input | 2–6 | larger F (e.g. 8) |
+| Target ratio vectors (support up to F fluids) | input | random reachable ratios | unseen ratios |
+| Number of targets T (all experiments merged) | input | 1–20 | larger T (e.g. 30–50) |
+| Demand per target | input | 1–4 | larger demand |
+| Droplet volume per target | input | 1 to M/2 | unseen volumes |
+| Max mix volume M | input | 2–10 (literature 4–10; DMFB = 2) | unseen M inside the range (e.g. 5, 7) and beyond it (e.g. 12) |
+| Storage capacity S | input | tight (binding) to loose, e.g. 2–12 | unseen S, and instances where storage binds |
+| Target tolerance ε | input, or 0 (open, see 1.7) | 0 and small ε | — |
+| Min mix volume, min droplet volume, partial take allowed | platform config | — | — |
+| Cost weights (sample, reagent, buffer, mix, waste) | platform config in phase 1; an input later (6.5) | — | — |
+
+Out of scope for this agent (later pipeline stages, section 14): routing, droplet positions,
+contamination and washing, completion time, detection, split error (phase 2), mixes with more
+than two inputs.
+
+### 1.4 Design rules that follow
+1. **Every count is a set, never a column.** Fluids, targets, droplets and candidate actions
+   are rows (tokens); relations between them are pairwise features. One set of weights reads
+   any F, T and number of droplets. Padding sizes are memory settings, never part of the
+   network's weights.
+2. **Every input of 1.3 the strategy depends on is explicit in the observation:** M, storage
+   capacity, droplet volume, tolerance.
+3. **Features mean the same thing at every size and on every chip:** relative quantities
+   (nearest-target distance, fractions, counts satisfied) instead of indexed ones, and a volume
+   scale that does not redefine "one unit" per chip (which scaling transfers best is to be
+   measured).
+4. **Size-free aggregation:** attention and mean/max pooling, LayerNorm; no sums over a count.
+5. **The environment stays the referee** (rule 2.1): every plan is legal by construction on any
+   input, so a weak decision costs more but never breaks a rule.
+
+*Status:* the code breaks rules 1–3 today (observation v1, 9.2a): `F_max` and `T_max` appear
+as feature columns (per-fluid composition, per-target distances), M is only implicit, and
+volumes are scaled by each chip's M. Observation v2 (9.2, 9.3) and network v2 (11.4) are
+specified against these rules and are built in M8 before any training beyond the acceptance
+runs (16).
+
+### 1.5 The claim and how it is measured
+> One policy, no retraining: valid plans on any input; near the best known cost across the
+> trained ranges; measured behaviour beyond them.
+
+- Reported as **curves of gap against each axis of 1.3** (M, F, T, demand, storage, accuracy),
+  inside and beyond the trained range, with success rate and inference time, not only as one
+  table per benchmark set.
+- Gaps follow section 12.2: to a proved optimum where exact search finishes, otherwise to the
+  interval [lower bound, best known].
+- On each published method's own input class, the agent is compared with that method (tiers 2–3
+  of 8.4). The full conjunction of 1.2 is the frontier (tier 5), where no published method
+  applies directly.
+
+### 1.6 Known practical limits (measured, not assumed away)
+- **Training coverage:** reliability is earned only where training varied the inputs.
+- **Action space growth:** candidates grow with M and with droplets on chip (pairs × volume
+  splits), so `L_max`, memory and decision difficulty grow at large M.
+- **Grading weakens with size:** exact search proves optima only on small instances, and the
+  [lower bound, best known] intervals widen on larger ones.
+- **Mixtures need a general fallback:** `cost_to_finish` covers dilutions only (10.3), so a
+  general mixture fallback is on the critical path.
+- **Exact-integer bounds in the encoder:** denominators are kept below 2^20 (9.3); much finer
+  accuracy would need that revisited.
+
+### 1.7 Open decisions (ask before fixing the ranges)
+1. The target platform's realistic M, fluid count and storage capacity (supervisor). The
+   architecture is not limited by the answer; the training ranges and headline results are
+   centred on it.
+2. Storage counted in droplets or in volume (section 15).
+3. Exact targets (ε = 0) or a tolerance ε > 0, and whether `max_denominator` is a real chip
+   limit (an input) or only a search bound.
+4. Optional extensions: non-pure stock fluids, a hard budget on sample volume, cost weights as
+   an input (preference conditioning, 6.5).
+
+### 1.8 Infrastructure goals
+These carry the agent goal and are built (M0–M7):
 1. An **exact rules engine** for MEDA sample preparation: integer volumes, exact rational
    compositions, k:l mixing with k + l ≤ M, storage limits. No floating point in the rules.
 2. A **Gymnasium-compatible environment** on top of it, with action masking, for training
@@ -103,8 +218,9 @@ Read sections 1–5 before writing any code. Implement in the milestone order of
 7. **Every solver and agent outputs the same `MixingDAG` format** (section 7), validated by the
    same validator.
 8. **Every open physical assumption is a config value**, not a constant in code (section 15).
-9. **Permutation invariance.** Droplet order and target order carry no meaning. Canonical
-   ordering is used only for hashing and for stable candidate indexing.
+9. **Permutation invariance.** Fluid order, droplet order and target order carry no meaning.
+   Canonical ordering is used only for hashing and for stable candidate indexing. No network
+   weight may belong to a particular fluid, droplet or target position (1.4).
 
 ---
 
@@ -608,6 +724,13 @@ Stage order (matches the research ladder), one config file each:
 An accuracy denominator must factorise into mix volumes the chip allows, or the naive witness
 cannot build it (32 = 2⁵ under M = 2; 64 = 8·8 under M = 8).
 
+*To be redesigned (owner: the user).* These five stages predate the goals of section 1: each
+fixes M and covers a narrow slice of the input space of 1.3. The stage design will be redone
+against 1.3 (which inputs each stage varies and over what range, which values are held out
+for testing), and the training regime chosen with it (`notes/training_regime_research.md`).
+Until then this list describes the code. Every chip now enters as a problem input, so a stage
+may sample M and storage capacity per instance instead of fixing one chip config.
+
 ### 8.4 Benchmarks (`benchmark_io.py`, `scripts/make_benchmark.py`, `benchmarks/`)
 A benchmark set is a frozen JSON file (`format: "meda-benchmark/1"`) holding `name`, `version`,
 `description`, the generator config it came from, `seeds`, `reference` and the `instances`.
@@ -676,9 +799,10 @@ Tier 5 rules:
   published method adapted to the instance. Adapted results are labelled `adapted`, for example
   e-MRCM run per target and then replicated to meet demand, and are never presented as the
   published method.
-- Before this set can be used, two things are needed: env padding sizes (`F_max`, `T_max`,
-  `storage_capacity_max`, `L_max`) that cover its largest instance, which otherwise raises
-  under rule 9, and a cost-to-finish fallback that supports mixtures (10.3).
+- Before this set can be used, two things are needed: env padding sizes that cover its
+  largest instance (otherwise the env raises rather than truncate; with observation v2 this is
+  a memory setting and needs no retraining, 9.2), and a cost-to-finish fallback that supports
+  mixtures (10.3).
 - **Claim rule.** "No published method can attempt these" is false as written. Naive always
   produces a plan, and an exact solver can attempt any instance given unlimited time. Report
   what was measured instead: the instance lies outside every published method's input class,
@@ -763,8 +887,9 @@ mask = env.action_masks()                      # bool[L_max]; same as obs["actio
 ```
 - `action_space = Discrete(L_max)`. The action is an **index into the current candidate list**,
   which is `rules.legal_actions(state)` in canonical order, padded to `L_max`.
-- If the number of legal actions exceeds `L_max`, raise a clear error naming the instance (do
-  not truncate silently). `L_max` is a config value.
+- If the number of legal actions exceeds `L_max` (`L_pad` in observation v2), raise a clear
+  error naming the instance (do not truncate silently). It is a config value, and in v2 a
+  memory setting only (9.2).
 - Selecting an index that is not a legal candidate raises `IllegalActionError`.
 - `reset` raises (naming the instance) if the instance does not fit the padding sizes, if a
   target's `droplet_volume` exceeds `max_mix_volume`, or if no action is legal at the start.
@@ -790,42 +915,103 @@ mask = env.action_masks()                      # bool[L_max]; same as obs["actio
   `AutoresetMode.SAME_STEP`: under `NEXT_STEP` an async worker keeps its pending-reset flag in a
   local variable that cannot be saved.
 
-### 9.2 Observation (`gymnasium.spaces.Dict`, padded, float32 unless noted)
+### 9.2 Observation v2 (`gymnasium.spaces.Dict`, padded, float32 unless noted)
+
+*Status: specified in 0.10, not built. The code still emits observation v1 (9.2a). v2 follows
+the design rules of 1.4: every count is a set of rows, never a feature column.*
+
+The observation is a set of **tokens** (fluids, droplets, targets, candidates) plus **pair
+matrices** that relate them. No feature column belongs to a particular fluid or target, so
+no network weight does either: the same weights read an instance with any number of fluids,
+targets, droplets or candidates, on a chip with any M or storage capacity.
+
 | Key | Shape | Content |
 | --- | --- | --- |
-| `sources` | [S_max, D_src] | One row per reservoir (rows 0..F−1) and per droplet on chip (rows F..F+n−1, canonical order) |
-| `source_mask` | [S_max] int8 0/1 | Valid rows |
-| `targets` | [T_max, D_tgt] | One row per target |
-| `target_mask` | [T_max] int8 0/1 | Valid rows |
-| `candidates` | [L_max, D_cand] | Features of each legal action (below) |
-| `cand_index` | [L_max, 3] int32 | (op, row of src_a or droplet, row of src_b or target index); op 0 = Mix, 1 = Output, 2 = Discard; −1 if unused |
-| `action_mask` | [L_max] int8 0/1 | Valid candidates (`env.action_masks()` returns the same as bool) |
-| `globals` | [D_glob] | Step fraction, storage fraction, remaining demand fraction, optional preference weights |
+| `fluids` | [F_pad, D_fluid] | One row per fluid (= its reservoir), by fluid id |
+| `fluid_mask` | [F_pad] int8 | Valid rows |
+| `droplets` | [N_pad, D_drop] | One row per droplet on chip, in the state's canonical order |
+| `droplet_mask` | [N_pad] int8 | Valid rows |
+| `droplet_comp` | [N_pad, F_pad] | Composition of each droplet as fractions over the fluid rows |
+| `targets` | [T_pad, D_tgt] | One row per target |
+| `target_mask` | [T_pad] int8 | Valid rows |
+| `target_comp` | [T_pad, F_pad] | Composition of each target as fractions over the fluid rows |
+| `droplet_target` | [N_pad, T_pad, 2] | Per (droplet, target): L∞ distance, satisfies flag |
+| `candidates` | [L_pad, D_cand] | Scalar features of each legal action (below) |
+| `cand_comp` | [L_pad, F_pad] | Composition each candidate produces (its afterstate) |
+| `cand_target` | [L_pad, T_pad, 2] | Per (candidate, target): L∞ distance of the result, satisfies flag |
+| `cand_index` | [L_pad, 5] int32 | (op, a_type, a_row, b_type, b_row); op 0 = Mix, 1 = Output, 2 = Discard; type 0 = fluid, 1 = droplet, 2 = target; −1 if unused |
+| `action_mask` | [L_pad] int8 | Valid candidates (`env.action_masks()` returns the same as bool) |
+| `globals` | [D_glob] | Episode and chip quantities (below) |
 
-`S_max = F_max + storage_capacity_max`. Compositions are padded to `F_max` fluids. All sizes come
-from `configs/env/sample_prep.yaml`. Every float feature lies in [0, 1]; volumes are divided by M.
+**Padding sizes are memory settings, not limits of the agent.** `F_pad`, `T_pad`, `N_pad` and
+`L_pad` (`configs/env`) size the arrays only. Raising them never invalidates trained weights;
+an instance larger than the padding raises an error naming it (never truncated, section 18),
+and the fix is a larger padding, not retraining. Config keys (`configs/env`): `F_pad`, `T_pad`,
+`N_pad`, `L_pad`, `volume_ref`, `count_ref` (v1 used `F_max`, `T_max`,
+`storage_capacity_max`, `L_max`). Batches are trimmed to their largest real row counts before
+the network sees them (11.4).
+
+**Scales.** Every volume appears on two scales, because both meanings matter and neither may
+be redefined per chip:
+- **relative**, `volume / M`: how much of a mixer it fills (what decides which mixes exist);
+- **absolute**, `volume / volume_ref`: its size in units, where `volume_ref` is a fixed
+  normalising constant in `configs/env` (default 16), the same on every chip.
+
+Counts that matter in absolute terms (remaining demand, steps left, storage capacity) are divided
+by `count_ref` (default 16). These normalisers are scales, not caps: values above 1 are legal,
+and the observation space bounds them by [0, ∞). Fractions, flags and distances lie in [0, 1].
+
+**Pair conventions.** For a met target, distance is 1 and satisfies is 0 (it is no longer
+wanted); the target row's `met` flag says why. Padded pairs are 0 and masked.
 
 ### 9.3 Features (`encoding.py`) — the network never does arithmetic
 
-Every result composition and distance is formed as exact integers (numpy int64) and divided
-only at the end, so each float is the correctly rounded exact value; "satisfies" flags are
-compared exactly in integers. To keep int64 exact, `max_denominator` and every target
-composition/tolerance denominator must be ≤ 2^20 (checked at reset), and tolerances ≤ 1. The
-denominator feature is `1 − 1/den` (bounded, 0 for pure fluids).
+Exactness is unchanged from v1: every result composition and distance is formed as exact
+integers (numpy int64) and divided only at the end, so each float is the correctly rounded exact
+value; "satisfies" flags are compared exactly in integers. To keep int64 exact,
+`max_denominator` and every target composition/tolerance denominator must be ≤ 2^20 (checked at
+reset), and tolerances ≤ 1. The denominator feature is `1 − 1/den` (0 for pure fluids).
 
-**Source row:** composition (F_max floats), volume / M (1 for reservoirs), is_reservoir,
-fluid-kind one-hot (reservoirs only), denominator feature, L∞ distance to each open target
-(T_max; 1 for met or padded targets), "satisfies open target t" flags (T_max), age (actions
-since the droplet was made, / step limit).
+**Fluid row (D_fluid = 3):** kind one-hot (sample, reagent, buffer). Kind is a category with a
+fixed number of values, not a count. Reserved extensions, each a new column only when its
+decision is taken (1.7): cost weight of the fluid (preference conditioning, 6.5), stock
+concentration (non-pure stocks).
 
-**Target row:** composition, tolerance, droplet volume / M, remaining demand / demand, met flag.
+**Droplet row (D_drop = 6):** volume / M; volume / `volume_ref`; denominator feature; age
+(actions since the droplet was made / step limit); distance to the nearest open target;
+satisfies-any-open-target flag. The per-target detail is in `droplet_target`.
 
-**Candidate row (afterstate features):** op one-hot; k, l, k + l (scaled; for Output k is the
-delivered volume, for Discard the droplet volume); the **resulting** composition (exact, then
-converted to float); its denominator feature; L∞ distance from the result to each open target;
-whether the result satisfies any open target; this action's reagent units by fluid kind (/ M);
-waste it creates (/ M); storage after the action (/ capacity). Providing the result of each candidate is the
-"afterstate" idea (TD-Gammon): the network judges outcomes instead of predicting them.
+**Target row (D_tgt = 7):** droplet volume / M; droplet volume / `volume_ref`; tolerance;
+remaining demand / demand; remaining demand / `count_ref`; met flag; denominator feature of the
+target composition. The composition itself is in `target_comp`.
+
+**Candidate row (D_cand = 17), the afterstate features:** op one-hot (3); k, l, k + l on both
+scales (6; for Output k is the delivered volume, for Discard the droplet volume, l = 0); the
+result's denominator feature; distance from the result to the nearest open target; whether the
+result satisfies any open target; this action's reagent units by fluid kind / `volume_ref` (3);
+waste it creates / `volume_ref`; droplets on chip after the action / storage capacity. The
+result composition is in `cand_comp` and its per-target detail in `cand_target`. Providing the
+result of each candidate is the afterstate idea (TD-Gammon): the network judges outcomes instead
+of predicting them.
+
+**Globals (D_glob = 7):** step / step limit; steps left / `count_ref`; droplets on chip /
+storage capacity; remaining demand / total demand; remaining demand / `count_ref`;
+M / `volume_ref`; storage capacity / `count_ref`. The v1 globals F / F_max and T / T_max are
+gone: they tie features to padding sizes, and the masks already say how many rows are real.
+Preference weights are appended here when 6.5 is enabled.
+
+**Operands.** `cand_index` names each operand by type and row: a Mix's operands are fluids
+(reservoir takes) or droplets; an Output's are a fluid or droplet and the target; a Discard's is
+a droplet. Rows index the corresponding token array, so no index depends on another array's
+padding.
+
+### 9.2a Observation v1 (current code, to be replaced by 9.2)
+Keys `sources` [S_max, D_src] (reservoirs, then droplets), `source_mask`, `targets`
+[T_max, D_tgt], `target_mask`, `candidates` [L_max, D_cand], `cand_index` [L_max, 3],
+`action_mask`, `globals` [5], with `S_max = F_max + storage_capacity_max`. Compositions are
+`F_max` columns and every source and candidate row has one distance column per target (`T_max`),
+so F and T are hard limits of a trained network, and volumes are divided by M only. M5–M8
+acceptance runs use v1; nothing trained on it needs to be kept.
 
 ### 9.4 Vectorisation and speed
 - Must work with `gymnasium.vector.AsyncVectorEnv` (picklable, no global state).
@@ -833,6 +1019,9 @@ waste it creates (/ M); storage after the action (/ capacity). Providing the res
 - Target: at least 10,000 env steps/second in total with 16–32 async workers on the
   workstation for curriculum stages 1–3. Optimise only after profiling (cache legal-action
   enumeration per canonical state; `numba` only if needed).
+- Observation v2 adds pair matrices: `cand_target` is L_pad × T_pad × 2 floats per step (for
+  example 2048 × 12 × 2, about 200 KB). The encoder computes them vectorised from the same exact
+  integers as the candidate features; profile v2 against v1 before and after the switch.
 
 ### 9.5 Wrappers (`wrappers.py`)
 - `EpisodeStats`: accumulates totals for logging.
@@ -1003,28 +1192,68 @@ Acceptance: matches the exact optimum on every tiny instance it is trained on, *
 M = 8** (see 16).
 
 ### 11.4 PPO with a set encoder (`ppo/`)
-**Network (`networks.py`):**
-1. Source encoder: MLP on each source row → d_model.
-2. Target encoder: MLP on each target row → d_model.
-3. A learned global token.
-4. Set encoder: Transformer encoder (2–4 layers, 4–8 heads, **no positional encoding**) over
-   [global token; sources; targets] with key padding masks. Output: contextual embeddings.
-5. Candidate scorer: for each candidate, gather the embeddings referenced by `cand_index`
-   (source a, source b or target), concatenate with the candidate's own features, MLP → logit.
-6. Masked categorical: set logits of invalid candidates to a large negative value before
-   softmax (`policy.py`).
-7. Value head: MLP on the global token → scalar.
+
+**Network v2 (`networks.py`).** *Status: specified in 0.10, not built; the code implements the
+v1 network (end of this section) over observation v1.* It reads observation v2 (9.2). Write
+`d` for `d_model`. No parameter's shape depends on F, T, the number of droplets or candidates,
+M, storage capacity or any padding size (rule 1.4.1); every aggregation over a set is a masked
+mean or a softmax attention, never a sum over a count (1.4.4).
+
+1. **Fluid embeddings, informed by how the targets use each fluid.** For fluid f,
+   `use_f = mean over valid targets t of MLP_u([target_comp[t, f]; targets[t]])`, then
+   `x_f = MLP_f([fluids[f]; use_f])` → d. Two fluids of the same kind start from the same row;
+   they become different through `use_f` whenever the targets use them differently.
+2. **Composition embedding**, shared by droplets, targets and candidate results:
+   `comp(c) = MLP_c(Σ_f c_f · x_f)`, the fraction-weighted sum of the fluid embeddings. It is
+   the same operation as a linear layer on composition columns, except that the weight for
+   fluid f is computed from fluid f's own embedding instead of belonging to column f, so it
+   exists for any number of fluids.
+3. **Tokens.** Fluid tokens `x_f`; droplet tokens `MLP_d([droplets[i]; comp(droplet_comp[i])])`;
+   target tokens `MLP_t([targets[t]; comp(target_comp[t])])`; a global token = a learned vector
+   + `MLP_g(globals)`.
+4. **Set encoder.** A pre-norm Transformer encoder (2–4 layers, 4–8 heads, dropout 0, **no
+   positional encoding**) over [global; fluids; droplets; targets], with key-padding masks and
+   **relation biases**: a learned per-head bias added to the attention logit of each related
+   pair, in both directions: droplet ↔ fluid from `droplet_comp` (the fraction), target ↔ fluid
+   from `target_comp`, droplet ↔ target from `droplet_target` (distance, satisfies). Unrelated
+   pairs get bias 0. The pair facts therefore shape attention without becoming columns.
+5. **Candidate scorer.** For each candidate, concatenate: its scalar features; `comp` of its
+   result (`cand_comp`); a target summary `r` = softmax attention over the contextual target
+   embeddings, scored by a small MLP of `cand_target` (masked to valid targets); the contextual
+   embedding of operand a and of operand b (a fluid, droplet or target by `cand_index` type, or
+   a learned blank for Discard); the global token. MLP → one logit.
+6. **Masked categorical** (`policy.py`): masked logits are set to the dtype minimum, so a masked
+   candidate has probability exactly 0 (rule 2.4).
+7. **Value head:** MLP on the global token → scalar. Returns grow with problem size (more
+   targets cost more), so value targets span a wide range in mixed-size training. Diagnostic,
+   logged from the start: value explained variance per size bucket. Remedy, added only when that
+   diagnostic shows the need: per-task or running-scale value normalisation (PopArt; see
+   `notes/training_regime_research.md` 3.4).
+
+Known weak spot, to test: two fluids of the same kind that every target uses identically get
+identical embeddings. That is right by symmetry for the problem as a whole, but a droplet
+mixing them in unequal ratios is then embedded like its mirror image; the exact
+`cand_target` relations still tell the outcomes apart. Ablation: a random per-episode identity
+feature per fluid (`agent.fluid_identity`, off by default).
+
+**Batch trimming.** Observations are trimmed to the batch's largest real row count per token
+array (fluids, droplets, targets, candidates) before the network sees them, and the rollout
+stores them trimmed per step (`rollout.py`).
+
+**Network v1 (current code).** MLPs on v1 source and target rows (widths fixed by `F_max`,
+`T_max`), a global token from `globals`, the same Transformer without relation biases, and the
+same scorer gathering source a and source b / target / blank through `cand_index`. Replaced by
+v2; the rest of the agent (policy, rollout, trainer, checkpoints, logging) carries over
+unchanged apart from the observation keys it trims.
 
 **Algorithm (`ppo.py`, CleanRL style):** vectorised rollouts; GAE(λ); clipped surrogate;
 value loss (optionally clipped); entropy bonus; gradient-norm clipping; learning-rate
 annealing; several epochs of minibatches per rollout. γ = 1.0 by default (finite episodes).
 
 **As built (M8).**
-- `networks.py`: `SetEncoderNet(sizes, NetConfig)`. Input widths come from `EnvSizes`. Source
-  and target MLPs; global token = learned vector + linear projection of `globals`; pre-norm
-  Transformer encoder, dropout 0, key-padding masks from `source_mask` / `target_mask`. The
-  scorer input is [candidate features; embedding of source a; second operand; global token],
-  where the second operand is source b (Mix), the target (Output) or a learned blank (Discard).
+- `networks.py`: network v1 above, `SetEncoderNet(sizes, NetConfig)`, input widths from
+  `EnvSizes`; pre-norm Transformer, dropout 0. Scorer input [candidate features; embedding of
+  source a; second operand; global token].
 - `policy.py`: masked logits are set to the dtype minimum, so a masked candidate has
   probability exactly 0. Observations are trimmed to the longest real candidate list in the
   batch before the network sees them. `PPOAgent` implements `Agent` (`save` / `load` keep the
@@ -1057,10 +1286,13 @@ rollout_steps: 128
 gamma: 1.0
 gae_lambda: 0.95
 clip_coef: 0.2
+clip_vloss: true
 ent_coef: 0.01
 vf_coef: 0.5
 max_grad_norm: 0.5
 lr: 3.0e-4
+anneal_lr: true
+fluid_identity: false   # network v2 ablation (11.4); not read by network v1
 update_epochs: 4
 num_minibatches: 8
 total_env_steps: 5_000_000
@@ -1152,6 +1384,8 @@ vs number of targets; each producer has a fixed colour across all figures).
   table states its benchmark tier, and a result answers only its tier's question.
 - Report solver and agent wall time alongside cost on every tier. On tier 5, plot both against
   each scaling axis.
+- For the agent goal (1.5), report gap and success rate as curves against each input axis of
+  1.3, marking where the trained range ends.
 
 ---
 
@@ -1218,6 +1452,8 @@ results by DAG hash, and allow a learned surrogate to predict it.
 | Dilution first or mixture first | dilution first (curriculum) | `generator` | Supervisor |
 | Whether a mix may take inputs from more than two sources | no | `rules` (would change the action set) | Later |
 | Split-error model for phase 2 | none | `core/noise.py` | Literature / hardware data |
+| Realistic M, fluid count and storage capacity of the target platform (centre of the training ranges of 1.3) | suggested ranges in 1.3 | generator configs | Supervisor |
+| Exact targets (ε = 0) or a tolerance ε > 0; `max_denominator` as a chip input or only a search bound | ε = 0; chip config | targets; `chip.max_denominator` | Supervisor, assay |
 
 ---
 
@@ -1289,10 +1525,22 @@ instances that is the gap to optimal; on the other five it is a gap to the best 
 from a checkpoint with identical subsequent metrics (same seed). Training excludes the hashes of
 `tiny_exact_v1` and `val_stage1_v2`.
 
-Progress: (a) met. `tiny-quarter-m2` and `tiny-sharing-m2` each reach their proved optimum
-(15 and 26) at 10,240 and 20,480 env steps (8 envs, d_model 64, 2 layers; `pytest -m slow`).
-(c) met: 2 updates, save, load into a fresh trainer and fresh envs, then 2 more updates gives
-the same metrics and weights as 4 straight updates, on CPU. (b) waits for the stage design.
+(d) (added in 0.10, from the goal of section 1) one network, without retraining, reads
+instances that differ in fluid count, target count, M and storage capacity, and its candidate
+logits and value are unchanged when fluids, droplets or targets are reordered.
+
+Progress, on observation and network v1: (a) met. `tiny-quarter-m2` and `tiny-sharing-m2`
+each reach their proved optimum (15 and 26) at 10,240 and 20,480 env steps (8 envs, d_model 64,
+2 layers; `pytest -m slow`). (c) met: 2 updates, save, load into a fresh trainer and fresh
+envs, then 2 more updates gives the same metrics and weights as 4 straight updates, on CPU.
+
+Remaining, in order:
+1. Observation v2 (9.2, 9.3) and network v2 (11.4), then re-run (a) and (c) on them and meet
+   (d). v1 is removed once v2 passes.
+2. (b) after the stage design (8.3), whose validation sets replace or join `val_stage1_v2`.
+3. Before any stage trains on mixtures: a general mixture cost-to-finish (10.3). Naive cannot
+   build most mixtures, so the truncation penalty is undefined there; this moves from M9 onto
+   the critical path of the goal.
 
 **M9 — Reserved.** MCTS / AlphaZero-style search; literature baselines with reproduction tests;
 preference-conditioned training; noise model; pipeline interfaces to scheduler/router.
@@ -1318,6 +1566,10 @@ preference-conditioned training; noise model; pipeline interfaces to scheduler/r
 - `check_env` passes; mask equals the legal set; padded rows are masked; selecting a masked
   index raises; episode ends exactly on success, truncation or dead end; truncation penalty
   applied.
+- Observation v2: every composition row sums to 1; every pair distance and satisfies flag
+  equals the exact value from `meda.core` (as v1's flags are checked against `apply`); operands
+  in `cand_index` point at the rows the action names; one instance encodes identically at two
+  different padding sizes, apart from the padding.
 
 ### 17.3 Hand-checked solver cases (fluids: S = sample at 1.0, B = buffer; one-unit outputs; tolerance 0)
 
@@ -1351,6 +1603,9 @@ skipped by default; run them with `uv run pytest -m slow` when closing a milesto
 ### 17.5 Agents and evaluation
 - Tabular Q converges on cases 1–4.
 - PPO smoke test: 2,000 steps on a tiny instance without NaNs; loss decreases.
+- Network v2: logits and value unchanged when fluids, droplets or targets are reordered (with
+  `cand_index` remapped); one set of weights accepts instances with different F, T, M and
+  storage capacity, and different padding sizes, in one test (M8 acceptance (d)).
 - Evaluation: a hand-made results table gives the expected gaps.
 
 ---
