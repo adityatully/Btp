@@ -51,7 +51,7 @@ def real_env(instances: list[Instance], **overrides: object) -> object:
 
 
 def train_on(instance: Instance, episodes: int, seed: int = 0) -> tuple[TabularQ, object]:
-    env = real_env([instance], L_max=1024)
+    env = real_env([instance], L_pad=1024)
     agent = TabularQ(
         TabularQConfig(
             episodes=episodes,
@@ -187,7 +187,7 @@ def test_epsilon_decays_to_its_floor() -> None:
 def test_truncation_is_treated_as_terminal() -> None:
     """The env already adds cost_to_finish, so bootstrapping there would double-count."""
     inst = dilution([(1, 32)], chip_limits=chip("dmfb_m2"), step_limit=2)  # cannot finish
-    env = real_env([inst], L_max=256)
+    env = real_env([inst], L_pad=256)
     agent = TabularQ(TabularQConfig(episodes=200, seed=0), WEIGHTS)
     stats = agent.train(env, [inst])  # type: ignore[arg-type]
     assert stats.successes == 0

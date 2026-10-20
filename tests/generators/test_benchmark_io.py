@@ -19,6 +19,7 @@ from meda.generators.benchmark_io import (
     InstanceReference,
     check_no_overlap,
     instance_hash,
+    problem_hash,
 )
 from meda.generators.sampler import sample_instances
 from meda.solvers.baselines.naive import NaiveSolver, naive_plan
@@ -49,6 +50,15 @@ def test_hash_ignores_id_metadata_and_step_limit() -> None:
     base = dilution([(1, 4)])
     renamed = replace(base, instance_id="other", metadata={"generator": "x"}, step_limit=99)
     assert instance_hash(base) == instance_hash(renamed)
+
+
+def test_problem_hash_ignores_the_chip_name_but_not_its_limits() -> None:
+    """A generator that draws M names the chip after the draw; the problem is the same."""
+    base = dilution([(1, 4)], chip_limits=chip("meda_m8"))
+    relabelled = replace(base, chip=replace(base.chip, name="meda_m8-M8-S10"))
+    assert problem_hash(relabelled) == problem_hash(base)
+    smaller_m = replace(base, chip=replace(base.chip, max_mix_volume=6))
+    assert problem_hash(smaller_m) != problem_hash(base)
 
 
 def test_hash_ignores_target_order_but_not_content() -> None:

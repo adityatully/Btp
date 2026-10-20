@@ -58,7 +58,7 @@ def tiny_grid(denominator: int = 16) -> list[Instance]:
 
 def make_tiny_env() -> SamplePrepEnv:
     """Module-level factory (picklable for AsyncVectorEnv)."""
-    return make_env(tiny_grid(), L_max=128)
+    return make_env(tiny_grid(), L_pad=128)
 
 
 class AnyIndexToLegal(gym.ActionWrapper[dict, np.int64, np.int64]):  # type: ignore[type-arg]

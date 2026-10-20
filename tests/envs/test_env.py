@@ -11,17 +11,19 @@ import pytest
 from gymnasium.utils.env_checker import check_env
 
 from meda.agents.base import run_episode
+from meda.agents.ppo.policy import trim_obs
 from meda.agents.random_agent import RandomAgent
 from meda.core.actions import Action, Mix, Output, Source
-from meda.core.composition import Composition, Rational
+from meda.core.composition import Composition, Rational, linf_distance
 from meda.core.dag import validate
 from meda.core.problem import Instance
 from meda.core.rules import IllegalActionError, TerminalStatus, apply, legal_actions
-from meda.envs.encoding import OP_MIX
+from meda.envs.encoding import OP_MIX, TYPE_DROPLET, TYPE_FLUID, TYPE_TARGET
 from meda.envs.sample_prep_env import FixedInstances, SamplePrepEnv
 from meda.envs.wrappers import CurriculumWrapper, EpisodeStats, PreferenceWrapper
+from meda.solvers.fallback import NaiveCostToFinish
 from tests.core.helpers import chip, default_weights, dilution, mixture
-from tests.envs.helpers import AnyIndexToLegal, make_env, make_tiny_env, tiny_grid
+from tests.envs.helpers import AnyIndexToLegal, env_config, make_env, make_tiny_env, tiny_grid
 
 S, B = Source.reservoir(0), Source.reservoir(1)
 CASE3 = dilution([(3, 10)])
@@ -63,14 +65,16 @@ def test_mask_and_padding_follow_legal_actions() -> None:
             assert env.observation_space.contains(obs)
             n_legal = len(env.legal)
             assert env.legal == (() if done else legal_actions(env.state, env.instance))
-            expected = np.arange(env.config.sizes.l_max) < n_legal
+            expected = np.arange(env.config.sizes.l_pad) < n_legal
             assert (env.action_masks() == expected).all()
             assert (obs["action_mask"].astype(bool) == expected).all()
             assert (obs["candidates"][n_legal:] == 0).all()
             assert (obs["cand_index"][n_legal:] == -1).all()
-            n_src = env.instance.num_fluids + len(env.state.droplets)
-            assert obs["source_mask"].sum() == n_src
-            assert (obs["sources"][n_src:] == 0).all()
+            n_drop = len(env.state.droplets)
+            assert obs["fluid_mask"].sum() == env.instance.num_fluids
+            assert obs["droplet_mask"].sum() == n_drop
+            assert (obs["droplets"][n_drop:] == 0).all()
+            assert (obs["droplet_comp"][n_drop:] == 0).all()
             assert obs["target_mask"].sum() == len(env.instance.targets)
             if done:
                 break
@@ -81,7 +85,7 @@ def test_mask_and_padding_follow_legal_actions() -> None:
 def test_masked_index_raises() -> None:
     env = make_env([CASE3])
     env.reset(seed=0)
-    for bad in (len(env.legal), env.config.sizes.l_max - 1, -1):
+    for bad in (len(env.legal), env.config.sizes.l_pad - 1, -1):
         with pytest.raises(IllegalActionError, match="masked"):
             env.step(np.int64(bad))
 
@@ -140,10 +144,12 @@ def test_dead_end_adds_penalty() -> None:
 
 def test_reset_rejects_instances_that_do_not_fit() -> None:
     big = dilution([(1, 4)])  # M = 8: 28 legal mixes at the start
-    with pytest.raises(ValueError, match=r"test-dilution.*L_max 10"):
-        make_env([big], L_max=10).reset(seed=0)
-    with pytest.raises(ValueError, match=r"test-mixture.*F_max 2"):
-        make_env([mixture([(1, 1, 1)])], F_max=2).reset(seed=0)
+    with pytest.raises(ValueError, match=r"test-dilution.*L_pad 10"):
+        make_env([big], L_pad=10).reset(seed=0)
+    with pytest.raises(ValueError, match=r"test-mixture.*F_pad 2"):
+        make_env([mixture([(1, 1, 1)])], F_pad=2).reset(seed=0)
+    with pytest.raises(ValueError, match=r"storage_capacity 10 > env N_pad 4"):
+        make_env([big], N_pad=4).reset(seed=0)
     with pytest.raises(ValueError, match="no legal action at the start"):
         make_env([dilution([(1, 2)], chip_limits=chip(max_denominator=1))]).reset(seed=0)
     wide = dilution([(1, 4)], droplet_volume=9)
@@ -153,7 +159,7 @@ def test_reset_rejects_instances_that_do_not_fit() -> None:
 
 def test_reset_options_choose_instance_and_seed_is_deterministic() -> None:
     grid = tiny_grid()
-    env = make_env(grid, L_max=128)
+    env = make_env(grid, L_pad=128)
     _, info = env.reset(options={"instance": grid[3]})
     assert info["instance_id"] == grid[3].instance_id
     rng_a, rng_b = np.random.default_rng(5), np.random.default_rng(5)
@@ -172,34 +178,129 @@ def test_encoding_of_known_state() -> None:
     env = make_env([CASE3])
     env.reset(seed=0)
     obs, *_ = env.step(np.int64(index_of(env, CASE3_PLAN[0])))  # droplet 2: 2/5, volume 5
-    z = env.config.sizes
-    droplet_row = obs["sources"][2]
-    assert droplet_row[:2] == pytest.approx([0.4, 0.6])
-    assert droplet_row[z.f_max] == pytest.approx(5 / 8)  # volume / M
-    assert droplet_row[z.f_max + 1] == 0  # not a reservoir
-    reservoir_row = obs["sources"][1]
-    assert reservoir_row[:2] == pytest.approx([0.0, 1.0])
-    assert reservoir_row[z.f_max + 1] == 1
+    vref, cref = 16, 16
+    assert obs["fluids"][:2].tolist() == [[1, 0, 0], [0, 0, 1]]  # sample, buffer
+    assert obs["droplet_comp"][0, :2] == pytest.approx([0.4, 0.6])
+    drop = obs["droplets"][0]
+    assert drop[0] == pytest.approx(5 / 8)  # volume / M
+    assert drop[1] == pytest.approx(5 / vref)  # volume / volume_ref
+    assert drop[2] == pytest.approx(1 - 1 / 5)  # denominator feature
+    assert drop[4] == pytest.approx(0.1)  # L-inf from 2/5 to the target 3/10
+    assert drop[5] == 0
+    assert obs["droplet_target"][0, 0] == pytest.approx([0.1, 0.0])
+    assert obs["target_comp"][0, :2] == pytest.approx([0.3, 0.7])
+    assert obs["targets"][0] == pytest.approx([1 / 8, 1 / vref, 0, 1, 1 / cref, 0, 1 - 1 / 10])
 
     j = index_of(env, CASE3_PLAN[1])  # 3 units of 2/5 + 1 unit of B -> 3/10, volume 4
     cand = obs["candidates"][j]
-    assert list(obs["cand_index"][j]) == [OP_MIX, 2, 1]
+    # (op, a = droplet row 0, b = fluid row 1)
+    assert list(obs["cand_index"][j]) == [OP_MIX, TYPE_DROPLET, 0, TYPE_FLUID, 1]
     assert cand[OP_MIX] == 1
-    assert cand[3:6] == pytest.approx([3 / 8, 1 / 8, 4 / 8])
-    assert cand[6:8] == pytest.approx([0.3, 0.7])  # exact result, as float
-    c = 6 + z.f_max
-    assert cand[c] == pytest.approx(1 - 1 / 10)  # denominator feature
-    assert cand[c + 1] == pytest.approx(0.0)  # L-inf to target 0
-    assert cand[c + 1 + z.t_max] == 1  # satisfies an open target
-    reagent = cand[c + 2 + z.t_max : c + 5 + z.t_max]
-    assert reagent == pytest.approx([0, 0, 1 / 8])  # 1 unit of buffer
-    assert cand[-1] == pytest.approx(2 / 10)  # 2 droplets after (2/5 keeps 2 units)
+    assert cand[3:9] == pytest.approx([3 / 8, 1 / 8, 4 / 8, 3 / vref, 1 / vref, 4 / vref])
+    assert obs["cand_comp"][j, :2] == pytest.approx([0.3, 0.7])  # exact result, as float
+    assert cand[9] == pytest.approx(1 - 1 / 10)  # denominator feature
+    assert cand[10] == pytest.approx(0.0)  # L-inf to the nearest open target
+    assert cand[11] == 1  # satisfies an open target
+    assert obs["cand_target"][j, 0] == pytest.approx([0.0, 1.0])
+    assert cand[12:15] == pytest.approx([0, 0, 1 / vref])  # 1 unit of buffer
+    assert cand[16] == pytest.approx(2 / 10)  # 2 droplets after (2/5 keeps 2 units)
+    glob = obs["globals"]
+    limit = CASE3.step_limit
+    assert glob == pytest.approx(
+        [1 / limit, (limit - 1) / cref, 1 / 10, 1, 1 / cref, 8 / vref, 10 / cref]
+    )
     # The flag is exact: it is set iff applying the candidate yields exactly 3/10.
-    sat = obs["candidates"][: len(env.legal), c + 1 + z.t_max]
-    for act, flag in zip(env.legal, sat, strict=True):
+    for act, flag in zip(env.legal, obs["candidates"][: len(env.legal), 11], strict=True):
         if isinstance(act, Mix):
             _, _, delta = apply(env.state, act, env.instance)
             assert bool(flag) == (delta.nodes[0].composition == Composition.from_ints((3, 7), 10))
+
+
+def _exact_pair(comp: Composition, inst: Instance, remaining: tuple[int, ...]) -> list[Any]:
+    """(distance, satisfies) per target, from `meda.core`, with the met-target convention."""
+    out = []
+    for t in inst.targets:
+        if remaining[t.id] == 0:
+            out.append((1.0, 0.0))
+        else:
+            dist = linf_distance(comp, t.composition)
+            out.append((float(dist), float(dist <= t.tolerance)))
+    return out
+
+
+def test_v2_compositions_pairs_and_operands_are_exact() -> None:
+    """SPEC 17.2: rows sum to 1, every pair equals the core's exact value, operands point at
+    the rows the action names."""
+    inst = mixture([(1, 1, 2), (1, 2, 1)], demand=2, step_limit=14)
+    env = make_env([inst], L_pad=2048)
+    rng = np.random.default_rng(3)
+    obs, _ = env.reset(seed=0)
+    for _ in range(8):
+        state, nf, nt = env.state, inst.num_fluids, len(inst.targets)
+        rem = state.remaining_demand
+        for name in ("droplet_comp", "target_comp", "cand_comp"):
+            real = obs[
+                {"droplet_comp": "droplet_mask", "target_comp": "target_mask"}.get(
+                    name, "action_mask"
+                )
+            ].astype(bool)
+            assert obs[name][real].sum(axis=1) == pytest.approx(1.0)
+        for i, d in enumerate(state.droplets):
+            want = _exact_pair(d.composition, inst, rem)
+            assert np.allclose(obs["droplet_target"][i, :nt], want)
+        row_of = {d.uid: i for i, d in enumerate(state.droplets)}
+        for j, act in enumerate(env.legal):
+            _, _, delta = apply(state, act, inst)
+            idx = obs["cand_index"][j]
+            if isinstance(act, Mix):
+                result = delta.nodes[0].composition
+                for src, (typ, row) in ((act.a, idx[1:3]), (act.b, idx[3:5])):
+                    if src.is_reservoir:
+                        assert (typ, row) == (TYPE_FLUID, src.index)
+                    else:
+                        assert (typ, row) == (TYPE_DROPLET, row_of[src.index])
+                assert np.allclose(obs["cand_target"][j, :nt], _exact_pair(result, inst, rem))
+            elif isinstance(act, Output):
+                assert idx[3:5].tolist() == [TYPE_TARGET, act.target]
+        if not env.legal:
+            break
+        obs, _, term, trunc, _ = env.step(np.int64(rng.integers(len(env.legal))))
+        if term or trunc:
+            break
+    assert obs["fluid_mask"].sum() == nf
+
+
+def test_encoding_is_the_same_at_two_padding_sizes() -> None:
+    inst = mixture([(1, 1, 2), (1, 2, 1)], demand=2, step_limit=14)
+    small = make_env([inst], L_pad=1200)
+    big = make_env([inst], F_pad=7, T_pad=20, N_pad=15, L_pad=1600)
+    rng = np.random.default_rng(1)
+    a, _ = small.reset(seed=0)
+    b, _ = big.reset(seed=0)
+    for _ in range(6):
+        assert _obs_equal(trim_obs(_batched(a)), trim_obs(_batched(b)))
+        i = np.int64(rng.integers(len(small.legal)))
+        a, *rest_a = small.step(i)
+        b, *_ = big.step(i)
+        if rest_a[1] or rest_a[2]:
+            break
+
+
+def test_reset_refuses_an_instance_the_fallback_cannot_price() -> None:
+    """A mixture naive cannot build has no truncation penalty: refused at reset, not mid-run."""
+    unpriceable = mixture([(3, 7, 22)])  # denominator 32 > M = 8: naive cannot build it
+    env = SamplePrepEnv(
+        env_config(),
+        FixedInstances([unpriceable]),
+        default_weights(),
+        NaiveCostToFinish(default_weights()),
+    )
+    with pytest.raises(ValueError, match=r"test-mixture.*cannot price"):
+        env.reset(seed=0)
+
+
+def _batched(obs: dict[str, Any]) -> dict[str, Any]:
+    return {k: v[None] for k, v in obs.items()}
 
 
 def test_age_feature_grows() -> None:
@@ -207,8 +308,7 @@ def test_age_feature_grows() -> None:
     env.reset(seed=0)
     env.step(np.int64(index_of(env, Mix(S, 1, B, 2))))
     obs, *_ = env.step(np.int64(index_of(env, Mix(S, 1, B, 1))))
-    z = env.config.sizes
-    ages = sorted(obs["sources"][2:4, z.d_src - 1].tolist())
+    ages = sorted(obs["droplets"][:2, 3].tolist())
     assert ages == pytest.approx([0.0, 0.1])
 
 
@@ -380,8 +480,8 @@ def test_snapshot_is_independent_of_the_env() -> None:
 def test_restore_rejects_an_instance_that_does_not_fit() -> None:
     big = make_env([dilution([(1, 4), (3, 8)], demand=2, step_limit=12)])
     big.reset()
-    small = make_env(tiny_grid(), T_max=1)
-    with pytest.raises(ValueError, match="targets > env T_max"):
+    small = make_env(tiny_grid(), T_pad=1)
+    with pytest.raises(ValueError, match="targets > env T_pad"):
         small.restore(big.snapshot())
 
 

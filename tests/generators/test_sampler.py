@@ -14,7 +14,8 @@ from meda.core.dag import MixingDAG, validate
 from meda.core.fluids import FluidKind
 from meda.core.problem import Instance, Target
 from meda.core.rules import replay
-from meda.envs.encoding import Encoder, EnvSizes
+from meda.envs.encoding import Encoder
+from meda.envs.sample_prep_env import EnvConfig
 from meda.generators.benchmark_io import instance_hash
 from meda.generators.curriculum import Curriculum, Stage, StageStats
 from meda.generators.sampler import (
@@ -99,10 +100,59 @@ def test_every_stage_fits_the_env_config(name: str) -> None:
     """The env padding must cover the largest instance a stage can make (SPEC 9.2)."""
     cfg, chip_limits = load_stage(name)
     sizes = env_sizes()
-    assert cfg.max_fluids <= sizes["F_max"], f"{name}: F_max too small"
+    assert cfg.max_fluids <= sizes["F_pad"], f"{name}: F_pad too small"
     max_targets = cfg.num_experiments[1] * cfg.targets_per_experiment[1]
-    assert max_targets <= sizes["T_max"], f"{name}: T_max too small for {max_targets} targets"
-    assert chip_limits.storage_capacity <= sizes["storage_capacity_max"]
+    assert max_targets <= sizes["T_pad"], f"{name}: T_pad too small for {max_targets} targets"
+    max_storage = cfg.storage_capacity[1] if cfg.storage_capacity else chip_limits.storage_capacity
+    assert max_storage <= sizes["N_pad"], f"{name}: N_pad too small"
+
+
+@stages
+def test_existing_stage_hashes_are_unchanged(name: str) -> None:
+    """The chip-input keys are written into the config hash only when set, so stages that do
+    not use them keep the hash that names their instances in frozen sets."""
+    if name == "tiny_dilution":
+        assert load_stage(name)[0].config_hash() == "686c78262fb2b9da"  # val_stage1_v2
+
+
+def ranged_dilution(**overrides: object) -> GeneratorConfig:
+    ranges = {"max_mix_volume": [4, 10], "storage_capacity": [3, 8], "droplet_volume": [1, 2]}
+    return GeneratorConfig.from_dict(stage_dict("dilution_multi", **{**ranges, **overrides}))
+
+
+def test_chip_inputs_and_droplet_volume_are_drawn_per_instance() -> None:
+    """SPEC 1.3: M, storage capacity and droplet volume vary per instance within the ranges,
+    every draw is witnessed, and the same seed gives the same instances."""
+    cfg, base = ranged_dilution(), chip("meda_m8")
+    drawn = sample_instances(cfg, base, np.random.default_rng(4), 40, WEIGHTS)
+    ms = {i.chip.max_mix_volume for i in drawn}
+    caps = {i.chip.storage_capacity for i in drawn}
+    volumes = {t.droplet_volume for i in drawn for t in i.targets}
+    assert len(ms) >= 4 and ms <= set(range(4, 11))
+    assert len(caps) >= 3 and caps <= set(range(3, 9))
+    assert volumes == {1, 2}
+    for inst in drawn:
+        m, cap = inst.chip.max_mix_volume, inst.chip.storage_capacity
+        assert inst.chip.name == f"meda_m8-M{m}-S{cap}"
+        assert inst.chip.min_mix_volume == base.min_mix_volume  # platform constants untouched
+        final, _, _ = replay(inst, witness_of(inst))
+        assert final.is_success, inst.instance_id
+    again = sample_instances(cfg, base, np.random.default_rng(4), 40, WEIGHTS)
+    assert [i.to_json() for i in again] == [i.to_json() for i in drawn]
+
+
+def test_droplet_volume_above_the_drawn_m_raises() -> None:
+    cfg = ranged_dilution(max_mix_volume=[2, 2], droplet_volume=[3, 3])
+    with pytest.raises(ValueError, match="droplet_volume 3 > max_mix_volume 2"):
+        sample_instance(cfg, chip("meda_m8"), np.random.default_rng(0), WEIGHTS)
+
+
+@pytest.mark.parametrize(
+    ("key", "value"), [("max_mix_volume", [1, 4]), ("storage_capacity", [5, 2])]
+)
+def test_bad_chip_input_ranges_raise(key: str, value: list[int]) -> None:
+    with pytest.raises(ValueError, match=key):
+        GeneratorConfig.from_dict(stage_dict("dilution_multi", **{key: value}))
 
 
 # --------------------------------------------------------------------------- M4 acceptance
@@ -149,7 +199,7 @@ def test_sampled_instances_respect_their_stage(name: str) -> None:
         assert cfg.num_experiments[0] <= len(experiments)
         for t in inst.targets:
             assert cfg.demand[0] <= t.demand <= cfg.demand[1]
-            assert t.droplet_volume == cfg.droplet_volume
+            assert cfg.droplet_volume[0] <= t.droplet_volume <= cfg.droplet_volume[1]
             assert t.tolerance == cfg.tolerance
             assert t.composition.den <= chip_limits.max_denominator
             assert support_size_of(t.composition) >= min(cfg.support_size, inst.num_fluids)
@@ -160,9 +210,7 @@ def test_sampled_instances_respect_their_stage(name: str) -> None:
 def test_sampled_instances_run_in_the_encoder(name: str) -> None:
     cfg, chip_limits = load_stage(name)
     sizes = env_sizes()
-    encoder = Encoder(
-        EnvSizes(sizes["F_max"], sizes["T_max"], sizes["storage_capacity_max"], sizes["L_max"])
-    )
+    encoder = Encoder(EnvConfig.from_dict(sizes).sizes)
     for inst in sample_instances(cfg, chip_limits, np.random.default_rng(5), 5, WEIGHTS):
         encoder.check_instance(inst)
 

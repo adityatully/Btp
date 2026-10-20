@@ -18,20 +18,23 @@ from meda.agents.ppo.policy import PPOAgent, batch_obs, masked_distribution
 from meda.agents.ppo.ppo import PPOConfig, PPOTrainer
 from meda.agents.ppo.rollout import RolloutBuffer, compute_gae
 from meda.analysis.evaluate import build_env
-from meda.core.problem import Instance
+from meda.core.composition import ZERO, Composition
+from meda.core.fluids import Fluid, FluidKind
+from meda.core.problem import Instance, Target
+from meda.envs.encoding import TYPE_DROPLET, TYPE_FLUID, TYPE_TARGET
 from meda.generators.benchmark_io import BenchmarkSet
 from meda.train import train_ppo
 from meda.utils.checkpoint import load_checkpoint, save_checkpoint
-from tests.core.helpers import dilution, load_yaml
+from tests.core.helpers import SRB, chip, dilution, load_yaml, mixture
 from tests.envs.helpers import make_env
 
 TINY = BenchmarkSet.read("tiny_exact_v1")
 SMALL_NET = NetConfig(d_model=32, n_layers=2, n_heads=4)
 
 
-def cfg(l_max: int = 128) -> dict[str, Any]:
+def cfg(l_pad: int = 128) -> dict[str, Any]:
     return {
-        "env": {**load_yaml("env/sample_prep.yaml"), "L_max": l_max},
+        "env": {**load_yaml("env/sample_prep.yaml"), "L_pad": l_pad},
         "costs": load_yaml("costs/default.yaml"),
     }
 
@@ -59,49 +62,102 @@ def trainer_for(instances: list[Instance], pc: PPOConfig, seed: int = 0) -> PPOT
     return PPOTrainer(pc, sizes, envs, "cpu", seed=seed)
 
 
-def mid_episode_obs() -> tuple[dict[str, Any], Any]:
-    """An observation with droplets on chip and two open targets (M = 8)."""
-    env = make_env([dilution([(1, 4), (3, 8)], demand=2, step_limit=12)])
+def mid_episode_obs(inst: Instance | None = None, **env_overrides: Any) -> dict[str, Any]:
+    """An observation with droplets on chip and two open targets over three fluids (M = 8)."""
+    inst = inst or mixture([(1, 1, 2), (1, 2, 1)], demand=2, step_limit=14)
+    env = make_env([inst], **{"L_pad": 2048, **env_overrides})
     obs, _ = env.reset(seed=0)
     rng = np.random.default_rng(0)
     for _ in range(2):
         mixes = [i for i, a in enumerate(env.legal) if type(a).__name__ == "Mix"]
         obs, *_ = env.step(np.int64(rng.choice(mixes)))
-    return obs, env.config.sizes
+    return obs
+
+
+def permuted(obs: dict[str, Any], rng: np.random.Generator) -> dict[str, Any]:
+    """`obs` with its fluid, droplet and target rows shuffled (row i holds old row p[i]) and
+    every reference to them (composition columns, pairs, operands) remapped to match."""
+    nf, nd, nt = (int(obs[k].sum()) for k in ("fluid_mask", "droplet_mask", "target_mask"))
+    nc = int(obs["action_mask"].sum())
+    pf, pd, pt = rng.permutation(nf), rng.permutation(nd), rng.permutation(nt)
+    out = {k: v.copy() for k, v in obs.items()}
+    out["fluids"][:nf] = obs["fluids"][pf]
+    out["droplets"][:nd] = obs["droplets"][pd]
+    out["targets"][:nt] = obs["targets"][pt]
+    out["droplet_comp"][:nd, :nf] = obs["droplet_comp"][pd][:, pf]
+    out["target_comp"][:nt, :nf] = obs["target_comp"][pt][:, pf]
+    out["droplet_target"][:nd, :nt] = obs["droplet_target"][pd][:, pt]
+    out["cand_comp"][:nc, :nf] = obs["cand_comp"][:nc][:, pf]
+    out["cand_target"][:nc, :nt] = obs["cand_target"][:nc][:, pt]
+    inverse = {
+        TYPE_FLUID: np.argsort(pf),
+        TYPE_DROPLET: np.argsort(pd),
+        TYPE_TARGET: np.argsort(pt),
+    }
+    ci, new = obs["cand_index"][:nc], out["cand_index"][:nc]
+    for typ_col, row_col in ((1, 2), (3, 4)):
+        for typ, inv in inverse.items():
+            hit = ci[:, typ_col] == typ
+            new[hit, row_col] = inv[ci[hit, row_col]]
+    return out
+
+
+def forward(net: SetEncoderNet, *observations: dict[str, Any]) -> tuple[torch.Tensor, ...]:
+    batched = {k: np.stack([o[k] for o in observations]) for k in observations[0]}
+    with torch.no_grad():
+        return net(batch_obs(batched, torch.device("cpu")))
 
 
 # --------------------------------------------------------------------------- network
 
 
 def test_network_shapes_and_permutation_invariance() -> None:
+    """Logits and value unchanged when fluids, droplets and targets are reordered (17.5)."""
     torch.manual_seed(0)
-    obs, sizes = mid_episode_obs()
-    net = SetEncoderNet(sizes, SMALL_NET).eval()
-    s, t = int(obs["source_mask"].sum()), int(obs["target_mask"].sum())
+    obs = mid_episode_obs()
+    nf, nd, nt = (int(obs[k].sum()) for k in ("fluid_mask", "droplet_mask", "target_mask"))
     n_cand = int(obs["action_mask"].sum())
-    assert s > 2 and t == 2 and n_cand > 10
-
-    p = np.random.default_rng(1).permutation(s)  # new row i holds old row p[i]
-    q = np.array([1, 0])
-    inv_p, inv_q = np.argsort(p), np.argsort(q)
-    shuffled = {k: v.copy() for k, v in obs.items()}
-    shuffled["sources"][:s] = obs["sources"][p]
-    shuffled["targets"][:t] = obs["targets"][q]
-    ci = obs["cand_index"][:n_cand]
-    new_ci = shuffled["cand_index"][:n_cand]
-    new_ci[:, 1] = inv_p[ci[:, 1]]
-    mix, out = ci[:, 0] == 0, ci[:, 0] == 1
-    new_ci[mix, 2] = inv_p[ci[mix, 2]]
-    new_ci[out, 2] = inv_q[ci[out, 2]]
-
-    with torch.no_grad():
-        a = batch_obs({k: v[None] for k, v in obs.items()}, torch.device("cpu"))
-        b = batch_obs({k: v[None] for k, v in shuffled.items()}, torch.device("cpu"))
-        la, va = net(a)
-        lb, vb = net(b)
+    assert nf == 3 and nd >= 2 and nt == 2 and n_cand > 10
+    net = SetEncoderNet(SMALL_NET).eval()
+    la, va = forward(net, obs)
     assert la.shape == (1, n_cand)  # trimmed to the real candidates
-    torch.testing.assert_close(la, lb, rtol=1e-5, atol=1e-5)
-    torch.testing.assert_close(va, vb, rtol=1e-5, atol=1e-5)
+    for seed in range(3):
+        lb, vb = forward(net, permuted(obs, np.random.default_rng(seed)))
+        torch.testing.assert_close(la, lb, rtol=1e-5, atol=1e-5)
+        torch.testing.assert_close(va, vb, rtol=1e-5, atol=1e-5)
+
+
+def test_one_network_reads_any_fluids_targets_m_storage_and_padding() -> None:
+    """M8 acceptance (d): the same weights read instances that differ in F, T, M and storage
+    capacity, at any padding size, alone or batched together."""
+    torch.manual_seed(0)
+    four = (*SRB[:2], Fluid(2, "R2", FluidKind.REAGENT), Fluid(3, "B", FluidKind.BUFFER))
+    four_targets = tuple(
+        Target(i, i, Composition.from_ratio(r), ZERO, 1, 1)
+        for i, r in enumerate([(1, 1, 1, 1), (2, 1, 0, 1), (1, 0, 2, 1)])
+    )
+    instances = [
+        dilution([(1, 4)], chip_limits=chip("dmfb_m2"), step_limit=10),  # F 2, T 1, M 2
+        mixture([(1, 1, 2), (1, 2, 1)], demand=2, step_limit=14),  # F 3, T 2, M 8
+        Instance(
+            "test-four", four, four_targets, chip(max_mix_volume=4, storage_capacity=3), 20
+        ),  # F 4, T 3, M 4, S 3
+    ]
+    net = SetEncoderNet(SMALL_NET).eval()
+    small = [mid_episode_obs(i) for i in instances]
+    big = [mid_episode_obs(i, F_pad=9, T_pad=30, N_pad=16, L_pad=4000) for i in instances]
+    alone = [forward(net, o) for o in small]
+    for (la, va), o in zip(alone, big, strict=True):
+        lb, vb = forward(net, o)  # same instance, larger padding: identical after trimming
+        torch.testing.assert_close(la, lb)
+        torch.testing.assert_close(va, vb)
+    logits, values = forward(net, *small)  # one batch mixing all three
+    for i, (la, va) in enumerate(alone):
+        n = la.shape[1]
+        torch.testing.assert_close(logits[i : i + 1, :n], la, rtol=1e-5, atol=1e-5)
+        torch.testing.assert_close(values[i : i + 1], va, rtol=1e-5, atol=1e-5)
+    # No parameter's shape mentions a count: the network never saw the padding sizes.
+    assert not any(9 in p.shape or 30 in p.shape for p in net.parameters())
 
 
 def test_masked_candidates_have_zero_probability() -> None:
@@ -118,8 +174,8 @@ def test_masked_candidates_have_zero_probability() -> None:
 
 def test_agent_acts_legally_and_save_load_round_trips(tmp_path: Path) -> None:
     torch.manual_seed(0)
-    obs, sizes = mid_episode_obs()
-    agent = PPOAgent(SetEncoderNet(sizes, SMALL_NET))
+    obs = mid_episode_obs()
+    agent = PPOAgent(SetEncoderNet(SMALL_NET))
     mask = obs["action_mask"].astype(bool)
     greedy = agent.act(obs, mask, deterministic=True)
     assert mask[greedy]
@@ -147,23 +203,23 @@ def test_gae_hand_case_with_episode_end_and_cut_off() -> None:
     np.testing.assert_allclose(ret, expected + values)
 
 
-def test_rollout_buffer_pads_candidates_to_the_widest_step() -> None:
+def test_rollout_buffer_pads_every_token_axis_to_the_widest_step() -> None:
+    """Steps are stored trimmed; the batch pads each axis to the widest step (operands -1)."""
+    env = make_env([mixture([(1, 1, 2), (1, 2, 1)], demand=2, step_limit=14)], L_pad=2048)
+    first, _ = env.reset(seed=0)  # empty chip
+    later = mid_episode_obs()  # droplets on chip, more candidates
     buf = RolloutBuffer(num_steps=2, num_envs=1)
-    for width in (3, 5):
-        mask = np.zeros((1, 10), dtype=np.int8)
-        mask[0, :width] = 1
-        obs = {
-            "action_mask": mask,
-            "cand_index": np.where(mask[..., None] == 1, 0, -1).repeat(3, -1).astype(np.int32),
-            "candidates": mask[..., None].astype(np.float32).repeat(2, -1),
-            "globals": np.zeros((1, 4), dtype=np.float32),
-        }
-        buf.add(obs, np.array([0]), np.zeros(1), np.zeros(1), np.zeros(1), np.array([False]))
+    for obs in (first, later):
+        batched = {k: v[None] for k, v in obs.items()}
+        buf.add(batched, np.array([0]), np.zeros(1), np.zeros(1), np.zeros(1), np.array([False]))
     flat = buf.flat_obs()
-    assert flat["action_mask"].shape == (2, 5) and flat["candidates"].shape == (2, 5, 2)
-    assert flat["action_mask"][0].tolist() == [1, 1, 1, 0, 0]
-    assert flat["cand_index"][0, 4].tolist() == [-1, -1, -1]
-    assert flat["globals"].shape == (2, 4)
+    widths = {k: int(later[k].sum()) for k in ("droplet_mask", "action_mask")}
+    assert flat["droplets"].shape[1] == flat["droplet_comp"].shape[1] == widths["droplet_mask"]
+    assert flat["droplet_target"].shape[1] == widths["droplet_mask"]
+    assert flat["candidates"].shape[1] == flat["cand_target"].shape[1] == widths["action_mask"]
+    n0 = int(first["action_mask"].sum())
+    assert (flat["cand_index"][0, n0:] == -1).all() and (flat["action_mask"][0, n0:] == 0).all()
+    assert flat["fluids"].shape == (2, 3, 3) and flat["globals"].shape == (2, 7)
 
 
 # --------------------------------------------------------------------------- trainer
@@ -204,8 +260,11 @@ def test_resume_from_checkpoint_repeats_the_run_exactly(tmp_path: Path) -> None:
     instances = [TINY.by_id("tiny-sharing-m2"), TINY.by_id("tiny-grid-m2-3of8")]
     pc = ppo_cfg()
 
-    def strip(m: dict[str, float]) -> dict[str, float]:
-        return {k: v for k, v in m.items() if k != "env_steps_per_second"}
+    def strip(m: dict[str, float]) -> dict[str, Any]:
+        # NaN (no successful episode yet) is written as None so equal runs compare equal.
+        return {
+            k: None if math.isnan(v) else v for k, v in m.items() if k != "env_steps_per_second"
+        }
 
     torch.manual_seed(7)
     straight = trainer_for(instances, pc, seed=3)

@@ -69,6 +69,15 @@ def test_gaps_against_optimum_and_interval() -> None:
     assert df.loc["half", ["gap_to_optimal", "gap_to_best_known"]].isna().all()
     assert df["success"].all()
     assert (df.loc[["quarter", "seven-32"], "mix_ops"] == [2, 5]).all()
+    # The input axes of SPEC 1.3, one column each, for gap-vs-axis curves.
+    row = df.loc["quarter"]
+    inst = BENCH.by_id("quarter")
+    assert (row.num_fluids, row.max_mix_volume, row.storage_capacity, row.max_droplet_volume) == (
+        inst.num_fluids,
+        inst.chip.max_mix_volume,
+        inst.chip.storage_capacity,
+        1,
+    )
 
 
 def test_an_invalid_dag_is_a_hard_error() -> None:
