@@ -51,13 +51,18 @@ def instance_hash(instance: Instance) -> str:
 
 
 def problem_hash(instance: Instance) -> str:
-    """Like `instance_hash` but blind to `max_denominator` (an accuracy ceiling, not the problem).
+    """Like `instance_hash` but blind to `max_denominator` (an accuracy ceiling, not the problem)
+    and to the chip's `name` (a label).
 
     `tiny_exact_v1` sets each instance's `max_denominator` to the lcm of its targets, so the
-    same dilution has a different `instance_hash` there than in a stage-1 draw. Holding a
-    problem out of training has to compare this hash.
+    same dilution has a different `instance_hash` there than in a stage-1 draw. A generator
+    that draws M or storage capacity names the chip after the draw, so the same problem can
+    also carry different chip names. Holding a problem out of training has to compare this
+    hash.
     """
-    chip = {k: v for k, v in instance.chip.to_dict().items() if k != "max_denominator"}
+    chip = {
+        k: v for k, v in instance.chip.to_dict().items() if k not in ("max_denominator", "name")
+    }
     payload = {
         "fluids": [f.kind.value for f in instance.fluids],
         "targets": _targets_payload(instance),

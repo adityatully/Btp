@@ -62,12 +62,15 @@ class GeneratorConfig:
     accuracy_denominator: int
     support_size: int
     demand: tuple[int, int]
-    droplet_volume: int
+    droplet_volume: tuple[int, int]  # drawn per target
     tolerance: Rational
     step_limit: int | None  # None: size it from the witness
     step_limit_multiple: float
     walk_mixes: tuple[int, int]
     fixed_compositions: tuple[tuple[int, ...], ...]
+    # Chip inputs drawn per instance (SPEC 1.3); None keeps the chip config's value.
+    max_mix_volume: tuple[int, int] | None = None
+    storage_capacity: tuple[int, int] | None = None
 
     @property
     def min_fluids(self) -> int:
@@ -106,8 +109,15 @@ class GeneratorConfig:
         ):
             if value[0] < 1 or value[1] < value[0]:
                 fail(f"{field} must be an increasing range of positive ints, got {value}")
-        if self.droplet_volume < 1:
-            fail(f"droplet_volume must be >= 1, got {self.droplet_volume}")
+        for field, span in (
+            ("droplet_volume", self.droplet_volume),
+            ("max_mix_volume", self.max_mix_volume),
+            ("storage_capacity", self.storage_capacity),
+        ):
+            if span is not None and (span[0] < 1 or span[1] < span[0]):
+                fail(f"{field} must be an increasing range of positive ints, got {span}")
+        if self.max_mix_volume is not None and self.max_mix_volume[0] < 2:
+            fail(f"max_mix_volume must be >= 2 (k, l >= 1), got {self.max_mix_volume}")
         if self.tolerance < 0:
             fail(f"tolerance must be >= 0, got {self.tolerance}")
         if self.composition_sampler == "fixed_list" and not self.fixed_compositions:
@@ -130,6 +140,8 @@ class GeneratorConfig:
             "step_limit_multiple",
             "walk_mixes",
             "fixed_compositions",
+            "max_mix_volume",
+            "storage_capacity",
         }
         unknown = set(data) - known
         if unknown:
@@ -147,7 +159,7 @@ class GeneratorConfig:
             accuracy_denominator=int(data["accuracy_denominator"]),
             support_size=int(data["support_size"]),
             demand=_as_range(data["demand"]),
-            droplet_volume=int(data["droplet_volume"]),
+            droplet_volume=_as_range(data["droplet_volume"]),
             tolerance=Rational.parse(data["tolerance"]),
             step_limit=None if step_limit is None else int(step_limit),
             step_limit_multiple=float(data.get("step_limit_multiple", 2.0)),
@@ -155,6 +167,8 @@ class GeneratorConfig:
             fixed_compositions=tuple(
                 tuple(int(x) for x in parts) for parts in data.get("fixed_compositions", ())
             ),
+            max_mix_volume=_optional_range(data.get("max_mix_volume")),
+            storage_capacity=_optional_range(data.get("storage_capacity")),
         )
 
     def config_hash(self) -> str:
@@ -169,13 +183,21 @@ class GeneratorConfig:
             "accuracy": self.accuracy_denominator,
             "support": self.support_size,
             "demand": list(self.demand),
-            "droplet_volume": self.droplet_volume,
+            "droplet_volume": _hashable_span(self.droplet_volume),
             "tolerance": str(self.tolerance),
             "step_limit": self.step_limit,
             "step_limit_multiple": self.step_limit_multiple,
             "walk_mixes": list(self.walk_mixes),
             "fixed": [list(c) for c in self.fixed_compositions],
         }
+        # Keys added after generator version 1, written only when set, so the hash of every
+        # config that does not use them is unchanged (it names instances in frozen sets).
+        for key, span in (
+            ("max_mix_volume", self.max_mix_volume),
+            ("storage_capacity", self.storage_capacity),
+        ):
+            if span is not None:
+                payload[key] = list(span)
         return hashlib.sha256(json.dumps(payload, sort_keys=True).encode()).hexdigest()[:16]
 
 
@@ -188,8 +210,41 @@ def _as_range(value: Any) -> tuple[int, int]:
     return int(value), int(value)
 
 
+def _optional_range(value: Any) -> tuple[int, int] | None:
+    return None if value is None else _as_range(value)
+
+
+def _hashable_span(span: tuple[int, int]) -> int | list[int]:
+    """A fixed value as itself (the version-1 form), a real range as [low, high]."""
+    return span[0] if span[0] == span[1] else list(span)
+
+
 def _draw(rng: np.random.Generator, span: tuple[int, int]) -> int:
     return int(rng.integers(span[0], span[1] + 1))
+
+
+def _draw_if_range(rng: np.random.Generator, span: tuple[int, int]) -> int:
+    """Like `_draw`, but a fixed value consumes no randomness, so adding a range option leaves
+    every config without one drawing exactly as before."""
+    return span[0] if span[0] == span[1] else _draw(rng, span)
+
+
+def sample_chip(cfg: GeneratorConfig, chip: ChipLimits, rng: np.random.Generator) -> ChipLimits:
+    """The instance's chip: the config's chip with M and storage capacity drawn from the
+    generator's ranges where it sets them (SPEC 1.3: chip limits are problem inputs). The
+    name records what was drawn; it is a label, not part of the problem (`problem_hash`)."""
+    if cfg.max_mix_volume is None and cfg.storage_capacity is None:
+        return chip
+    m = chip.max_mix_volume if cfg.max_mix_volume is None else _draw(rng, cfg.max_mix_volume)
+    cap = (
+        chip.storage_capacity if cfg.storage_capacity is None else _draw(rng, cfg.storage_capacity)
+    )
+    if m < chip.min_mix_volume:
+        raise ValueError(
+            f"generator '{cfg.name}': drew max_mix_volume {m} < chip '{chip.name}' "
+            f"min_mix_volume {chip.min_mix_volume}"
+        )
+    return replace(chip, name=f"{chip.name}-M{m}-S{cap}", max_mix_volume=m, storage_capacity=cap)
 
 
 def make_fluids(cfg: GeneratorConfig, rng: np.random.Generator) -> tuple[Fluid, ...]:
@@ -333,6 +388,7 @@ def _sample_once(
     weights: CostWeights | None,
     instance_id: str | None,
 ) -> Instance:
+    chip = sample_chip(cfg, chip, rng)
     fluids = make_fluids(cfg, rng)
     num_experiments = _draw(rng, cfg.num_experiments)
     per_experiment = [_draw(rng, cfg.targets_per_experiment) for _ in range(num_experiments)]
@@ -342,13 +398,20 @@ def _sample_once(
     targets: list[Target] = []
     experiment_of = [e for e, n in enumerate(per_experiment) for _ in range(n)]
     for i, comp in enumerate(comps):
+        volume = _draw_if_range(rng, cfg.droplet_volume)
+        if volume > chip.max_mix_volume:
+            raise ValueError(
+                f"generator '{cfg.name}': drew droplet_volume {volume} > max_mix_volume "
+                f"{chip.max_mix_volume} of chip '{chip.name}'; no droplet could be delivered. "
+                f"Narrow droplet_volume or raise max_mix_volume."
+            )
         targets.append(
             Target(
                 id=i,
                 experiment_id=experiment_of[i],
                 composition=comp,
                 tolerance=cfg.tolerance,
-                droplet_volume=cfg.droplet_volume,
+                droplet_volume=volume,
                 demand=_draw(rng, cfg.demand),
             )
         )
