@@ -36,6 +36,7 @@ from meda.generators.synthetic import (
     witness_plan,
 )
 from meda.solvers.baselines.naive import naive_plan
+from meda.solvers.baselines.tree import tree_plan
 from tests.core.helpers import SB, chip, default_weights
 from tests.generators.helpers import STAGE_NAMES, env_sizes, load_stage, stage_dict, stage_files
 
@@ -50,8 +51,10 @@ def witness_of(instance: Instance) -> tuple[object, ...]:
     recipes = instance.metadata.get("recipes")
     if recipes is not None:
         return witness_plan(instance, [recipe_from_dict(r) for r in recipes])
-    plan = naive_plan(instance)
-    assert plan is not None, f"no naive plan for {instance.instance_id}"
+    plan = naive_plan(instance) if instance.metadata.get("witness_source") != "tree" else None
+    if plan is None:
+        plan = tree_plan(instance)
+    assert plan is not None, f"no witness for {instance.instance_id}"
     return plan
 
 
@@ -488,3 +491,27 @@ def test_curriculum_never_draws_a_held_out_problem() -> None:
     leaked = [unguarded(rng) for _ in range(200)]
     with pytest.raises(ValueError, match="overlap"):
         check_no_overlap(leaked, frozen)
+
+
+def test_mixtures_can_be_drawn_at_a_chosen_accuracy() -> None:
+    """With the split tree as witness, a mixture stage can sample ratios on the simplex at its
+    accuracy level (not only by random walk), and every draw has a truncation penalty."""
+    from meda.solvers.fallback import ConstructiveCostToFinish
+
+    cfg = GeneratorConfig.from_dict(
+        stage_dict(
+            "mixture_multi",
+            composition_sampler="dirichlet_snapped",
+            accuracy_denominator=32,
+            max_mix_volume=[2, 8],
+        )
+    )
+    fallback = ConstructiveCostToFinish(WEIGHTS)
+    drawn = sample_instances(cfg, chip("meda_m8"), np.random.default_rng(2), 20, WEIGHTS)
+    assert {i.metadata["witness_source"] for i in drawn} <= {"naive", "tree"}
+    assert any(i.metadata["witness_source"] == "tree" for i in drawn)
+    for inst in drawn:
+        assert all(32 % t.composition.den == 0 for t in inst.targets)
+        final, _, _ = replay(inst, witness_of(inst))
+        assert final.is_success
+        assert fallback.supports(inst)

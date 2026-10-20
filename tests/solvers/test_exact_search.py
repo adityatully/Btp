@@ -22,8 +22,13 @@ from meda.solvers.base import SolveBudget
 from meda.solvers.baselines.bitscan import BitScanSolver, applies_to, is_dyadic
 from meda.solvers.baselines.facda import FacDASolver
 from meda.solvers.baselines.naive import NaiveSolver, naive_plan
+from meda.solvers.baselines.tree import tree_plan
 from meda.solvers.exact_search import ExactSearch, fluid_bound_heuristic, zero_heuristic
-from meda.solvers.fallback import NaiveCostToFinish, UnsupportedFallbackError
+from meda.solvers.fallback import (
+    ConstructiveCostToFinish,
+    UnsupportedFallbackError,
+    cheapest_construction,
+)
 from tests.core.helpers import chip, default_weights, dilution, mixture
 
 WEIGHTS = default_weights()
@@ -234,14 +239,14 @@ def test_search_is_deterministic() -> None:
 @pytest.mark.parametrize("instance", TINY.instances, ids=lambda i: i.instance_id)
 def test_cost_to_finish_is_an_upper_bound_at_the_start(instance: Instance) -> None:
     """From the initial state it must be at least the optimum, or truncating would look cheap."""
-    fallback = NaiveCostToFinish(WEIGHTS)
+    fallback = ConstructiveCostToFinish(WEIGHTS)
     estimate = fallback(PrepState.initial(instance), instance)
     assert estimate >= TINY.reference[instance.instance_id].cost
 
 
 def test_cost_to_finish_charges_what_is_on_chip_and_drops_to_zero_when_done() -> None:
     inst = dilution([(1, 4)], chip_limits=chip("dmfb_m2"))
-    fallback = NaiveCostToFinish(WEIGHTS)
+    fallback = ConstructiveCostToFinish(WEIGHTS)
     start = PrepState.initial(inst)
     assert fallback(start, inst) == Rational.of(15)  # the naive plan's cost
     mid, _, _ = replay(inst, [Mix(S, 1, B, 1)])
@@ -256,9 +261,12 @@ def test_cost_to_finish_charges_what_is_on_chip_and_drops_to_zero_when_done() ->
 
 def test_cost_to_finish_scales_with_remaining_demand_and_caches() -> None:
     inst = dilution([(1, 4)], chip_limits=chip("dmfb_m2"), demand=3, step_limit=60)
-    fallback = NaiveCostToFinish(WEIGHTS)
+    fallback = ConstructiveCostToFinish(WEIGHTS)
     full = fallback.remaining_cost((3,), inst)
-    assert fallback.remaining_cost((1,), inst) * 3 == full
+    one = fallback.remaining_cost((1,), inst)
+    # The split tree serves two deliveries per droplet at M = 2, so three cost less than three
+    # separate builds; never more.
+    assert full < one * 3
     assert fallback.remaining_cost((0,), inst) == Rational.of(0)
     assert len(fallback._cache) == 2  # (3,) and (1,); the empty demand short-circuits
     assert fallback.remaining_cost((3,), inst) == full  # served from the cache
@@ -266,12 +274,38 @@ def test_cost_to_finish_scales_with_remaining_demand_and_caches() -> None:
 
 def test_cost_to_finish_raises_for_an_unsupported_mixture() -> None:
     """Rule 9: name the instance and the limit instead of inventing a penalty."""
-    hard = mixture([(5, 3, 2)])  # denominator 10 > M for a 3-fluid chain
-    fallback = NaiveCostToFinish(WEIGHTS)
+    hard = mixture([(5, 4, 2)])  # denominator 11: a prime above M = 8, so unreachable
+    fallback = ConstructiveCostToFinish(WEIGHTS)
     assert not fallback.supports(hard)
     with pytest.raises(UnsupportedFallbackError, match=r"(?s)test-mixture.*cost-to-finish"):
         fallback(PrepState.initial(hard), hard)
     assert fallback.supports(dilution([(1, 4)], chip_limits=chip("dmfb_m2")))
+
+
+def test_cost_to_finish_prices_mixtures_naive_cannot_build() -> None:
+    """The split tree gives every reachable mixture a penalty (10.3)."""
+    inst = mixture([(3, 5, 8), (1, 1, 6)], demand=2)  # 16ths at M = 8: no naive plan
+    assert naive_plan(inst) is None
+    fallback = ConstructiveCostToFinish(WEIGHTS)
+    assert fallback.supports(inst)
+    full = fallback(PrepState.initial(inst), inst)
+    best = cheapest_construction(inst, WEIGHTS)
+    assert best is not None and full == best[1]
+
+
+def test_cost_to_finish_takes_the_cheaper_construction_per_target() -> None:
+    inst = dilution([(1, 4), (3, 8)], chip_limits=chip("dmfb_m2"), demand=3, step_limit=200)
+    fallback = ConstructiveCostToFinish(WEIGHTS)
+    for target in inst.targets:
+        single = replace(inst, targets=(replace(target, id=0),))
+        costs = [
+            WEIGHTS.scalar(replay(single, plan)[1], inst.fluids)
+            for plan in (naive_plan(single), tree_plan(single))
+            if plan is not None
+        ]
+        assert fallback.remaining_cost(
+            tuple(target.demand if t.id == target.id else 0 for t in inst.targets), inst
+        ) == min(costs)
 
 
 # --------------------------------------------------------------------------- bitscan, facda

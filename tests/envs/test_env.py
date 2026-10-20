@@ -21,7 +21,7 @@ from meda.core.rules import IllegalActionError, TerminalStatus, apply, legal_act
 from meda.envs.encoding import OP_MIX, TYPE_DROPLET, TYPE_FLUID, TYPE_TARGET
 from meda.envs.sample_prep_env import FixedInstances, SamplePrepEnv
 from meda.envs.wrappers import CurriculumWrapper, EpisodeStats, PreferenceWrapper
-from meda.solvers.fallback import NaiveCostToFinish
+from meda.solvers.fallback import ConstructiveCostToFinish
 from tests.core.helpers import chip, default_weights, dilution, mixture
 from tests.envs.helpers import AnyIndexToLegal, env_config, make_env, make_tiny_env, tiny_grid
 
@@ -287,13 +287,13 @@ def test_encoding_is_the_same_at_two_padding_sizes() -> None:
 
 
 def test_reset_refuses_an_instance_the_fallback_cannot_price() -> None:
-    """A mixture naive cannot build has no truncation penalty: refused at reset, not mid-run."""
-    unpriceable = mixture([(3, 7, 22)])  # denominator 32 > M = 8: naive cannot build it
+    """An instance with no truncation penalty is refused at reset, not mid-run."""
+    unpriceable = mixture([(5, 4, 2)])  # denominator 11, a prime above M = 8: unreachable
     env = SamplePrepEnv(
         env_config(),
         FixedInstances([unpriceable]),
         default_weights(),
-        NaiveCostToFinish(default_weights()),
+        ConstructiveCostToFinish(default_weights()),
     )
     with pytest.raises(ValueError, match=r"test-mixture.*cannot price"):
         env.reset(seed=0)

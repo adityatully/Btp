@@ -20,7 +20,7 @@ from meda.core.dag import validate
 from meda.core.problem import Instance
 from meda.core.state import Droplet, PrepState
 from meda.generators.benchmark_io import BENCHMARKS_DIR, BenchmarkSet
-from meda.solvers.fallback import NaiveCostToFinish
+from meda.solvers.fallback import ConstructiveCostToFinish
 from tests.core.helpers import chip, default_weights, dilution, load_yaml
 from tests.envs.helpers import env_config, make_env
 
@@ -46,7 +46,7 @@ def real_env(instances: list[Instance], **overrides: object) -> object:
         env_config(**overrides),
         FixedInstances(instances),
         WEIGHTS,
-        NaiveCostToFinish(WEIGHTS),
+        ConstructiveCostToFinish(WEIGHTS),
     )
 
 
@@ -193,7 +193,7 @@ def test_truncation_is_treated_as_terminal() -> None:
     assert stats.successes == 0
     assert stats.truncations == stats.episodes
     # Every learned value is at least as negative as the penalty it was charged.
-    penalty = float(NaiveCostToFinish(WEIGHTS)(PrepState.initial(inst), inst))
+    penalty = float(ConstructiveCostToFinish(WEIGHTS)(PrepState.initial(inst), inst))
     assert min(agent.q.values()) <= -penalty
 
 

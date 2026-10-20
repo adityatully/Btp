@@ -1,6 +1,13 @@
 # MEDA Design Automation — Codebase Specification
 
-Version 0.11 · 2026-10-20
+Version 0.12 · 2026-10-20
+
+Changes in 0.12 (critical path for mixtures): the split-tree construction (10.4) builds every
+reachable target over any number of fluids and any M; the truncation penalty takes the cheaper
+of naive and tree per target (`ConstructiveCostToFinish`, renamed from `NaiveCostToFinish`;
+10.3); the generator witness falls back to the tree, so mixtures can be drawn at a chosen
+accuracy, and `witness_source` names the construction (8.1); exact search seeds its
+branch and bound with the cheaper construction (10.2); `tree` is an `evaluate_cli` producer.
 
 Changes in 0.11 (M8, mechanical part of the 0.10 redesign): observation v2 and network v2 are
 built and v1 is removed (9.2, 9.3, 11.4). The env config keys are now `F_pad`, `T_pad`,
@@ -691,8 +698,9 @@ are an error. Fields:
 **Every sampled instance is solvable by construction.** The sampler builds a *feasibility
 witness* — a legal plan meeting all demand — before returning, and raises an error naming the
 instance if it cannot. The witness comes from the walk's own recipes (`reachable_walk`, stored
-in `metadata["recipes"]` so it stays re-derivable from the frozen instance) or from the naive
-construction (10.4). `metadata` records the generator name and version, the config hash, the
+in `metadata["recipes"]` so it stays re-derivable from the frozen instance), else from the
+naive construction, else from the split tree (10.4); `metadata["witness_source"]` names which.
+Naive goes first, so every instance it already witnessed is unchanged. `metadata` records the generator name and version, the config hash, the
 composition sampler, `witness_actions`, `witness_source` and, when `weights` is given,
 `known_upper_bound` (the witness cost as an exact `"a/b"` string).
 
@@ -1082,7 +1090,8 @@ from new draws — so remaining cost is at least the weighted shortfall. Mix and
 ignored, keeping it admissible. Re-opening is allowed (a pop whose `g` is stale is skipped), so
 optimality holds even if the heuristic is not consistent.
 
-**Branch and bound.** The search starts from an incumbent plan (the naive baseline) and prunes
+**Branch and bound.** The search starts from an incumbent plan (the cheaper of the naive and
+split-tree constructions, 10.3) and prunes
 any node whose `g + h` already reaches the incumbent cost; if nothing cheaper is found, the
 incumbent is proved optimal. Without it the search does not finish: cheap buffer dilutions
 wander into fine compositions no target needs.
@@ -1118,19 +1127,25 @@ unreachable under `dmfb_m2` needs exhaustion, which only happens on a tightly bo
 — at the chip's default 10 droplets and 30 steps the same search can only report `timeout`.
 
 ### 10.3 Fallback cost-to-finish (`fallback.py`)
-`NaiveCostToFinish(weights)(state, instance)`: waste everything on chip, then build each
-remaining droplet from the reservoirs with the naive construction. Because it is the cost of a
-completion that really exists, it can never be below the optimal remaining cost, which is what
-the truncation penalty needs — otherwise an unfinished plan could look cheaper than a finished
-one. It is hypothetical, so it is computed on a relaxed instance and need not fit the step limit
-that was just exceeded. The naive part depends only on the remaining demand, so it is cached per
-(instance, remaining demand); the object is picklable for `AsyncVectorEnv`.
+`ConstructiveCostToFinish(weights)(state, instance)`: waste everything on chip, then build each
+remaining target's droplets from the reservoirs, per target with the cheaper of the naive and
+split-tree constructions (10.4; `cheapest_construction`). Because it is the cost of a completion
+that really exists, it can never be below the optimal remaining cost, which is what the
+truncation penalty needs — otherwise an unfinished plan could look cheaper than a finished one.
+Taking the cheaper construction keeps it as close to the true cost of finishing as these
+constructions allow. It is hypothetical, so it is computed on a relaxed instance and need not fit
+the step limit that was just exceeded; the chip, storage included, is the instance's own. Both
+constructions build each target on its own from an empty chip, so the remaining cost is a sum
+over targets, cached per (instance, target, remaining demand); the object is picklable for
+`AsyncVectorEnv`.
 
-**Scope.** The naive construction must be able to build the remaining targets, which covers
-every dilution stage. A mixture whose denominator exceeds the mix limit raises
-`UnsupportedFallbackError` naming the instance rather than inventing a number (rule 9); use
-`supports(instance)` to check before training. Mixture stages therefore need a general baseline
-first (reserved for M9). The same estimate also serves as tabular Q's value prior (11.3).
+**Scope.** Every reachable target: one whose reduced denominator has no prime factor above M
+(a mix of k + l <= M units can introduce no larger prime), given storage for the tree's depth.
+Outside that it raises `UnsupportedFallbackError` naming the instance and the target rather than
+inventing a number (rule 9); `supports(instance)` checks before training, and the env refuses
+such an instance at reset (9.1). Measured: storage capacity 3 suffices for every 3-fluid target
+at denominator 64 on M = 8; at capacity 2, 120 of those 2,079 have no plan. The same estimate
+serves as tabular Q's value prior (11.3).
 
 ### 10.4 Baselines (`baselines/`)
 - `naive.py` (built in M4, which needs it for acceptance): each target droplet made
@@ -1146,6 +1161,19 @@ first (reserved for M9). The same estimate also serves as tabular Q's value prio
   Outside that scope (a mixture whose denominator exceeds M, or a prime factor above M)
   `naive_plan` returns `None`: **not found**, never a claim of infeasibility. `NaiveSolver`
   reports status `infeasible` for it, which means only that this construction found nothing.
+- `tree.py` (0.12): the **split tree**, for any number of fluids. Factor the target's
+  denominator D into mix sizes within `[min_mix_volume, M]`; at the top level with factor e the
+  target is an equal-parts blend of e pieces of denominator D / e (consecutive chunks of the
+  numerator vector, fluid by fluid, so most are pure); identical pieces merge, each distinct
+  piece is a reservoir or is built recursively, and the pieces are folded into a running droplet
+  one at a time (every mix at most e times a volume scale s, <= M; about two droplets per level
+  on chip). One droplet serves as many deliveries of its target as its top mix allows. It
+  builds **every reachable target** (tested exhaustively on 3- and 4-fluid targets at several
+  denominators and M), shares nothing between targets, and returns `None` (not found, never
+  "infeasible") when storage is too tight or `min_mix_volume` > 2 blocks a factor. Example:
+  3/16 S + 5/16 R + 1/2 B at M = 8 is `Mix(S 3, R 5)` then 1 unit of that + 1 of B; naive
+  cannot build it (it builds 35 of the 2,079 three-fluid targets at denominator 64 on M = 8).
+  It is never cheaper than a proved optimum (tested on `tiny_exact_v1` and small mixtures).
 - `bitscan.py`: classic 1:1 binary dilution for two-fluid targets (DMFB literature). Valid only
   under a 1:1 chip, two fluids, and a dyadic target; `applies_to(instance)` gives the reason when
   it does not apply, and the solver then reports `infeasible`. Under M = 2 the naive mixed-radix
@@ -1574,11 +1602,8 @@ and network v2 (v1 removed):
 
 Remaining, in order:
 1. (b) after the stage design (8.3), whose validation sets replace or join `val_stage1_v2`.
-2. Before any stage trains on mixtures: a general mixture cost-to-finish (10.3). Naive cannot
-   build most mixtures, so the truncation penalty is undefined there (the env refuses such an
-   instance at reset, 9.1); this moves from M9 onto the critical path of the goal. Measured:
-   naive builds 21 of the 1,953 three-fluid targets at denominator 64 on M = 8 (3 on M = 4),
-   against every dilution n/64 for M = 2..10.
+2. Done in 0.12: a general mixture cost-to-finish and witness, the split tree (10.3, 10.4).
+   Every reachable target now has a truncation penalty and a feasibility witness.
 
 **M9 — Reserved.** MCTS / AlphaZero-style search; literature baselines with reproduction tests;
 preference-conditioned training; noise model; pipeline interfaces to scheduler/router.
