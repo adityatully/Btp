@@ -6,6 +6,8 @@ instance is solvable, and training draws can be kept off a frozen set.
 
 from __future__ import annotations
 
+import math
+
 import numpy as np
 import pytest
 
@@ -22,9 +24,11 @@ from meda.generators.sampler import (
     GeneratorConfig,
     dilution_grid,
     make_fluids,
+    mix_depth_bound,
     sample_instance,
     sample_instances,
     snap_to_denominator,
+    step_limit_base,
 )
 from meda.generators.synthetic import (
     Blend,
@@ -515,3 +519,60 @@ def test_mixtures_can_be_drawn_at_a_chosen_accuracy() -> None:
         final, _, _ = replay(inst, witness_of(inst))
         assert final.is_success
         assert fallback.supports(inst)
+
+
+# --------------------------------------------------------------------------- step limit
+
+
+def test_mix_depth_bound() -> None:
+    assert [mix_depth_bound(d, m) for d, m in ((1, 8), (32, 2), (64, 8), (65, 8), (16, 3))] == [
+        0,
+        5,
+        2,
+        3,
+        3,
+    ]
+
+
+def test_depth_rule_sizes_the_step_limit_from_the_problem() -> None:
+    """Default rule: ceil(multiple x sum over deliveries of (mix depth + 1)), never below the
+    witness, and recorded in the metadata."""
+    data = stage_dict("dilution_multi", max_mix_volume=[2, 8])
+    data.pop("step_limit_rule")
+    data.pop("step_limit_multiple")
+    cfg = GeneratorConfig.from_dict(data)
+    assert cfg.step_limit_rule == "depth" and cfg.step_limit_multiple == (4.0, 4.0)
+    for inst in sample_instances(cfg, chip("meda_m8"), np.random.default_rng(1), 30, WEIGHTS):
+        m = inst.chip.max_mix_volume
+        base = sum(t.demand * (mix_depth_bound(t.composition.den, m) + 1) for t in inst.targets)
+        meta = inst.metadata
+        assert meta["step_limit_base"] == base == step_limit_base(inst)
+        assert inst.step_limit == max(math.ceil(4 * base), meta["witness_actions"])
+        assert meta["step_limit_raised_to_witness"] == (
+            math.ceil(4 * base) < meta["witness_actions"]
+        )
+
+
+def test_step_limit_multiple_may_be_a_range() -> None:
+    cfg = GeneratorConfig.from_dict(
+        {**stage_dict("dilution_multi"), "step_limit_rule": "depth", "step_limit_multiple": [3, 5]}
+    )
+    drawn = sample_instances(cfg, chip("meda_m8"), np.random.default_rng(3), 25, WEIGHTS)
+    multiples = [i.metadata["step_limit_multiple"] for i in drawn]
+    assert all(3 <= x <= 5 for x in multiples) and len(set(multiples)) > 1
+    again = sample_instances(cfg, chip("meda_m8"), np.random.default_rng(3), 25, WEIGHTS)
+    assert [i.step_limit for i in again] == [i.step_limit for i in drawn]
+
+
+@pytest.mark.parametrize(
+    ("key", "value"), [("step_limit_rule", "fixed"), ("step_limit_multiple", [3, 1])]
+)
+def test_bad_step_limit_settings_raise(key: str, value: object) -> None:
+    with pytest.raises(ValueError, match="step_limit"):
+        GeneratorConfig.from_dict({**stage_dict("dilution_multi"), key: value})
+
+
+@stages
+def test_existing_stages_keep_the_witness_rule(name: str) -> None:
+    cfg, _ = load_stage(name)
+    assert cfg.step_limit_rule == "witness" and cfg.step_limit_multiple == (2.0, 2.0)

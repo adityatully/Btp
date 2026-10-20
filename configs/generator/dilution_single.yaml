@@ -9,5 +9,6 @@ support_size: 2
 demand: [1, 1]
 droplet_volume: 1
 tolerance: 0
-step_limit: null                # sized from the witness plan
+step_limit: null                # sized by step_limit_rule
+step_limit_rule: witness         # keeps the version-1 sizing, so frozen sets rebuild identically
 step_limit_multiple: 2.0

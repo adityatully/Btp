@@ -21,6 +21,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import math
 from collections.abc import Container, Mapping, Sequence
 from dataclasses import dataclass, replace
 from typing import Any
@@ -47,6 +48,13 @@ from meda.solvers.baselines.tree import tree_plan
 
 COMPOSITION_SAMPLERS = ("dirichlet_snapped", "reachable_walk", "fixed_list")
 GENERATOR_VERSION = 1
+# How an instance's step limit is sized when `step_limit` is null (SPEC 8.1):
+# - "depth": multiple x a bound from the problem alone, sum over deliveries of (the fewest mix
+#   levels any plan needs for that target + 1 output), so the budget does not depend on how
+#   good a construction is;
+# - "witness": multiple x the witness plan's length (the rule of generator version 1).
+STEP_LIMIT_RULES = ("depth", "witness")
+DEFAULT_STEP_LIMIT_MULTIPLE = {"depth": 4.0, "witness": 2.0}
 
 
 @dataclass(frozen=True, slots=True)
@@ -65,13 +73,14 @@ class GeneratorConfig:
     demand: tuple[int, int]
     droplet_volume: tuple[int, int]  # drawn per target
     tolerance: Rational
-    step_limit: int | None  # None: size it from the witness
-    step_limit_multiple: float
+    step_limit: int | None  # None: size it by `step_limit_rule`
+    step_limit_multiple: tuple[float, float]  # drawn per instance when a real range
     walk_mixes: tuple[int, int]
     fixed_compositions: tuple[tuple[int, ...], ...]
     # Chip inputs drawn per instance (SPEC 1.3); None keeps the chip config's value.
     max_mix_volume: tuple[int, int] | None = None
     storage_capacity: tuple[int, int] | None = None
+    step_limit_rule: str = "depth"
 
     @property
     def min_fluids(self) -> int:
@@ -121,6 +130,11 @@ class GeneratorConfig:
             fail(f"max_mix_volume must be >= 2 (k, l >= 1), got {self.max_mix_volume}")
         if self.tolerance < 0:
             fail(f"tolerance must be >= 0, got {self.tolerance}")
+        if self.step_limit_rule not in STEP_LIMIT_RULES:
+            fail(f"step_limit_rule must be one of {STEP_LIMIT_RULES}")
+        low, high = self.step_limit_multiple
+        if low <= 0 or high < low:
+            fail(f"step_limit_multiple must be > 0 (or an increasing range), got {(low, high)}")
         if self.composition_sampler == "fixed_list" and not self.fixed_compositions:
             fail("fixed_list needs a non-empty fixed_compositions list")
 
@@ -139,6 +153,7 @@ class GeneratorConfig:
             "tolerance",
             "step_limit",
             "step_limit_multiple",
+            "step_limit_rule",
             "walk_mixes",
             "fixed_compositions",
             "max_mix_volume",
@@ -149,6 +164,11 @@ class GeneratorConfig:
             raise ValueError(f"generator config has unknown keys {sorted(unknown)}")
         counts = data["num_fluids"]
         step_limit = data.get("step_limit")
+        rule = str(data.get("step_limit_rule", "depth"))
+        if rule not in DEFAULT_STEP_LIMIT_MULTIPLE:
+            raise ValueError(
+                f"generator '{data['name']}': step_limit_rule must be one of {STEP_LIMIT_RULES}"
+            )
         return GeneratorConfig(
             name=str(data["name"]),
             samples=_as_range(counts.get("samples", 1)),
@@ -163,7 +183,10 @@ class GeneratorConfig:
             droplet_volume=_as_range(data["droplet_volume"]),
             tolerance=Rational.parse(data["tolerance"]),
             step_limit=None if step_limit is None else int(step_limit),
-            step_limit_multiple=float(data.get("step_limit_multiple", 2.0)),
+            step_limit_rule=rule,
+            step_limit_multiple=_float_range(
+                data.get("step_limit_multiple", DEFAULT_STEP_LIMIT_MULTIPLE[rule])
+            ),
             walk_mixes=_as_range(data.get("walk_mixes", [1, 3])),
             fixed_compositions=tuple(
                 tuple(int(x) for x in parts) for parts in data.get("fixed_compositions", ())
@@ -187,7 +210,7 @@ class GeneratorConfig:
             "droplet_volume": _hashable_span(self.droplet_volume),
             "tolerance": str(self.tolerance),
             "step_limit": self.step_limit,
-            "step_limit_multiple": self.step_limit_multiple,
+            "step_limit_multiple": _hashable_float_span(self.step_limit_multiple),
             "walk_mixes": list(self.walk_mixes),
             "fixed": [list(c) for c in self.fixed_compositions],
         }
@@ -199,6 +222,8 @@ class GeneratorConfig:
         ):
             if span is not None:
                 payload[key] = list(span)
+        if self.step_limit_rule != "witness":  # the version-1 rule is the unwritten one
+            payload["step_limit_rule"] = self.step_limit_rule
         return hashlib.sha256(json.dumps(payload, sort_keys=True).encode()).hexdigest()[:16]
 
 
@@ -209,6 +234,35 @@ def _as_range(value: Any) -> tuple[int, int]:
             raise ValueError(f"expected a [low, high] range, got {value}")
         return int(value[0]), int(value[1])
     return int(value), int(value)
+
+
+def _float_range(value: Any) -> tuple[float, float]:
+    """Accepts `2.5` (fixed) or `[low, high]`."""
+    if isinstance(value, Sequence) and not isinstance(value, str):
+        if len(value) != 2:
+            raise ValueError(f"expected a [low, high] range, got {value}")
+        return float(value[0]), float(value[1])
+    return float(value), float(value)
+
+
+def _hashable_float_span(span: tuple[float, float]) -> float | list[float]:
+    return span[0] if span[0] == span[1] else list(span)
+
+
+def mix_depth_bound(den: int, m: int) -> int:
+    """The fewest mix levels any plan needs to reach denominator `den`: a mix of at most `m`
+    units multiplies the denominator by at most m, so depth d reaches at most m**d."""
+    depth, reach = 0, 1
+    while reach < den:
+        reach *= m
+        depth += 1
+    return depth
+
+
+def step_limit_base(instance: Instance) -> int:
+    """The "depth" rule's base: per delivery, its target's mix-depth bound plus one output."""
+    m = instance.chip.max_mix_volume
+    return sum(t.demand * (mix_depth_bound(t.composition.den, m) + 1) for t in instance.targets)
 
 
 def _optional_range(value: Any) -> tuple[int, int] | None:
@@ -419,7 +473,25 @@ def _sample_once(
     name = instance_id or f"{cfg.name}-{cfg.config_hash()}-{_instance_suffix(targets, chip)}"
     probe = Instance(name, fluids, tuple(targets), chip, 10_000)
     actions, witness_source = _witness(probe, recipes)
-    step_limit = cfg.step_limit or max(len(actions), round(cfg.step_limit_multiple * len(actions)))
+    sizing: dict[str, Any] = {}
+    if cfg.step_limit is not None:
+        step_limit = cfg.step_limit
+    else:
+        low, high = cfg.step_limit_multiple
+        multiple = low if low == high else float(rng.uniform(low, high))
+        if cfg.step_limit_rule == "witness":
+            step_limit = max(len(actions), round(multiple * len(actions)))
+        else:
+            base = step_limit_base(probe)
+            sized = math.ceil(multiple * base)
+            step_limit = max(sized, len(actions))
+            sizing = {
+                "step_limit_rule": "depth",
+                "step_limit_base": base,
+                "step_limit_multiple": multiple,
+                # Never silent (rule 9): a budget below the known plan is raised to fit it.
+                "step_limit_raised_to_witness": sized < len(actions),
+            }
     if step_limit < len(actions):
         raise ValueError(
             f"instance '{name}': step_limit {step_limit} is below the witness plan length "
@@ -432,6 +504,7 @@ def _sample_once(
         "composition_sampler": cfg.composition_sampler,
         "witness_actions": len(actions),
         "witness_source": witness_source,
+        **sizing,
     }
     if recipes is not None:
         # Store the walk so the witness stays re-derivable from the instance alone: the naive

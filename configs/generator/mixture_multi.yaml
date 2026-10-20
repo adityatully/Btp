@@ -9,6 +9,7 @@ support_size: 3
 demand: [1, 3]
 droplet_volume: 1
 tolerance: 0
-step_limit: null                # sized from the witness plan
+step_limit: null                # sized by step_limit_rule
+step_limit_rule: witness         # keeps the version-1 sizing, so frozen sets rebuild identically
 step_limit_multiple: 2.0
 walk_mixes: [2, 4]               # a support of 3 fluids needs at least 2 mixes

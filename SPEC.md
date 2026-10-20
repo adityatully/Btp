@@ -1,6 +1,10 @@
 # MEDA Design Automation — Codebase Specification
 
-Version 0.12 · 2026-10-20
+Version 0.13 · 2026-10-20
+
+Changes in 0.13: the step limit is sized by default from the problem alone (`depth` rule,
+8.1): 4 × the sum over deliveries of (mix-depth bound + 1), optionally with a multiple drawn
+per instance; the five existing stages keep the version-1 `witness` rule explicitly.
 
 Changes in 0.12 (critical path for mixtures): the split-tree construction (10.4) builds every
 reachable target over any number of fluids and any M; the truncation penalty takes the cheaper
@@ -692,8 +696,22 @@ are an error. Fields:
   every config that does not use them samples and hashes exactly as before. An accuracy
   denominator must suit every M in the range (8.3); a draw the naive witness cannot build raises
   naming the instance.
-- `step_limit`: an absolute value, or `null` to size it as `step_limit_multiple` times the
-  witness plan length. A step limit below the witness length is an error.
+- `step_limit`: an absolute value, or `null` to size it by `step_limit_rule`:
+  - `depth` (the default): `ceil(step_limit_multiple × base)`, where base is, summed over every
+    delivery, its target's **mix-depth bound** plus one output. The bound is the fewest mix
+    levels any plan needs, `ceil(log_M D)` for reduced denominator D (a mix of at most M units
+    multiplies a denominator by at most M), so the budget comes from the problem alone and not
+    from how good a construction is. Default multiple 4: measured, the witness is at most 2.7 ×
+    base (median 1.6–1.9) across the five stages and ranged and mixture settings, so 4 gives
+    about the old budget. A limit below the witness length is raised to it and flagged
+    (`step_limit_raised_to_witness`); `step_limit_base` and the multiple used are recorded too.
+  - `witness`: `step_limit_multiple` (default 2) times the witness plan length, the rule of
+    generator version 1. The five existing stages set it explicitly, so their draws, hashes and
+    frozen sets are unchanged.
+
+  `step_limit_multiple` may be a `[low, high]` range, drawn per instance (a randomised budget,
+  so the agent sees tight and loose budgets; it already observes steps left). A fixed value
+  draws no randomness. A step limit below the witness length is an error.
 
 **Every sampled instance is solvable by construction.** The sampler builds a *feasibility
 witness* — a legal plan meeting all demand — before returning, and raises an error naming the
