@@ -117,7 +117,7 @@ class PPOTrainer:
             raise ValueError(f"PPO needs AutoresetMode.SAME_STEP (SPEC 9.1), got {mode}")
         self.cfg, self.sizes, self.envs = cfg, sizes, envs
         self.device = torch.device(device)
-        self.net = SetEncoderNet(sizes, cfg.net).to(self.device)
+        self.net = SetEncoderNet(cfg.net).to(self.device)
         self.optimizer = torch.optim.Adam(self.net.parameters(), lr=cfg.lr, eps=1e-5)
         self.rng = np.random.default_rng(seed)
         self.seed = seed

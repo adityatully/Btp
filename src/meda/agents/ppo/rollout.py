@@ -7,9 +7,9 @@ rollout, for episodes the rollout cut off mid-way: their remaining cost is estim
 value of the next observation. The vector env autoresets in the same step (SPEC 9.1), so
 `dones[t]` marks exactly the steps after which the next observation belongs to a new episode.
 
-**Memory.** Observations are stored per step, trimmed to that step's longest real candidate
-list, and padded only to the widest step of the rollout when the batch is built. A rollout at
-`L_max = 2048` would otherwise hold gigabytes of padding.
+**Memory.** Observations are stored per step, every token axis trimmed to that step's real
+widths, and padded only to the widest step of the rollout when the batch is built. A rollout at
+`L_pad = 2048` would otherwise hold gigabytes of padding.
 """
 
 from __future__ import annotations
@@ -20,7 +20,7 @@ from typing import Any
 import numpy as np
 import numpy.typing as npt
 
-from meda.agents.ppo.policy import CANDIDATE_KEYS, trim_candidates
+from meda.agents.ppo.policy import KEY_AXES, PAD_FILL, real_widths, trim_obs
 
 FloatArray = npt.NDArray[np.float64]
 
@@ -74,27 +74,28 @@ class RolloutBuffer:
         t = len(self.obs)
         if t >= self.num_steps:
             raise IndexError(f"rollout buffer is full ({self.num_steps} steps)")
-        self.obs.append(trim_candidates(obs))
+        self.obs.append(trim_obs(obs))
         self.actions[t], self.logprobs[t], self.values[t] = actions, logprobs, values
         self.rewards[t], self.dones[t] = rewards, dones
 
     def flat_obs(self) -> dict[str, npt.NDArray[Any]]:
-        """All observations as [T * N, ...], candidates padded to the widest step."""
+        """All observations as [T * N, ...], each token axis padded to the widest step."""
         if len(self.obs) != self.num_steps:
             raise ValueError(f"rollout has {len(self.obs)} of {self.num_steps} steps")
-        width = max(o["action_mask"].shape[1] for o in self.obs)
+        steps = [real_widths(o) for o in self.obs]
+        widths = {axis: max(w[axis] for w in steps) for axis in steps[0]}
         out: dict[str, npt.NDArray[Any]] = {}
         for key in self.obs[0]:
-            parts = [o[key] for o in self.obs]
-            if key in CANDIDATE_KEYS:
-                fill = -1 if key == "cand_index" else 0
-                parts = [_pad_width(p, width, fill) for p in parts]
+            fill = PAD_FILL.get(key, 0)
+            parts = [_pad_to(o[key], key, widths, fill) for o in self.obs]
             out[key] = np.concatenate(parts, axis=0)
         return out
 
 
-def _pad_width(a: npt.NDArray[Any], width: int, fill: int) -> npt.NDArray[Any]:
-    if a.shape[1] == width:
+def _pad_to(a: npt.NDArray[Any], key: str, widths: dict[str, int], fill: int) -> npt.NDArray[Any]:
+    pad = [(0, 0)] * a.ndim
+    for dim, axis in KEY_AXES[key]:
+        pad[dim] = (0, widths[axis] - a.shape[dim])
+    if all(p == (0, 0) for p in pad):
         return a
-    pad = [(0, 0), (0, width - a.shape[1])] + [(0, 0)] * (a.ndim - 2)
     return np.pad(a, pad, constant_values=fill)
