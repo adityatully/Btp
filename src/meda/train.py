@@ -3,7 +3,7 @@
     uv run python -m meda.train agent=tabular_q
     uv run python -m meda.train agent=tabular_q train.benchmark=tiny_exact_v1 agent.episodes=40000
 
-    uv run python -m meda.train agent=ppo train.instances=[tiny-sharing-m2] env.L_max=128
+    uv run python -m meda.train agent=ppo train.instances=[tiny-sharing-m2] env.L_pad=128
 
 Both agents train on instances from a frozen benchmark set (`train.benchmark`,
 `train.instances`). Tabular Q (M6) needs that: it keys on exact states, so it only learns about

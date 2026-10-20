@@ -1,6 +1,6 @@
 """`SamplePrepEnv`: Gymnasium environment over the exact core (SPEC section 9).
 
-- Action: `Discrete(L_max)`, an index into `rules.legal_actions(state)` (canonical order).
+- Action: `Discrete(L_pad)`, an index into `rules.legal_actions(state)` (canonical order).
   Selecting an index that is not a legal candidate raises `IllegalActionError`.
 - Reward: `-float(step cost)` from exact rational costs (SPEC 6.4).
 - Episode end (SPEC 5.8):
@@ -70,15 +70,25 @@ class EnvConfig:
     @staticmethod
     def from_dict(data: Mapping[str, Any]) -> EnvConfig:
         """From `configs/env/sample_prep.yaml`."""
-        expected = {"F_max", "T_max", "storage_capacity_max", "L_max", "preference_conditioning"}
+        expected = {
+            "F_pad",
+            "T_pad",
+            "N_pad",
+            "L_pad",
+            "volume_ref",
+            "count_ref",
+            "preference_conditioning",
+        }
         if set(data) != expected:
             raise ValueError(f"env config keys must be {sorted(expected)}, got {sorted(data)}")
         return EnvConfig(
             EnvSizes(
-                f_max=int(data["F_max"]),
-                t_max=int(data["T_max"]),
-                storage_max=int(data["storage_capacity_max"]),
-                l_max=int(data["L_max"]),
+                f_pad=int(data["F_pad"]),
+                t_pad=int(data["T_pad"]),
+                n_pad=int(data["N_pad"]),
+                l_pad=int(data["L_pad"]),
+                volume_ref=int(data["volume_ref"]),
+                count_ref=int(data["count_ref"]),
             ),
             preference_conditioning=bool(data["preference_conditioning"]),
         )
@@ -117,7 +127,7 @@ class SamplePrepEnv(gym.Env[Obs, np.int64]):
         self.config = config
         self.encoder = Encoder(config.sizes)
         self.observation_space = cast("gym.spaces.Space[Obs]", self.encoder.observation_space())
-        self.action_space = gym.spaces.Discrete(config.sizes.l_max)
+        self.action_space = gym.spaces.Discrete(config.sizes.l_pad)
         self.cost_weights = cost_weights
         self.cost_to_finish = cost_to_finish
         self._source = instance_source
@@ -154,7 +164,7 @@ class SamplePrepEnv(gym.Env[Obs, np.int64]):
         self._source = source
 
     def action_masks(self) -> npt.NDArray[np.bool_]:
-        mask = np.zeros(self.config.sizes.l_max, dtype=bool)
+        mask = np.zeros(self.config.sizes.l_pad, dtype=bool)
         mask[: len(self._legal)] = True
         return mask
 
@@ -203,6 +213,18 @@ class SamplePrepEnv(gym.Env[Obs, np.int64]):
         """The current observation, as the last `reset` or `step` returned it."""
         return self.encoder.encode(self.state, self.instance, self._legal, self._born)
 
+    def _check_penalty_defined(self, instance: Instance) -> None:
+        """Refuse, at reset, an instance whose truncation penalty cannot be computed, rather
+        than failing mid-episode when the step limit is hit (rule 9). Applies to a
+        `cost_to_finish` that exposes `supports(instance)` (the naive fallback, SPEC 10.3)."""
+        supports = getattr(self.cost_to_finish, "supports", None)
+        if supports is not None and not supports(instance):
+            raise ValueError(
+                f"instance '{instance.instance_id}': cost_to_finish "
+                f"{type(self.cost_to_finish).__name__} cannot price an unfinished plan for it "
+                f"(a mixture the naive construction cannot build; SPEC 10.3)"
+            )
+
     # ------------------------------------------------------------------ gym API
 
     def reset(
@@ -211,6 +233,7 @@ class SamplePrepEnv(gym.Env[Obs, np.int64]):
         super().reset(seed=seed)
         instance = (options or {}).get("instance") or self._source(self.np_random)
         self.encoder.check_instance(instance)
+        self._check_penalty_defined(instance)
         self._instance = instance
         self._state = PrepState.initial(instance)
         self._legal = legal_actions(self._state, instance)

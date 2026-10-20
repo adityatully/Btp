@@ -71,7 +71,7 @@ def profile_single(cfg: dict[str, Any], instances: list[Instance], steps: int, s
     dt = time.perf_counter() - start
     print(
         f"single process: {steps / dt:,.0f} steps/s ({steps} steps, {episodes} episodes, "
-        f"max legal candidates {max_legal}, L_max {env.config.sizes.l_max})"
+        f"max legal candidates {max_legal}, L_pad {env.config.sizes.l_pad})"
     )
 
 

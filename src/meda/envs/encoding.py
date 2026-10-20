@@ -1,16 +1,22 @@
-"""State -> padded numpy observation, including per-candidate afterstate features (SPEC 9.2-9.3).
-# this file is used to encode the state into a padded numpy observation which will
-#  be used to train the policy network and is the input to the agent when making a decision
+"""State -> padded numpy observation v2: tokens plus pair matrices (SPEC 9.2-9.3).
+
 The network never does arithmetic: every result composition, distance and "satisfies target"
 flag is computed here from the exact integer compositions of `meda.core`. Results are formed as
 exact integer numerators over an integer denominator (numpy int64) and only then divided, so each
 float is the correctly rounded value of the exact rational. "Satisfies" flags are compared
 exactly in integers.
 
-All float features lie in [0, 1]. Volumes are scaled by the chip's max mix volume M.
+**Every count is a set of rows, never a feature column** (SPEC 1.4). Fluids, droplets, targets
+and candidates are rows; compositions are fraction matrices over the fluid rows; per-target
+detail is in pair matrices. No feature column belongs to a particular fluid or target, so the
+padding sizes `F_pad`, `T_pad`, `N_pad`, `L_pad` are memory settings, not limits of a network.
 
-Rows of `sources`: reservoirs first (rows 0..F-1, by fluid id), then droplets on chip in the
-state's canonical order (rows F..F+n-1).
+**Scales.** Every volume appears twice: relative (`/ M`, how much of a mixer it fills) and
+absolute (`/ volume_ref`, the same on every chip). Absolute counts are divided by `count_ref`.
+These are scales, not caps: such features may exceed 1.
+
+Row order: fluids by fluid id (the fluid rows are the reservoirs); droplets in the state's
+canonical order; targets by target id; candidates in `rules.legal_actions` order.
 """
 
 from __future__ import annotations
@@ -32,41 +38,35 @@ from meda.core.state import PrepState
 EXACT_LIMIT = 2**20
 KINDS = (FluidKind.SAMPLE, FluidKind.REAGENT, FluidKind.BUFFER)
 OP_MIX, OP_OUTPUT, OP_DISCARD = 0, 1, 2
+TYPE_FLUID, TYPE_DROPLET, TYPE_TARGET = 0, 1, 2
+
+D_FLUID = 3  # kind one-hot
+D_DROP = 6  # vol/M, vol/volume_ref, denominator, age, nearest open distance, satisfies any
+D_TGT = 7  # dvol/M, dvol/volume_ref, tolerance, rem/demand, rem/count_ref, met, denominator
+D_CAND = 17  # op (3), k, l, k+l on both scales (6), den, nearest, satisfies, reagent (3),
+#              waste, droplets after / storage capacity
+D_GLOB = 7  # step/limit, steps left, on chip/capacity, rem/total, rem/count_ref, M, capacity
+D_PAIR = 2  # L-inf distance, satisfies flag
 
 Obs = dict[str, npt.NDArray[Any]]
 
 
 @dataclass(frozen=True, slots=True)
 class EnvSizes:
-    """Padding sizes (from `configs/env`). Exceeding any of them raises; nothing is truncated."""
+    """Padding sizes and feature scales (from `configs/env`). Exceeding a padding size raises;
+    nothing is truncated. Raising one never invalidates trained weights (SPEC 9.2)."""
 
-    f_max: int
-    t_max: int
-    storage_max: int
-    l_max: int
+    f_pad: int
+    t_pad: int
+    n_pad: int
+    l_pad: int
+    volume_ref: int
+    count_ref: int
 
-    @property
-    def s_max(self) -> int:
-        return self.f_max + self.storage_max
-
-    @property
-    def d_src(self) -> int:
-        # composition, volume, is_reservoir, kind one-hot, denominator, L-inf and satisfies per
-        # target, age
-        return self.f_max + 1 + 1 + len(KINDS) + 1 + 2 * self.t_max + 1
-
-    @property
-    def d_tgt(self) -> int:
-        # composition, tolerance, droplet volume, remaining demand fraction, met flag
-        return self.f_max + 4
-
-    @property
-    def d_cand(self) -> int:
-        # op one-hot, k, l, k+l, result composition, result denominator, L-inf per target,
-        # satisfies any open target, reagent by kind, waste, storage after
-        return 3 + 3 + self.f_max + 1 + self.t_max + 1 + len(KINDS) + 1 + 1
-
-    D_GLOB = 5  # step fraction, storage fraction, remaining demand fraction, F/f_max, T/t_max
+    def __post_init__(self) -> None:
+        for name in ("f_pad", "t_pad", "n_pad", "l_pad", "volume_ref", "count_ref"):
+            if getattr(self, name) < 1:
+                raise ValueError(f"env: {name} must be >= 1, got {getattr(self, name)}")
 
 
 def den_feature(den: npt.NDArray[np.int64]) -> npt.NDArray[np.float64]:
@@ -80,18 +80,33 @@ class Encoder:
 
     def observation_space(self) -> spaces.Dict:
         z = self.sizes
+        inf = np.inf
+
+        def box(shape: tuple[int, ...], high: float = 1.0) -> spaces.Box:
+            return spaces.Box(0.0, high, shape=shape, dtype=np.float32)
+
         return spaces.Dict(
             {
-                "sources": spaces.Box(0.0, 1.0, shape=(z.s_max, z.d_src), dtype=np.float32),
-                "source_mask": spaces.MultiBinary(z.s_max),
-                "targets": spaces.Box(0.0, 1.0, shape=(z.t_max, z.d_tgt), dtype=np.float32),
-                "target_mask": spaces.MultiBinary(z.t_max),
-                "candidates": spaces.Box(0.0, 1.0, shape=(z.l_max, z.d_cand), dtype=np.float32),
+                "fluids": box((z.f_pad, D_FLUID)),
+                "fluid_mask": spaces.MultiBinary(z.f_pad),
+                "droplets": box((z.n_pad, D_DROP), inf),
+                "droplet_mask": spaces.MultiBinary(z.n_pad),
+                "droplet_comp": box((z.n_pad, z.f_pad)),
+                "targets": box((z.t_pad, D_TGT), inf),
+                "target_mask": spaces.MultiBinary(z.t_pad),
+                "target_comp": box((z.t_pad, z.f_pad)),
+                "droplet_target": box((z.n_pad, z.t_pad, D_PAIR)),
+                "candidates": box((z.l_pad, D_CAND), inf),
+                "cand_comp": box((z.l_pad, z.f_pad)),
+                "cand_target": box((z.l_pad, z.t_pad, D_PAIR)),
                 "cand_index": spaces.Box(
-                    low=-1, high=max(z.s_max, z.t_max, 3), shape=(z.l_max, 3), dtype=np.int32
+                    low=-1,
+                    high=max(z.f_pad, z.n_pad, z.t_pad, 3),
+                    shape=(z.l_pad, 5),
+                    dtype=np.int32,
                 ),
-                "action_mask": spaces.MultiBinary(z.l_max),
-                "globals": spaces.Box(0.0, 1.0, shape=(EnvSizes.D_GLOB,), dtype=np.float32),
+                "action_mask": spaces.MultiBinary(z.l_pad),
+                "globals": box((D_GLOB,), inf),
             }
         )
 
@@ -102,15 +117,12 @@ class Encoder:
         def fail(msg: str) -> None:
             raise ValueError(f"instance '{inst.instance_id}': {msg}")
 
-        if inst.num_fluids > z.f_max:
-            fail(f"{inst.num_fluids} fluids > env F_max {z.f_max}")
-        if len(inst.targets) > z.t_max:
-            fail(f"{len(inst.targets)} targets > env T_max {z.t_max}")
-        if inst.chip.storage_capacity > z.storage_max:
-            fail(
-                f"storage_capacity {inst.chip.storage_capacity} > env storage_capacity_max "
-                f"{z.storage_max}"
-            )
+        if inst.num_fluids > z.f_pad:
+            fail(f"{inst.num_fluids} fluids > env F_pad {z.f_pad}")
+        if len(inst.targets) > z.t_pad:
+            fail(f"{len(inst.targets)} targets > env T_pad {z.t_pad}")
+        if inst.chip.storage_capacity > z.n_pad:
+            fail(f"storage_capacity {inst.chip.storage_capacity} > env N_pad {z.n_pad}")
         if inst.chip.max_denominator > EXACT_LIMIT:
             fail(f"max_denominator {inst.chip.max_denominator} > encoder limit {EXACT_LIMIT}")
         for t in inst.targets:
@@ -132,95 +144,108 @@ class Encoder:
         born: Mapping[int, int],
     ) -> Obs:
         z = self.sizes
-        if len(actions) > z.l_max:
+        if len(actions) > z.l_pad:
             raise ValueError(
                 f"instance '{inst.instance_id}' step {state.step}: {len(actions)} legal actions "
-                f"> env L_max {z.l_max}"
+                f"> env L_pad {z.l_pad}"
             )
         chip = inst.chip
         m = float(chip.max_mix_volume)
-        num_f = inst.num_fluids
+        vref, cref = float(z.volume_ref), float(z.count_ref)
+        nf = inst.num_fluids
         n = len(state.droplets)
-        s = num_f + n
+        nt = len(inst.targets)
 
-        # ---- sources: exact integer compositions
-        snum = np.zeros((s, z.f_max), dtype=np.int64)
+        # ---- sources (internal only): rows 0..F-1 are the reservoirs, F..F+n-1 the droplets
+        s = nf + n
+        snum = np.zeros((s, nf), dtype=np.int64)
         sden = np.ones(s, dtype=np.int64)
         svol = np.zeros(s, dtype=np.int64)  # 0 marks a reservoir (unlimited)
         is_res = np.zeros(s, dtype=bool)
         kind = np.zeros((s, len(KINDS)), dtype=np.int64)
-        age = np.zeros(s, dtype=np.float64)
         for f in inst.fluids:
             snum[f.id, f.id] = 1
             is_res[f.id] = True
             kind[f.id, KINDS.index(f.kind)] = 1
         row_of: dict[int, int] = {}
+        age = np.zeros(n, dtype=np.float64)
         for i, d in enumerate(state.droplets):
-            r = num_f + i
+            r = nf + i
             row_of[d.uid] = r
-            snum[r, :num_f] = d.composition.num
+            snum[r] = d.composition.num
             sden[r] = d.composition.den
             svol[r] = d.volume
-            age[r] = (state.step - born.get(d.uid, state.step)) / inst.step_limit
+            age[i] = (state.step - born.get(d.uid, state.step)) / inst.step_limit
 
         # ---- targets
-        nt = len(inst.targets)
-        tnum = np.zeros((nt, z.f_max), dtype=np.int64)
+        tnum = np.zeros((nt, nf), dtype=np.int64)
         tden = np.ones(nt, dtype=np.int64)
         tol_num = np.zeros(nt, dtype=np.int64)
         tol_den = np.ones(nt, dtype=np.int64)
         open_t = np.zeros(nt, dtype=bool)
         for t in inst.targets:
-            tnum[t.id, :num_f] = t.composition.num
+            tnum[t.id] = t.composition.num
             tden[t.id] = t.composition.den
             tol_num[t.id], tol_den[t.id] = t.tolerance.num, t.tolerance.den
             open_t[t.id] = state.remaining_demand[t.id] > 0
 
-        def dist_and_sat(
+        def pairs(
             num: npt.NDArray[np.int64], den: npt.NDArray[np.int64]
         ) -> tuple[npt.NDArray[np.float64], npt.NDArray[np.bool_]]:
-            """L-inf distance to each target (float) and exact `distance <= tolerance`."""
+            """Per (row, target): L-inf distance and exact `distance <= tolerance`, with the
+            met-target convention of SPEC 9.2 (distance 1, satisfies 0)."""
             diff = np.abs(
                 num[:, None, :] * tden[None, :, None] - tnum[None, :, :] * den[:, None, None]
-            ).max(axis=2)
+            ).max(axis=2, initial=0)
             scale = den[:, None] * tden[None, :]
-            dist = diff / scale
-            sat = diff * tol_den[None, :] <= tol_num[None, :] * scale
+            dist = np.where(open_t[None, :], diff / scale, 1.0)
+            sat = (diff * tol_den[None, :] <= tol_num[None, :] * scale) & open_t[None, :]
             return dist, sat
 
-        s_dist, s_sat = dist_and_sat(snum, sden)
-        sources = np.zeros((z.s_max, z.d_src), dtype=np.float32)
-        c = 0
-        sources[:s, c : c + z.f_max] = snum / sden[:, None]
-        c += z.f_max
-        sources[:s, c] = np.where(is_res, 1.0, svol / m)
-        c += 1
-        sources[:s, c] = is_res
-        c += 1
-        sources[:s, c : c + len(KINDS)] = kind
-        c += len(KINDS)
-        sources[:s, c] = den_feature(sden)
-        c += 1
-        sources[:s, c : c + z.t_max] = 1.0
-        sources[:s, c : c + nt] = np.where(open_t[None, :], s_dist, 1.0)
-        c += z.t_max
-        sources[:s, c : c + nt] = s_sat & open_t[None, :]
-        c += z.t_max
-        sources[:s, c] = age
+        def nearest(dist: npt.NDArray[np.float64]) -> npt.NDArray[np.float64]:
+            return dist.min(axis=1, initial=1.0)
 
-        targets = np.zeros((z.t_max, z.d_tgt), dtype=np.float32)
+        # ---- fluid rows
+        fluids = np.zeros((z.f_pad, D_FLUID), dtype=np.float32)
+        fluids[:nf] = kind[:nf]
+
+        # ---- droplet rows and their pairs
+        dnum, dden, dvol = snum[nf:], sden[nf:], svol[nf:]
+        d_dist, d_sat = pairs(dnum, dden)
+        droplets = np.zeros((z.n_pad, D_DROP), dtype=np.float32)
+        droplets[:n, 0] = dvol / m
+        droplets[:n, 1] = dvol / vref
+        droplets[:n, 2] = den_feature(dden)
+        droplets[:n, 3] = age
+        droplets[:n, 4] = nearest(d_dist)
+        droplets[:n, 5] = d_sat.any(axis=1)
+        droplet_comp = np.zeros((z.n_pad, z.f_pad), dtype=np.float32)
+        droplet_comp[:n, :nf] = dnum / dden[:, None]
+        droplet_target = np.zeros((z.n_pad, z.t_pad, D_PAIR), dtype=np.float32)
+        droplet_target[:n, :nt, 0] = d_dist
+        droplet_target[:n, :nt, 1] = d_sat
+
+        # ---- target rows
+        targets = np.zeros((z.t_pad, D_TGT), dtype=np.float32)
+        target_comp = np.zeros((z.t_pad, z.f_pad), dtype=np.float32)
         for t in inst.targets:
-            targets[t.id, : z.f_max] = tnum[t.id] / tden[t.id]
-            targets[t.id, z.f_max] = float(t.tolerance)
-            targets[t.id, z.f_max + 1] = t.droplet_volume / m
-            targets[t.id, z.f_max + 2] = state.remaining_demand[t.id] / t.demand
-            targets[t.id, z.f_max + 3] = not open_t[t.id]
+            rem = state.remaining_demand[t.id]
+            targets[t.id] = (
+                t.droplet_volume / m,
+                t.droplet_volume / vref,
+                float(t.tolerance),
+                rem / t.demand,
+                rem / cref,
+                not open_t[t.id],
+                den_feature(tden[t.id : t.id + 1])[0],
+            )
+            target_comp[t.id, :nf] = tnum[t.id] / tden[t.id]
 
-        # ---- candidates
+        # ---- candidates: exact afterstates
         nl = len(actions)
         op = np.zeros(nl, dtype=np.int64)
-        ia = np.zeros(nl, dtype=np.int64)
-        ib = np.full(nl, -1, dtype=np.int64)
+        ia = np.zeros(nl, dtype=np.int64)  # source row of operand a
+        ib = np.full(nl, -1, dtype=np.int64)  # source row (Mix) or target id (Output)
         kk = np.zeros(nl, dtype=np.int64)
         ll = np.zeros(nl, dtype=np.int64)
 
@@ -248,68 +273,79 @@ class Encoder:
         )
         rden = np.where(is_mix, (kk + lm) * da * db, da)
         g = rden.copy()
-        for col in range(z.f_max):
+        for col in range(nf):
             g = np.gcd(g, rnum[:, col])
         rnum, rden = rnum // g[:, None], rden // g
-        r_dist, r_sat = dist_and_sat(rnum, rden)
+        r_dist, r_sat = pairs(rnum, rden)
 
-        res_vol = np.where(is_res[ia], -1, svol[ia])
-        a_used = (res_vol == kk) & ~is_res[ia]
+        a_used = ~is_res[ia] & (svol[ia] == kk)
         b_used = is_mix & ~is_res[ib_src] & (svol[ib_src] == ll)
         storage_after = np.where(
             is_mix,
             n + 1 - a_used - b_used,
             np.where(op == OP_OUTPUT, n - a_used, n - 1),
         )
-
-        cand = np.zeros((z.l_max, z.d_cand), dtype=np.float32)
-        c = 0
-        cand[np.arange(nl), op] = 1.0
-        c += 3
-        cand[:nl, c] = kk / m
-        cand[:nl, c + 1] = lm / m
-        cand[:nl, c + 2] = np.where(is_mix, kk + lm, kk) / m
-        c += 3
-        cand[:nl, c : c + z.f_max] = rnum / rden[:, None]
-        c += z.f_max
-        cand[:nl, c] = den_feature(rden)
-        c += 1
-        cand[:nl, c : c + z.t_max] = 1.0
-        cand[:nl, c : c + nt] = np.where(open_t[None, :], r_dist, 1.0)
-        c += z.t_max
-        cand[:nl, c] = (r_sat & open_t[None, :]).any(axis=1)
-        c += 1
+        total = np.where(is_mix, kk + lm, kk)
         reagent = kk[:, None] * kind[ia] + lm[:, None] * np.where(is_mix[:, None], kind[ib_src], 0)
-        cand[:nl, c : c + len(KINDS)] = np.where(op[:, None] == OP_DISCARD, 0, reagent) / m
-        c += len(KINDS)
-        cand[:nl, c] = np.where(op == OP_DISCARD, kk, 0) / m
-        c += 1
-        cand[:nl, c] = storage_after / chip.storage_capacity
+        reagent = np.where(op[:, None] == OP_DISCARD, 0, reagent)
 
-        cand_index = np.full((z.l_max, 3), -1, dtype=np.int32)
-        cand_index[:nl, 0] = op
-        cand_index[:nl, 1] = ia
-        cand_index[:nl, 2] = ib
+        cand = np.zeros((z.l_pad, D_CAND), dtype=np.float32)
+        cand[np.arange(nl), op] = 1.0
+        cand[:nl, 3], cand[:nl, 4], cand[:nl, 5] = kk / m, lm / m, total / m
+        cand[:nl, 6], cand[:nl, 7], cand[:nl, 8] = kk / vref, lm / vref, total / vref
+        cand[:nl, 9] = den_feature(rden)
+        cand[:nl, 10] = nearest(r_dist)
+        cand[:nl, 11] = r_sat.any(axis=1)
+        cand[:nl, 12:15] = reagent / vref
+        cand[:nl, 15] = np.where(op == OP_DISCARD, kk, 0) / vref
+        cand[:nl, 16] = storage_after / chip.storage_capacity
+        cand_comp = np.zeros((z.l_pad, z.f_pad), dtype=np.float32)
+        cand_comp[:nl, :nf] = rnum / rden[:, None]
+        cand_target = np.zeros((z.l_pad, z.t_pad, D_PAIR), dtype=np.float32)
+        cand_target[:nl, :nt, 0] = r_dist
+        cand_target[:nl, :nt, 1] = r_sat
+
+        # Operands by (type, row): a source row below F is a fluid, else droplet row - F.
+        def typed(src_row: npt.NDArray[np.int64]) -> tuple[npt.NDArray[np.int64], ...]:
+            fluid = src_row < nf
+            return np.where(fluid, TYPE_FLUID, TYPE_DROPLET), np.where(fluid, src_row, src_row - nf)
+
+        a_type, a_row = typed(ia)
+        b_type_src, b_row_src = typed(np.maximum(ib, 0))
+        b_type = np.where(is_mix, b_type_src, np.where(op == OP_OUTPUT, TYPE_TARGET, -1))
+        b_row = np.where(is_mix, b_row_src, np.where(op == OP_OUTPUT, ib, -1))
+        cand_index = np.full((z.l_pad, 5), -1, dtype=np.int32)
+        cand_index[:nl] = np.stack([op, a_type, a_row, b_type, b_row], axis=1)
 
         total_demand = sum(t.demand for t in inst.targets)
+        remaining = sum(state.remaining_demand)
         glob = np.array(
             [
                 state.step / inst.step_limit,
+                (inst.step_limit - state.step) / cref,
                 n / chip.storage_capacity,
-                sum(state.remaining_demand) / total_demand if total_demand else 0.0,
-                num_f / z.f_max,
-                nt / z.t_max,
+                remaining / total_demand if total_demand else 0.0,
+                remaining / cref,
+                chip.max_mix_volume / vref,
+                chip.storage_capacity / cref,
             ],
             dtype=np.float32,
         )
         return {
-            "sources": sources,
-            "source_mask": _mask(s, z.s_max),
+            "fluids": fluids,
+            "fluid_mask": _mask(nf, z.f_pad),
+            "droplets": droplets,
+            "droplet_mask": _mask(n, z.n_pad),
+            "droplet_comp": droplet_comp,
             "targets": targets,
-            "target_mask": _mask(nt, z.t_max),
+            "target_mask": _mask(nt, z.t_pad),
+            "target_comp": target_comp,
+            "droplet_target": droplet_target,
             "candidates": cand,
+            "cand_comp": cand_comp,
+            "cand_target": cand_target,
             "cand_index": cand_index,
-            "action_mask": _mask(nl, z.l_max),
+            "action_mask": _mask(nl, z.l_pad),
             "globals": glob,
         }
 
