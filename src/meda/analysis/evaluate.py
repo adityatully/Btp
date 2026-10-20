@@ -38,7 +38,7 @@ from meda.core.problem import Instance
 from meda.envs.sample_prep_env import EnvConfig, FixedInstances, SamplePrepEnv
 from meda.generators.benchmark_io import BenchmarkSet
 from meda.solvers.base import SolveBudget, Solver, SolveResult
-from meda.solvers.fallback import NaiveCostToFinish
+from meda.solvers.fallback import ConstructiveCostToFinish
 
 
 class Producer(Protocol):
@@ -114,7 +114,7 @@ def build_env(cfg: Mapping[str, Any], instances: list[Instance]) -> SamplePrepEn
         EnvConfig.from_dict(cfg["env"]),
         FixedInstances(instances),
         weights,
-        NaiveCostToFinish(weights),
+        ConstructiveCostToFinish(weights),
     )
 
 

@@ -29,12 +29,14 @@ from meda.generators.benchmark_io import BenchmarkSet
 from meda.solvers.base import SolveBudget, Solver
 from meda.solvers.baselines.bitscan import BitScanSolver
 from meda.solvers.baselines.naive import NaiveSolver
+from meda.solvers.baselines.tree import TreeSolver
 from meda.solvers.exact_search import ExactSearch
 from meda.utils.seeding import seed_everything
 
 SOLVERS: dict[str, Callable[[CostWeights], Solver]] = {
     "naive": NaiveSolver,
     "bitscan": BitScanSolver,
+    "tree": TreeSolver,
     "exact_search": ExactSearch,
 }
 PRODUCERS = ("random", *SOLVERS)

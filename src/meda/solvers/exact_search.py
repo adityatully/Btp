@@ -13,7 +13,7 @@ excluded, a state settled cheaply at step 10 would block a pricier arrival at st
 had budget left to finish, so the search could return a suboptimal cost or wrongly report
 infeasible. Excluding it is faster and is safe only when the step limit cannot bind.
 
-**Branch and bound.** The search starts from an incumbent plan (the naive baseline by default)
+**Branch and bound.** The search starts from an incumbent plan (the cheaper of naive and split tree)
 and prunes any node whose `g + h` already reaches the incumbent's cost. If nothing cheaper is
 found, the incumbent is proved optimal. This is what makes the search finish: the reachable
 space is finite but vast, since cheap buffer dilutions can wander far into fine compositions
@@ -46,7 +46,7 @@ from meda.core.problem import Instance
 from meda.core.rules import apply, legal_actions, replay
 from meda.core.state import CanonicalKey, PrepState
 from meda.solvers.base import SolveBudget, SolveResult
-from meda.solvers.baselines.naive import naive_plan
+from meda.solvers.fallback import cheapest_construction
 
 Heuristic = Callable[[PrepState, Instance], Rational]
 HeuristicName = Literal["zero", "fluid_bound"]
@@ -174,14 +174,11 @@ class ExactSearch:
         )
 
     def incumbent(self, instance: Instance) -> tuple[tuple[Action, ...], Rational] | None:
-        """A feasible plan to bound the search with (the naive baseline), if it has one."""
+        """A feasible plan to bound the search with: the cheaper of the naive and split-tree
+        constructions (10.3), if either builds one within the step limit."""
         if not self.use_incumbent:
             return None
-        plan = naive_plan(instance)
-        if plan is None:
-            return None
-        _, totals, _ = replay(instance, plan)
-        return plan, self.weights.scalar(totals, instance.fluids)
+        return cheapest_construction(instance, self.weights)
 
     def search(
         self, instance: Instance, budget: SolveBudget | None = None

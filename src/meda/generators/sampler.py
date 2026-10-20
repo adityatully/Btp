@@ -7,8 +7,8 @@ training never draws an instance nobody can solve.
 
 Two composition samplers (SPEC 8.1):
 - `dirichlet_snapped` — sample the simplex, then snap to a composition whose denominator divides
-  `accuracy_denominator`. Witnessed by the naive construction, so the accuracy denominator must
-  factorise into mix volumes the chip allows.
+  `accuracy_denominator`. Witnessed by the naive construction, else the split tree, so every
+  prime factor of the accuracy denominator must be at most the chip's M.
 - `reachable_walk` — compositions a random legal plan actually produced (`generators.synthetic`).
   Reachable by construction, and the walk itself is the witness.
 
@@ -43,6 +43,7 @@ from meda.generators.synthetic import (
     witness_plan,
 )
 from meda.solvers.baselines.naive import naive_plan
+from meda.solvers.baselines.tree import tree_plan
 
 COMPOSITION_SAMPLERS = ("dirichlet_snapped", "reachable_walk", "fixed_list")
 GENERATOR_VERSION = 1
@@ -417,7 +418,7 @@ def _sample_once(
         )
     name = instance_id or f"{cfg.name}-{cfg.config_hash()}-{_instance_suffix(targets, chip)}"
     probe = Instance(name, fluids, tuple(targets), chip, 10_000)
-    actions = _witness(probe, recipes)
+    actions, witness_source = _witness(probe, recipes)
     step_limit = cfg.step_limit or max(len(actions), round(cfg.step_limit_multiple * len(actions)))
     if step_limit < len(actions):
         raise ValueError(
@@ -430,7 +431,7 @@ def _sample_once(
         "config_hash": cfg.config_hash(),
         "composition_sampler": cfg.composition_sampler,
         "witness_actions": len(actions),
-        "witness_source": "reachable_walk" if recipes else "naive",
+        "witness_source": witness_source,
     }
     if recipes is not None:
         # Store the walk so the witness stays re-derivable from the instance alone: the naive
@@ -442,21 +443,29 @@ def _sample_once(
     return replace(probe, step_limit=step_limit, metadata=metadata)
 
 
-def _witness(instance: Instance, recipes: tuple[Recipe, ...] | None) -> tuple[Action, ...]:
-    """A legal plan meeting all demand: the walk's own recipes, else the naive construction."""
+def _witness(
+    instance: Instance, recipes: tuple[Recipe, ...] | None
+) -> tuple[tuple[Action, ...], str]:
+    """A legal plan meeting all demand: the walk's own recipes, else the naive construction,
+    else the split tree (which builds any reachable target). Naive goes first so every
+    instance it already witnessed is unchanged. Returns the plan and which construction made
+    it (recorded as `witness_source`)."""
     if recipes is not None:
-        return witness_plan(instance, recipes)
+        return witness_plan(instance, recipes), "reachable_walk"
     actions = naive_plan(instance)
+    if actions is not None:
+        return actions, "naive"
+    actions = tree_plan(instance)
     if actions is None:
         raise ValueError(
-            f"instance '{instance.instance_id}': no feasibility witness. The naive construction "
-            f"cannot build these targets on chip '{instance.chip.name}' (denominators must "
-            f"factorise into mix volumes within [{instance.chip.min_mix_volume}, "
-            f"{instance.chip.max_mix_volume}], and mixtures need denominator <= "
-            f"{instance.chip.max_mix_volume}). Use composition_sampler=reachable_walk, or lower "
-            f"accuracy_denominator."
+            f"instance '{instance.instance_id}': no feasibility witness on chip "
+            f"'{instance.chip.name}'. A target is reachable only if every prime factor of its "
+            f"denominator is <= max_mix_volume {instance.chip.max_mix_volume}, and the split "
+            f"tree also needs storage for its depth (storage_capacity "
+            f"{instance.chip.storage_capacity}). Lower accuracy_denominator, raise "
+            f"max_mix_volume, or use composition_sampler=reachable_walk."
         )
-    return actions
+    return actions, "tree"
 
 
 def _instance_suffix(targets: Sequence[Target], chip: ChipLimits) -> str:

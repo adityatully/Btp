@@ -65,7 +65,7 @@ from meda.core.state import CanonicalKey
 from meda.envs.encoding import Obs
 from meda.envs.sample_prep_env import SamplePrepEnv
 from meda.solvers.exact_search import fluid_bound_heuristic
-from meda.solvers.fallback import NaiveCostToFinish
+from meda.solvers.fallback import ConstructiveCostToFinish
 
 QKey = tuple[CanonicalKey, CanonicalKey]
 PRIORS = ("naive", "fluid_bound", "zero")
@@ -147,7 +147,7 @@ class TabularQ:
             else None
         )
         self._fallback = (
-            NaiveCostToFinish(weights)
+            ConstructiveCostToFinish(weights)
             if weights is not None and self.config.prior == "naive"
             else None
         )
