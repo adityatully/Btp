@@ -1,6 +1,17 @@
 # MEDA Design Automation — Codebase Specification
 
-Version 0.10 (draft) · 2026-10-19
+Version 0.11 · 2026-10-20
+
+Changes in 0.11 (M8, mechanical part of the 0.10 redesign): observation v2 and network v2 are
+built and v1 is removed (9.2, 9.3, 11.4). The env config keys are now `F_pad`, `T_pad`,
+`N_pad`, `L_pad`, `volume_ref`, `count_ref` (9.2); `reset` refuses an instance whose truncation
+penalty cannot be computed (9.1). Network v2 as built: relation biases are linear maps of the
+pair facts with no constant term, one set per layer; the Transformer layer is written out over
+`scaled_dot_product_attention`, because `nn.TransformerEncoderLayer` handles a per-head float
+mask differently in eval mode (11.4). Generators may draw M, storage capacity and droplet
+volume per instance (8.1); `problem_hash` ignores the chip's name (8.4). `evaluate` writes the
+input-axis columns of 1.3 (12.2). M8 acceptance (a), (c) and (d) met on v2 (16). Stage design,
+regime and benchmarks are unchanged and still wait for the user (8.3).
 
 Changes in 0.10 (draft, under review): section 1 rewritten around the agent goal: one policy
 for any problem and chip in a stated input space (1.1), the problem class (1.2), which
@@ -75,9 +86,9 @@ Read sections 1–5 before writing any code. Implement in the milestone order of
 
 ## 1. Goals and non-goals
 
-*Draft, 2026-10-19. The agent goal (1.1–1.6) is under review: ranges marked "suggested" wait for
-the user's and the supervisor's confirmation. Sections after this one still describe the
-current code, which does not yet meet 1.4 (see the status note there).*
+*2026-10-19, updated 2026-10-20. The ranges marked "suggested" wait for the user's and the
+supervisor's confirmation. The observation and network meet 1.4 (see the status note there);
+the stages and benchmarks do not cover 1.3 yet.*
 
 ### 1.1 The goal
 **One trained policy that takes a sample-preparation problem and the chip's limits as input
@@ -135,11 +146,9 @@ than two inputs.
 5. **The environment stays the referee** (rule 2.1): every plan is legal by construction on any
    input, so a weak decision costs more but never breaks a rule.
 
-*Status:* the code breaks rules 1–3 today (observation v1, 9.2a): `F_max` and `T_max` appear
-as feature columns (per-fluid composition, per-target distances), M is only implicit, and
-volumes are scaled by each chip's M. Observation v2 (9.2, 9.3) and network v2 (11.4) are
-specified against these rules and are built in M8 before any training beyond the acceptance
-runs (16).
+*Status (0.11):* observation v2 (9.2, 9.3) and network v2 (11.4) follow rules 1–4 and are
+built; acceptance (d) of M8 tests them (16). The generators can draw the chip inputs (8.1), but
+the stages and benchmarks that use them wait for the stage design (8.3, 8.4).
 
 ### 1.5 The claim and how it is measured
 > One policy, no retraining: valid plans on any input; near the best known cost across the
@@ -157,7 +166,7 @@ runs (16).
 ### 1.6 Known practical limits (measured, not assumed away)
 - **Training coverage:** reliability is earned only where training varied the inputs.
 - **Action space growth:** candidates grow with M and with droplets on chip (pairs × volume
-  splits), so `L_max`, memory and decision difficulty grow at large M.
+  splits), so `L_pad`, memory and decision difficulty grow at large M.
 - **Grading weakens with size:** exact search proves optima only on small instances, and the
   [lower bound, best known] intervals widen on larger ones.
 - **Mixtures need a general fallback:** `cost_to_finish` covers dilutions only (10.3), so a
@@ -666,7 +675,16 @@ are an error. Fields:
     support really has `support_size` fluids, since a short walk can leave one unused.
   - `fixed_list`: explicit `fixed_compositions` (for tests).
 - `support_size`: how many fluids are nonzero in a target (dilution = 2: one sample + buffer).
-- `droplet_volume`, `tolerance`.
+- `droplet_volume`: a fixed value or a `[low, high]` range, drawn per target. A draw above the
+  instance's M raises (no droplet could be delivered); `tolerance`.
+- `max_mix_volume`, `storage_capacity` (optional, `[low, high]`): chip inputs drawn per instance
+  (1.3). The instance's chip is the configured chip with these two fields replaced and named
+  `<chip>-M<m>-S<s>`; the platform constants (min mix and droplet volume, partial take,
+  `max_denominator`) stay as configured. Unset, the chip's own values are used.
+  A fixed value draws no randomness, and these keys enter the config hash only when set, so
+  every config that does not use them samples and hashes exactly as before. An accuracy
+  denominator must suit every M in the range (8.3); a draw the naive witness cannot build raises
+  naming the instance.
 - `step_limit`: an absolute value, or `null` to size it as `step_limit_multiple` times the
   witness plan length. A step limit below the witness length is an error.
 
@@ -752,7 +770,8 @@ stored only if it comes from an admissible method; a guessed or extrapolated num
 written as one (rule 9).
 
 `instance_hash(instance)` is the canonical identity of a *problem*: the fluid kinds, the multiset
-of targets and the chip limits. It deliberately ignores the instance id, the metadata and the
+of targets and the chip limits (`problem_hash` ignores `max_denominator` and the chip's name,
+below). It deliberately ignores the instance id, the metadata and the
 step limit, so a training draw cannot slip past the overlap check by being renamed or given more
 steps. `check_no_overlap(training, frozen_sets)` raises and names every clash.
 
@@ -870,7 +889,9 @@ not automatic — training **must** pass the frozen sets' hashes as `exclude` (t
 does), or it will redraw the held-out instances. `BenchmarkSet.hashes()` returns both
 `instance_hash` and `problem_hash`; the latter ignores `max_denominator`, because
 `tiny_exact_v1` sets it per instance and the same dilution would otherwise hash differently
-there and in a stage-1 draw. `check_no_overlap` compares `problem_hash`.
+there and in a stage-1 draw, and the chip's `name`, a label that a generator drawing M sets per
+draw. `check_no_overlap` compares `problem_hash`. Hashes are computed, never stored in the
+frozen files, so this changed no set.
 
 ---
 
@@ -883,16 +904,17 @@ env = SamplePrepEnv(env_config, instance_source, cost_weights, cost_to_finish)
 # cost_to_finish(state, instance) -> Rational: truncation penalty (solvers.fallback, M5)
 obs, info = env.reset(seed=None, options=None) # options may pass a specific Instance
 obs, reward, terminated, truncated, info = env.step(action_index)
-mask = env.action_masks()                      # bool[L_max]; same as obs["action_mask"]
+mask = env.action_masks()                      # bool[L_pad]; same as obs["action_mask"]
 ```
-- `action_space = Discrete(L_max)`. The action is an **index into the current candidate list**,
-  which is `rules.legal_actions(state)` in canonical order, padded to `L_max`.
-- If the number of legal actions exceeds `L_max` (`L_pad` in observation v2), raise a clear
-  error naming the instance (do not truncate silently). It is a config value, and in v2 a
-  memory setting only (9.2).
+- `action_space = Discrete(L_pad)`. The action is an **index into the current candidate list**,
+  which is `rules.legal_actions(state)` in canonical order, padded to `L_pad`.
+- If the number of legal actions exceeds `L_pad`, raise a clear error naming the instance (do
+  not truncate silently). It is a config value and a memory setting only (9.2).
 - Selecting an index that is not a legal candidate raises `IllegalActionError`.
 - `reset` raises (naming the instance) if the instance does not fit the padding sizes, if a
-  target's `droplet_volume` exceeds `max_mix_volume`, or if no action is legal at the start.
+  target's `droplet_volume` exceeds `max_mix_volume`, if no action is legal at the start, or if
+  `cost_to_finish` exposes `supports(instance)` and it is false (a mixture the naive fallback
+  cannot price, 10.3): an unpriceable instance is refused up front, not when it truncates.
   `reset(options={"instance": inst})` runs a specific instance.
 - Episode end: success → `terminated`; dead end → `terminated` + penalty; step limit →
   `truncated` + penalty. The penalty already estimates the remaining cost, so agents must not
@@ -917,8 +939,8 @@ mask = env.action_masks()                      # bool[L_max]; same as obs["actio
 
 ### 9.2 Observation v2 (`gymnasium.spaces.Dict`, padded, float32 unless noted)
 
-*Status: specified in 0.10, not built. The code still emits observation v1 (9.2a). v2 follows
-the design rules of 1.4: every count is a set of rows, never a feature column.*
+*Status: built (0.11, `envs/encoding.py`); v1 is removed. v2 follows the design rules of 1.4:
+every count is a set of rows, never a feature column.*
 
 The observation is a set of **tokens** (fluids, droplets, targets, candidates) plus **pair
 matrices** that relate them. No feature column belongs to a particular fluid or target, so
@@ -972,6 +994,8 @@ value; "satisfies" flags are compared exactly in integers. To keep int64 exact,
 `max_denominator` and every target composition/tolerance denominator must be ≤ 2^20 (checked at
 reset), and tolerances ≤ 1. The denominator feature is `1 − 1/den` (0 for pure fluids).
 
+Column order (as built) is the order of each list below.
+
 **Fluid row (D_fluid = 3):** kind one-hot (sample, reagent, buffer). Kind is a category with a
 fixed number of values, not a count. Reserved extensions, each a new column only when its
 decision is taken (1.7): cost weight of the fluid (preference conditioning, 6.5), stock
@@ -986,7 +1010,8 @@ remaining demand / demand; remaining demand / `count_ref`; met flag; denominator
 target composition. The composition itself is in `target_comp`.
 
 **Candidate row (D_cand = 17), the afterstate features:** op one-hot (3); k, l, k + l on both
-scales (6; for Output k is the delivered volume, for Discard the droplet volume, l = 0); the
+scales (6: k/M, l/M, (k + l)/M, then the same over `volume_ref`; for Output k is the delivered
+volume, for Discard the droplet volume, l = 0); the
 result's denominator feature; distance from the result to the nearest open target; whether the
 result satisfies any open target; this action's reagent units by fluid kind / `volume_ref` (3);
 waste it creates / `volume_ref`; droplets on chip after the action / storage capacity. The
@@ -1005,13 +1030,11 @@ Preference weights are appended here when 6.5 is enabled.
 a droplet. Rows index the corresponding token array, so no index depends on another array's
 padding.
 
-### 9.2a Observation v1 (current code, to be replaced by 9.2)
-Keys `sources` [S_max, D_src] (reservoirs, then droplets), `source_mask`, `targets`
-[T_max, D_tgt], `target_mask`, `candidates` [L_max, D_cand], `cand_index` [L_max, 3],
-`action_mask`, `globals` [5], with `S_max = F_max + storage_capacity_max`. Compositions are
-`F_max` columns and every source and candidate row has one distance column per target (`T_max`),
-so F and T are hard limits of a trained network, and volumes are divided by M only. M5–M8
-acceptance runs use v1; nothing trained on it needs to be kept.
+### 9.2a Observation v1 (removed in 0.11)
+Keys `sources` (reservoirs, then droplets), `targets`, `candidates`, `cand_index` [L, 3] and
+`globals` [5], with compositions as `F_max` columns and one distance column per target
+(`T_max`), so F and T were hard limits of a trained network and volumes were divided by M only.
+The M5–M8 acceptance runs before 0.11 used it; nothing trained on it was kept.
 
 ### 9.4 Vectorisation and speed
 - Must work with `gymnasium.vector.AsyncVectorEnv` (picklable, no global state).
@@ -1193,8 +1216,8 @@ M = 8** (see 16).
 
 ### 11.4 PPO with a set encoder (`ppo/`)
 
-**Network v2 (`networks.py`).** *Status: specified in 0.10, not built; the code implements the
-v1 network (end of this section) over observation v1.* It reads observation v2 (9.2). Write
+**Network v2 (`networks.py`).** *Status: built (0.11); v1 is removed.* It reads observation v2
+(9.2). Every small MLP is Linear → ReLU → Linear with hidden width d, as in v1. Write
 `d` for `d_model`. No parameter's shape depends on F, T, the number of droplets or candidates,
 M, storage capacity or any padding size (rule 1.4.1); every aggregation over a set is a masked
 mean or a softmax attention, never a sum over a count (1.4.4).
@@ -1213,15 +1236,25 @@ mean or a softmax attention, never a sum over a count (1.4.4).
    + `MLP_g(globals)`.
 4. **Set encoder.** A pre-norm Transformer encoder (2–4 layers, 4–8 heads, dropout 0, **no
    positional encoding**) over [global; fluids; droplets; targets], with key-padding masks and
-   **relation biases**: a learned per-head bias added to the attention logit of each related
-   pair, in both directions: droplet ↔ fluid from `droplet_comp` (the fraction), target ↔ fluid
-   from `target_comp`, droplet ↔ target from `droplet_target` (distance, satisfies). Unrelated
-   pairs get bias 0. The pair facts therefore shape attention without becoming columns.
+   **relation biases**: for each related pair, every head's attention logit gets a learned
+   **linear function of the pair fact with no constant term**, separately in each direction:
+   droplet ↔ fluid from `droplet_comp` (the fraction; a 1 → heads map), target ↔ fluid from
+   `target_comp` (1 → heads), droplet ↔ target from `droplet_target` (distance, satisfies;
+   2 → heads). Each layer has its own maps. A zero fact (a fluid the droplet does not contain,
+   a padded pair) and every unrelated pair get bias 0, so the pair facts shape attention
+   without becoming columns. *As built:* the layer is written out (pre-norm attention over
+   `torch.nn.functional.scaled_dot_product_attention` with the bias as an additive mask, then a
+   4d ReLU feed-forward), not `nn.TransformerEncoderLayer`: in eval mode that class switches to
+   a fused kernel that treats a per-head float mask differently from training mode (measured:
+   logits 0.09 apart, against a spread of 0.05), which would make rollout log-probs disagree
+   with those of the update.
 5. **Candidate scorer.** For each candidate, concatenate: its scalar features; `comp` of its
    result (`cand_comp`); a target summary `r` = softmax attention over the contextual target
    embeddings, scored by a small MLP of `cand_target` (masked to valid targets); the contextual
    embedding of operand a and of operand b (a fluid, droplet or target by `cand_index` type, or
-   a learned blank for Discard); the global token. MLP → one logit.
+   a learned blank for Discard); the global token. MLP → one logit. Candidates do not attend to
+   each other, so cost stays linear in their number. `comp` uses the fluid embeddings of step 1
+   (before the Transformer), so compositions get context only through `use_f`: deliberate.
 6. **Masked categorical** (`policy.py`): masked logits are set to the dtype minimum, so a masked
    candidate has probability exactly 0 (rule 2.4).
 7. **Value head:** MLP on the global token → scalar. Returns grow with problem size (more
@@ -1234,30 +1267,26 @@ Known weak spot, to test: two fluids of the same kind that every target uses ide
 identical embeddings. That is right by symmetry for the problem as a whole, but a droplet
 mixing them in unequal ratios is then embedded like its mirror image; the exact
 `cand_target` relations still tell the outcomes apart. Ablation: a random per-episode identity
-feature per fluid (`agent.fluid_identity`, off by default).
+feature per fluid (`agent.fluid_identity`; reserved, not built: added with the ablation).
 
 **Batch trimming.** Observations are trimmed to the batch's largest real row count per token
-array (fluids, droplets, targets, candidates) before the network sees them, and the rollout
-stores them trimmed per step (`rollout.py`).
+axis (fluids, droplets, targets, candidates; at least 1) before the network sees them, every
+array along every axis it has (`policy.KEY_AXES`); the rollout stores them trimmed per step and
+pads each axis to the widest step of the rollout (`cand_index` with −1, the rest with 0).
 
-**Network v1 (current code).** MLPs on v1 source and target rows (widths fixed by `F_max`,
-`T_max`), a global token from `globals`, the same Transformer without relation biases, and the
-same scorer gathering source a and source b / target / blank through `cand_index`. Replaced by
-v2; the rest of the agent (policy, rollout, trainer, checkpoints, logging) carries over
-unchanged apart from the observation keys it trims.
+**Network v1 (removed in 0.11).** MLPs on v1 source and target rows (widths fixed by `F_max`,
+`T_max`), the same Transformer without relation biases, and the same scorer.
 
 **Algorithm (`ppo.py`, CleanRL style):** vectorised rollouts; GAE(λ); clipped surrogate;
 value loss (optionally clipped); entropy bonus; gradient-norm clipping; learning-rate
 annealing; several epochs of minibatches per rollout. γ = 1.0 by default (finite episodes).
 
 **As built (M8).**
-- `networks.py`: network v1 above, `SetEncoderNet(sizes, NetConfig)`, input widths from
-  `EnvSizes`; pre-norm Transformer, dropout 0. Scorer input [candidate features; embedding of
-  source a; second operand; global token].
+- `networks.py`: network v2 above, `SetEncoderNet(NetConfig)`. It takes no padding size or
+  env size at all, which is what lets one set of weights read any instance.
 - `policy.py`: masked logits are set to the dtype minimum, so a masked candidate has
-  probability exactly 0. Observations are trimmed to the longest real candidate list in the
-  batch before the network sees them. `PPOAgent` implements `Agent` (`save` / `load` keep the
-  weights and shapes only).
+  probability exactly 0. Observations are trimmed per token axis before the network sees them.
+  `PPOAgent` implements `Agent` (`save` / `load` keep the weights and `NetConfig` only).
 - `rollout.py`: an episode that ended (success, truncation or dead end) is never bootstrapped,
   because the env already charged `cost_to_finish`. The only bootstrap is at the end of a
   rollout, for episodes it cut off. Observations are stored trimmed per step and padded to the
@@ -1271,7 +1300,9 @@ annealing; several epochs of minibatches per rollout. γ = 1.0 by default (finit
   config and observation sizes match, and rebuilds the current observations with `observe`.
 - `utils/logging.py`: `metrics.jsonl` (one object per update, the record tests read),
   TensorBoard, and a console line.
-- Observed on `tiny-sharing-m2`: the greedy plan reaches the optimum by update 10 (8 envs × 64
+- `PPOTrainer` still takes the env sizes, only so a checkpoint is resumed into the same
+  observation layout it was saved from.
+- Observed on `tiny-sharing-m2` (network v1): the greedy plan reaches the optimum by update 10 (8 envs × 64
   steps). After entropy collapses, the policy occasionally wobbles: with every advantage near 0,
   per-minibatch normalisation scales noise up. LR annealing damps it, and nothing is tuned for
   it yet.
@@ -1292,7 +1323,7 @@ vf_coef: 0.5
 max_grad_norm: 0.5
 lr: 3.0e-4
 anneal_lr: true
-fluid_identity: false   # network v2 ablation (11.4); not read by network v1
+# fluid_identity: false # reserved for the network v2 ablation (11.4); not built yet
 update_epochs: 4
 num_minibatches: 8
 total_env_steps: 5_000_000
@@ -1350,7 +1381,9 @@ evaluation use.
 `evaluate(producer, benchmark, schedule) -> pandas.DataFrame`, one row per instance: benchmark,
 instance id, producer, status, `success` (status `optimal` or `feasible`), `cost` (float) and
 `cost_exact` (`"a/b"`), the reference (`reference_cost`, `reference_status`, `lower_bound`),
-`num_targets`, `total_demand`, wall time, nodes expanded, every metric of 12.1, and gaps.
+`num_targets`, `total_demand`, the input axes of 1.3 (`num_fluids`, `max_mix_volume`,
+`storage_capacity`, `max_droplet_volume`), wall time, nodes expanded, every metric of 12.1, and
+gaps.
 Gaps are computed exactly from rational costs and only for a successful plan (an unfinished
 plan's cost is not comparable):
 - `gap_to_optimal` = (cost − optimal) / optimal, only where the reference is `optimal`. A gap
@@ -1409,7 +1442,7 @@ vs number of targets; each producer has a fixed colour across all figures).
   ```bash
   python -m meda.train agent=tabular_q
   python -m meda.train agent=tabular_q train.benchmark=tiny_exact_v1 agent.episodes=40000
-  python -m meda.train agent=ppo "train.instances=[tiny-sharing-m2]" env.L_max=128
+  python -m meda.train agent=ppo "train.instances=[tiny-sharing-m2]" env.L_pad=128
   python -m meda.train agent=ppo train.resume=outputs/<run>/checkpoints/last.pt
   python -m meda.train -m agent.lr=1e-4,3e-4 seed=0,1,2        # sweep
   python -m meda.evaluate_cli eval.producers=[random,naive,exact_search] eval.benchmark=tiny_exact_v1
@@ -1529,18 +1562,23 @@ from a checkpoint with identical subsequent metrics (same seed). Training exclud
 instances that differ in fluid count, target count, M and storage capacity, and its candidate
 logits and value are unchanged when fluids, droplets or targets are reordered.
 
-Progress, on observation and network v1: (a) met. `tiny-quarter-m2` and `tiny-sharing-m2`
-each reach their proved optimum (15 and 26) at 10,240 and 20,480 env steps (8 envs, d_model 64,
-2 layers; `pytest -m slow`). (c) met: 2 updates, save, load into a fresh trainer and fresh
-envs, then 2 more updates gives the same metrics and weights as 4 straight updates, on CPU.
+Progress. Before 0.11, on observation and network v1: (a) and (c) met. In 0.11, on observation
+and network v2 (v1 removed):
+- (a) met: `tiny-quarter-m2` and `tiny-sharing-m2` each reach their proved optimum (15 and 26)
+  at 10,240 and 20,480 env steps (8 envs, d_model 64, 2 layers; `pytest -m slow`).
+- (c) met: 2 updates, save, load into a fresh trainer and fresh envs, then 2 more updates gives
+  the same metrics and weights as 4 straight updates, on CPU.
+- (d) met: one network reads instances with F = 2, 3, 4, T = 1, 2, 3, M = 2, 4, 8 and storage
+  capacity 3 and 10, alone or batched together, at two padding sizes with identical logits;
+  logits and value are unchanged when fluids, droplets and targets are reordered.
 
 Remaining, in order:
-1. Observation v2 (9.2, 9.3) and network v2 (11.4), then re-run (a) and (c) on them and meet
-   (d). v1 is removed once v2 passes.
-2. (b) after the stage design (8.3), whose validation sets replace or join `val_stage1_v2`.
-3. Before any stage trains on mixtures: a general mixture cost-to-finish (10.3). Naive cannot
-   build most mixtures, so the truncation penalty is undefined there; this moves from M9 onto
-   the critical path of the goal.
+1. (b) after the stage design (8.3), whose validation sets replace or join `val_stage1_v2`.
+2. Before any stage trains on mixtures: a general mixture cost-to-finish (10.3). Naive cannot
+   build most mixtures, so the truncation penalty is undefined there (the env refuses such an
+   instance at reset, 9.1); this moves from M9 onto the critical path of the goal. Measured:
+   naive builds 21 of the 1,953 three-fluid targets at denominator 64 on M = 8 (3 on M = 4),
+   against every dilution n/64 for M = 2..10.
 
 **M9 — Reserved.** MCTS / AlphaZero-style search; literature baselines with reproduction tests;
 preference-conditioned training; noise model; pipeline interfaces to scheduler/router.
