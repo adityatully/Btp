@@ -171,6 +171,11 @@ def evaluate(producer: Producer, benchmark: BenchmarkSet, schedule: ScheduleConf
             "bound_ratio": None,
             "num_targets": len(instance.targets),
             "total_demand": sum(t.demand for t in instance.targets),
+            # The input axes of SPEC 1.3, for gap-vs-axis curves (12.3).
+            "num_fluids": instance.num_fluids,
+            "max_mix_volume": instance.chip.max_mix_volume,
+            "storage_capacity": instance.chip.storage_capacity,
+            "max_droplet_volume": max(t.droplet_volume for t in instance.targets),
             "wall_time": result.wall_time,
             "nodes_expanded": result.nodes_expanded,
         }
