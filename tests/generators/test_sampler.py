@@ -148,6 +148,23 @@ def test_chip_inputs_and_droplet_volume_are_drawn_per_instance() -> None:
     assert [i.to_json() for i in again] == [i.to_json() for i in drawn]
 
 
+def test_droplets_up_to_m_are_witnessed_and_have_a_penalty() -> None:
+    """SPEC 1.3: droplet volume ranges up to M. Above M / 2 the split often cannot build the
+    droplet (ninths split only into mixes of 3 or 9, so 7 units at M = 8 does not fit); the
+    tree's dilute-up does, so these draws are kept, not refused."""
+    from meda.solvers.fallback import ConstructiveCostToFinish
+
+    cfg = ranged_dilution(max_mix_volume=[8, 10], droplet_volume=[5, 8], accuracy_denominator=9)
+    fallback = ConstructiveCostToFinish(WEIGHTS)
+    drawn = sample_instances(cfg, chip("meda_m8"), np.random.default_rng(5), 30, WEIGHTS)
+    assert any(i.metadata["witness_source"] == "tree" for i in drawn)
+    assert {t.droplet_volume for i in drawn for t in i.targets} == {5, 6, 7, 8}
+    for inst in drawn:
+        final, _, _ = replay(inst, witness_of(inst))
+        assert final.is_success, inst.instance_id
+        assert fallback.supports(inst)
+
+
 def test_droplet_volume_above_the_drawn_m_raises() -> None:
     cfg = ranged_dilution(max_mix_volume=[2, 2], droplet_volume=[3, 3])
     with pytest.raises(ValueError, match="droplet_volume 3 > max_mix_volume 2"):

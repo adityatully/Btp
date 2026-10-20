@@ -1,6 +1,12 @@
 # MEDA Design Automation — Codebase Specification
 
-Version 0.13 · 2026-10-20
+Version 0.14 · 2026-10-21
+
+Changes in 0.14: droplet volume per target ranges up to M, not M/2 (1.3; M/2 had no physical
+reason, only the split tree's limit). The split tree gains a **dilute-up** step, one mix of a
+built droplet with a pure fluid, so it builds droplets of any volume up to M (10.4); plans it
+already built are unchanged. The generator witness and the truncation penalty get this for free.
+
 
 Changes in 0.13: the step limit is sized by default from the problem alone (`depth` rule,
 8.1): 4 × the sum over deliveries of (mix-depth bound + 1), optionally with a multiple drawn
@@ -131,7 +137,7 @@ held-out test axis. **Platform config** is fixed per chip and asked of the super
 | Target ratio vectors (support up to F fluids) | input | random reachable ratios | unseen ratios |
 | Number of targets T (all experiments merged) | input | 1–20 | larger T (e.g. 30–50) |
 | Demand per target | input | 1–4 | larger demand |
-| Droplet volume per target | input | 1 to M/2 | unseen volumes |
+| Droplet volume per target | input | 1 to M (above M/2 one mix serves one delivery) | unseen volumes |
 | Max mix volume M | input | 2–10 (literature 4–10; DMFB = 2) | unseen M inside the range (e.g. 5, 7) and beyond it (e.g. 12) |
 | Storage capacity S | input | tight (binding) to loose, e.g. 2–12 | unseen S, and instances where storage binds |
 | Target tolerance ε | input, or 0 (open, see 1.7) | 0 and small ε | — |
@@ -1185,7 +1191,15 @@ serves as tabular Q's value prior (11.3).
   numerator vector, fluid by fluid, so most are pure); identical pieces merge, each distinct
   piece is a reservoir or is built recursively, and the pieces are folded into a running droplet
   one at a time (every mix at most e times a volume scale s, <= M; about two droplets per level
-  on chip). One droplet serves as many deliveries of its target as its top mix allows. It
+  on chip). A split's top mix is a multiple of a factor of D, so above M/2 it often cannot hold
+  the droplet's volume (ninths at M = 8 come in mixes of 3 or 6). Then the droplet is made by a
+  **dilute-up** (0.14): one mix of s units (volume <= s <= M), k units of a built droplet x_a with
+  l = s - k units of a pure fluid, x_a = (s·x − l·e_fluid)/k; fewest mixes first, at most 4
+  stacked. The split is always tried first, so every plan the split alone built is unchanged
+  (checked on 71,250 single targets: 0 changed, 9,508 newly built). With it the tree builds every
+  dilution n/D (D <= 64, M-smooth) at every volume up to M for M = 3–10. Measured limit: a few
+  3-fluid 1/64ths at volume 7 on M = 7 need an intermediate finer than `max_denominator` (256)
+  and are not found. One droplet serves as many deliveries of its target as its top mix allows. It
   builds **every reachable target** (tested exhaustively on 3- and 4-fluid targets at several
   denominators and M), shares nothing between targets, and returns `None` (not found, never
   "infeasible") when storage is too tight or `min_mix_volume` > 2 blocks a factor. Example:

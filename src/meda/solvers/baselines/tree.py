@@ -17,17 +17,22 @@ level.
 For example 3/16 S + 5/16 R + 1/2 B at M = 8 (16 = 2 x 8): pieces (3, 5, 0)/8 and pure B;
 the first is `Mix(S 3, R 5)`, then `Mix(that 1, B 1)`.
 
-The top level is scaled by s so its droplet holds the deliveries it serves (`s * e <= M`); a
-target whose droplet volume no factorisation can reach returns None. Like naive, no droplet is
-shared between targets, so the plan is an upper bound on the optimum, never a claim about it,
-and None means "not found", never "infeasible".
+The top level is scaled by s so its droplet holds the deliveries it serves (`s * e <= M`).
+When no split fits the volume (often above M / 2, since a split's top mix is a multiple of a
+factor of D), the droplet is made by a **dilute-up** instead: one mix of a built droplet with
+a pure fluid, of any size up to M (`_recipe`). A target neither can build returns None.
+
+Like naive, no droplet is shared between targets, so the plan is an upper bound on the
+optimum, never a claim about it, and None means "not found", never "infeasible".
 """
 
 from __future__ import annotations
 
 import time
+from functools import lru_cache
 
 from meda.core.actions import Action, Output, Source
+from meda.core.chip import ChipLimits
 from meda.core.composition import Composition
 from meda.core.costs import CostWeights
 from meda.core.dag import MixingDAG
@@ -76,21 +81,106 @@ def _top_factor(comp: Composition, need: int, lo: int, hi: int) -> tuple[int, in
     return None if best is None else (best[1], best[2])
 
 
-def build(b: PlanBuilder, comp: Composition, need: int) -> Source | None:
+MAX_DILUTE_UPS = 4
+"""How many dilute-up steps one recipe may stack. Measured: 2 already builds every dilution
+n/D (D <= 64, no prime factor above M) at every volume up to M, for M = 3..10; 4 leaves room
+for mixtures. A bound, so the search ends: a dilute-up input can be finer than its output."""
+
+# A recipe step: ("split", e, s, 0) or ("up", s, fluid, l).
+_Step = tuple[str, int, int, int]
+
+
+def dilute_up_input(comp: Composition, s: int, fluid: int, l: int) -> Composition | None:
+    """The droplet x_a with `Mix(x_a k, fluid l) = comp`, k = s - l, or None if it would need a
+    negative amount of some fluid: x_a = (s * comp - l * e_fluid) / k."""
+    k = s - l
+    num = [s * n for n in comp.num]
+    num[fluid] -= l * comp.den
+    if num[fluid] < 0:
+        return None
+    return Composition.from_ints(tuple(num), k * comp.den)
+
+
+@lru_cache(maxsize=200_000)
+def _recipe(
+    comp: Composition, need: int, lo: int, hi: int, max_den: int, ups: int
+) -> tuple[int, _Step | None] | None:
+    """(mixes, first step) of a recipe for `need` units of `comp`, or None if none is found.
+
+    The split comes first, so every target the split alone builds keeps its plan. Otherwise a
+    **dilute-up**: the droplet is one mix of s units (need <= s <= M), k = s - l units of a
+    built droplet x_a with l units of a pure fluid. That is what makes large droplets: a split
+    top mix must be a multiple of a factor of D, so above M / 2 it often does not fit (1/9 at
+    volume 8 on M = 8 is 1 unit of 8/9 with 7 of buffer). Among dilute-ups, the fewest mixes,
+    then the smallest s.
+    """
+    if comp.den == 1:
+        return 0, None
+    top = _top_factor(comp, need, lo, hi)
+    if top is not None:
+        e, s = top
+        total = len(split := split_pieces(comp, e)) - 1
+        for piece, count in split:
+            sub = _recipe(piece, count * s, lo, hi, max_den, ups)
+            if sub is None:
+                break
+            total += sub[0]
+        else:
+            return total, ("split", e, s, 0)
+    if ups == 0:
+        return None
+    best: tuple[int, _Step] | None = None
+    for s in range(max(need, lo), hi + 1):
+        for fluid, units in enumerate(comp.num):
+            for l in range(1, min(s - 1, s * units // comp.den) + 1):
+                xa = dilute_up_input(comp, s, fluid, l)
+                if xa is None or xa.den > max_den:
+                    continue
+                sub = _recipe(xa, s - l, lo, hi, max_den, ups - 1)
+                if sub is not None and (best is None or sub[0] + 1 < best[0]):
+                    best = (sub[0] + 1, ("up", s, fluid, l))
+    return best
+
+
+def recipe(chip: ChipLimits, comp: Composition, need: int) -> tuple[int, _Step | None] | None:
+    """(mixes, first step) of the tree's recipe for `need` units of `comp` on `chip`."""
+    return _recipe(
+        comp,
+        need,
+        chip.min_mix_volume,
+        chip.max_mix_volume,
+        chip.max_denominator,
+        MAX_DILUTE_UPS,
+    )
+
+
+def build(b: PlanBuilder, comp: Composition, need: int, ups: int = MAX_DILUTE_UPS) -> Source | None:
     """A source holding at least `need` units of `comp`: its reservoir if pure, else a new
     droplet. None if this construction cannot make it on this chip."""
     if comp.den == 1:
         return Source.reservoir(comp.num.index(1))
     chip = b.instance.chip
-    top = _top_factor(comp, need, chip.min_mix_volume, chip.max_mix_volume)
-    if top is None:
+    found = _recipe(comp, need, chip.min_mix_volume, chip.max_mix_volume, chip.max_denominator, ups)
+    if found is None or found[1] is None:
         return None
-    e, s = top
+    step = found[1]
+    if step[0] == "up":
+        _, s, fluid, l = step
+        xa = dilute_up_input(comp, s, fluid, l)
+        assert xa is not None
+        src = build(b, xa, s - l, ups - 1)
+        if src is None:
+            return None
+        out = Source.droplet(b.mix(src, s - l, Source.reservoir(fluid), l))
+        if not src.is_reservoir:
+            b.discard_leftover(src.index)
+        return out
+    _, e, s, _ = step
     running: Source | None = None
     weight = 0
     for piece, count in split_pieces(comp, e):
         take = count * s
-        src = build(b, piece, take)
+        src = build(b, piece, take, ups)
         if src is None:
             return None
         if running is None:
@@ -118,15 +208,19 @@ def _deliver(b: PlanBuilder, target: Target, count: int) -> bool:
 
 
 def _deliveries_per_droplet(b: PlanBuilder, target: Target, most: int) -> int:
-    """The most deliveries (<= `most`) one droplet of `target` can serve: its volume must be a
-    multiple of a top mix size the denominator allows, at most M (e.g. 32nds at M = 3 come only
-    from mixes of 2, so one droplet serves 2 unit deliveries, not 3). At least 1."""
+    """The most deliveries (<= `most`) one droplet of `target` can serve: the largest whose
+    total volume the split builds as one droplet, else the largest a dilute-up builds (32nds at
+    M = 3 split only into mixes of 2, so a split droplet serves 2 unit deliveries; a dilute-up
+    one serves 3). At least 1."""
     comp, chip = target.composition, b.instance.chip
     if comp.den == 1:
         return most  # a reservoir serves any number
     for count in range(most, 0, -1):
         need = count * target.droplet_volume
         if _top_factor(comp, need, chip.min_mix_volume, chip.max_mix_volume) is not None:
+            return count
+    for count in range(most, 0, -1):
+        if recipe(chip, comp, count * target.droplet_volume) is not None:
             return count
     return 1
 

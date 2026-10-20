@@ -16,7 +16,7 @@ from meda.core.rules import replay
 from meda.generators.benchmark_io import BenchmarkSet
 from meda.solvers.base import SolveBudget
 from meda.solvers.baselines.naive import factorise_within, naive_plan
-from meda.solvers.baselines.tree import TreeSolver, split_pieces, tree_plan
+from meda.solvers.baselines.tree import TreeSolver, dilute_up_input, split_pieces, tree_plan
 from meda.solvers.exact_search import ExactSearch
 from tests.core.helpers import chip, default_weights, dilution, mixture
 
@@ -109,6 +109,59 @@ def test_demand_shares_a_droplet_and_volume_scales_the_top_mix() -> None:
     assert sum(1 for n in three.nodes if n.type.name == "MIX") == 2  # one droplet serves all
     big = checked(single((3, 5, 8), 16, 8, volume=3))
     assert all(n.volume == 3 for n in big.nodes if n.type.name == "OUTPUT")
+
+
+def test_a_large_droplet_is_made_by_a_dilute_up() -> None:
+    """1/9 at volume 8 on M = 8: no split fits (a top mix must be a multiple of 3, so 3 or 6
+    units), so the last mix is 1 unit of 8/9 with 7 of buffer."""
+    inst = single((1, 8), 9, 8, volume=8)
+    assert naive_plan(inst) is None
+    dag = checked(inst)
+    last = [n for n in dag.nodes if n.type.name == "MIX"][-1]
+    assert last.volume == 8
+    assert all(n.volume == 8 for n in dag.nodes if n.type.name == "OUTPUT")
+
+
+@pytest.mark.parametrize(
+    ("num", "den", "s", "fluid", "l"), [((1, 8), 9, 8, 1, 7), ((3, 5, 8), 16, 7, 2, 3)]
+)
+def test_dilute_up_input_mixes_back_to_the_target(
+    num: tuple[int, ...], den: int, s: int, fluid: int, l: int
+) -> None:
+    comp = Composition.from_ints(num, den)
+    xa = dilute_up_input(comp, s, fluid, l)
+    assert xa is not None
+    k = s - l
+    blend = [k * xa.num[f] * den // xa.den for f in range(len(num))]
+    blend[fluid] += l * den
+    assert Composition.from_ints(tuple(blend), s * den) == comp
+    assert dilute_up_input(comp, 8, 0, 7) is None  # 7 units of S exceed 8 x 1/9
+
+
+@pytest.mark.parametrize("m", [3, 5, 8, 10])
+def test_every_reachable_dilution_is_built_at_every_volume_up_to_m(m: int) -> None:
+    """The split alone stops near M / 2: its top mix must be a multiple of a factor of D."""
+    for den in (6, 8, 9, 12, 16, 20, 24, 30, 32, 36):
+        if factorise_within(den, 2, m) is None:
+            continue
+        for n in range(1, den):
+            if Composition.from_ints((n, den - n), den).den != den:
+                continue
+            for volume in range(1, m + 1):
+                assert tree_plan(single((n, den - n), den, m, volume=volume)) is not None, (
+                    n,
+                    den,
+                    volume,
+                )
+
+
+def test_a_dilute_up_needing_finer_intermediates_than_the_cap_is_not_found() -> None:
+    """A recorded limit: 13/64 S + 25/64 R + 26/64 B at volume 7 on M = 7 needs an
+    intermediate finer than 1/256, so under the default cap the tree finds nothing; with
+    the cap raised it is built."""
+    inst = single((13, 25, 26), 64, 7, volume=7)
+    assert tree_plan(inst) is None
+    checked(replace(inst, chip=replace(inst.chip, max_denominator=4096)))
 
 
 def test_tight_storage_returns_none_rather_than_raising() -> None:
