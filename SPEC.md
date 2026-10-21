@@ -1,6 +1,12 @@
 # MEDA Design Automation — Codebase Specification
 
-Version 0.15 · 2026-10-21
+Version 0.16 · 2026-10-21
+
+Changes in 0.16 (documentation only): the Track 2 input ranges fixed by the user on 2026-10-20
+are recorded in 1.3 (training ranges and probe values, storage meaning, target volume, fixed
+64 / 8 / 1 costs, two-input mixes); 1.7 lists only the decisions still open; 1.6 drops the
+mixture-fallback limit (resolved in 0.12).
+
 
 Changes in 0.15 (capability ceilings removed before the stage design; no stage, regime or
 benchmark chosen): the split tree picks a recipe that fits the chip's storage (an exact peak),
@@ -119,9 +125,10 @@ Read sections 1–5 before writing any code. Implement in the milestone order of
 
 ## 1. Goals and non-goals
 
-*2026-10-19, updated 2026-10-20. The ranges marked "suggested" wait for the user's and the
-supervisor's confirmation. The observation and network meet 1.4 (see the status note there);
-the stages and benchmarks do not cover 1.3 yet.*
+*2026-10-19, updated 2026-10-21. The ranges of 1.3 were fixed by the user on 2026-10-20 from
+the literature survey (PLATFORM_PARAMS.md), taking the widest range the literature supports,
+since generalisation is the argument. The observation and network meet 1.4 (see the status
+note there); the stages and benchmarks do not cover 1.3 yet.*
 
 ### 1.1 The goal
 **One trained policy that takes a sample-preparation problem and the chip's limits as input
@@ -146,19 +153,33 @@ demand vector, almost none has a storage limit, and none has all five.
 ### 1.3 Inputs the agent must take
 **Inputs** vary per problem, are visible in the observation, are varied in training, and get a
 held-out test axis. **Platform config** is fixed per chip and asked of the supervisor (section 15).
+The design is for MEDA k:l mixing; M = 2 (DMFB, 1:1) is only a correctness check, and no range
+or default is chosen with 1:1 mixing in mind.
 
-| Parameter | Kind | Suggested training range | Held-out test axis |
+| Parameter | Kind | Training range | Probed beyond training |
 |---|---|---|---|
-| Number of fluids F, and each fluid's kind (sample / reagent / buffer) | input | 2–6 | larger F (e.g. 8) |
-| Target ratio vectors (support up to F fluids) | input | random reachable ratios | unseen ratios |
-| Number of targets T (all experiments merged) | input | 1–20 | larger T (e.g. 30–50) |
-| Demand per target | input | 1–4 | larger demand |
-| Droplet volume per target | input | 1 to M (above M/2 one mix serves one delivery) | unseen volumes |
-| Max mix volume M | input | 2–10 (literature 4–10; DMFB = 2) | unseen M inside the range (e.g. 5, 7) and beyond it (e.g. 12) |
-| Storage capacity S | input | tight (binding) to loose, e.g. 2–12 | unseen S, and instances where storage binds |
-| Target tolerance ε | input, or 0 (open, see 1.7) | 0 and small ε | — |
-| Min mix volume, min droplet volume, partial take allowed | platform config | — | — |
-| Cost weights (sample, reagent, buffer, mix, waste) | platform config in phase 1; an input later (6.5) | — | — |
+| Max mix volume M | input | 3–10 | 2 (sanity check), 12, 16 |
+| Number of fluids F, and each fluid's kind (sample / reagent / buffer) | input | 2–6 (baseline comparisons at F ≤ 5) | 7, 8, 10 |
+| Exact targets (ε = 0): accuracy D | input | D M-smooth (every prime factor ≤ M), up to 256 | 512 |
+| Tolerant targets: any ratio within ε | input | ε ∈ {0.001, 0.005} (FacDA's setting), trained alongside exact targets | smaller ε |
+| Target ratio vectors (support up to F fluids) | input | drawn by a weighted mix of samplers (8.1): exact grid, ε-tolerant, structured experiments | ratios never trained on (ratio-level holdout) |
+| Number of targets T (all experiments merged) | input | 1–10 | 20 |
+| Demand per target | input | 1–4 | 6 |
+| Droplet volume per target | input | 1 to M (above M/2 one mix serves one delivery) | — |
+| Storage capacity S | input | 2–16 and unbounded, with many draws where it binds | tighter or unseen values |
+| Intermediate cap `max_denominator` | per problem (8.1) | set per problem, not a chip property | — |
+| Min mix volume, min droplet volume, partial take allowed | platform config | min mix 2, min droplet 1, partial takes allowed | — |
+| Cost weights (sample, reagent, buffer, mix, waste) | platform config, fixed | 64 / 8 / 1, mix 1, waste 1 (`costs/geometric.yaml`, 6.3) | — |
+
+Notes on the table:
+- **Storage** counts every non-reservoir droplet on chip, the mix result included. The
+  literature's "k storage units" counts only parking cells; their k is roughly our k + 2, and
+  comparisons state that mapping.
+- **Target volume** is demand × droplet volume (each ≤ M), with the split fixed by the
+  generator. A total-volume target that the agent splits itself (TVODA's setting) is a later
+  extension that needs a core change.
+- **Cost weights** stay fixed; weights as an input is later multi-objective work (6.5).
+- **Mixes** take two inputs for the agent; more inputs are for baseline reproduction only.
 
 Out of scope for this agent (later pipeline stages, section 14): routing, droplet positions,
 contamination and washing, completion time, detection, split error (phase 2), mixes with more
@@ -202,20 +223,21 @@ the stages and benchmarks that use them wait for the stage design (8.3, 8.4).
   splits), so `L_pad`, memory and decision difficulty grow at large M.
 - **Grading weakens with size:** exact search proves optima only on small instances, and the
   [lower bound, best known] intervals widen on larger ones.
-- **Mixtures need a general fallback:** `cost_to_finish` covers dilutions only (10.3), so a
-  general mixture fallback is on the critical path.
+- **Exact search proves optima only on small problems:** measured in `notes/track2` (Track 2
+  experiment E2), larger benchmarks are graded by [lower bound, best known] intervals.
 - **Exact-integer bounds in the encoder:** denominators are kept below 2^20 (9.3); much finer
   accuracy would need that revisited.
 
-### 1.7 Open decisions (ask before fixing the ranges)
-1. The target platform's realistic M, fluid count and storage capacity (supervisor). The
-   architecture is not limited by the answer; the training ranges and headline results are
-   centred on it.
-2. Storage counted in droplets or in volume (section 15).
-3. Exact targets (ε = 0) or a tolerance ε > 0, and whether `max_denominator` is a real chip
-   limit (an input) or only a search bound.
-4. Optional extensions: non-pure stock fluids, a hard budget on sample volume, cost weights as
-   an input (preference conditioning, 6.5).
+### 1.7 Open decisions
+Settled on 2026-10-20 (1.3): storage in droplets, exact and tolerant targets both trained,
+`max_denominator` a per-problem bound, partial takes allowed, costs fixed at 64 / 8 / 1.
+Still open:
+1. The target platform's realistic M, mixer footprint and reservoir count, whether the router
+   can serve as a cost oracle, and real assay cost weights (supervisor). The architecture is not
+   limited by the answer; the headline results are centred on it.
+2. Goals, benchmarks, generator stages and training regime (Track 2, in that order; 8.3, 8.4).
+3. Optional extensions: total-volume targets, non-pure stock fluids, a hard budget on sample
+   volume, cost weights as an input (preference conditioning, 6.5).
 
 ### 1.8 Infrastructure goals
 These carry the agent goal and are built (M0–M7):
