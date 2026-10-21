@@ -1,6 +1,22 @@
 # MEDA Design Automation — Codebase Specification
 
-Version 0.14 · 2026-10-21
+Version 0.15 · 2026-10-21
+
+Changes in 0.15 (capability ceilings removed before the stage design; no stage, regime or
+benchmark chosen): the split tree picks a recipe that fits the chip's storage (an exact peak),
+adds a **blend** of two built droplets, searches under a deterministic budget, and builds a
+tolerant target at the coarsest reachable composition within its tolerance (10.4). The
+generator draws accuracy per target from a range (only M-smooth D for exact targets), support
+size from a range, tolerance from a list, droplet volume up to each instance's M, and sets
+`max_denominator` per problem; it can hold out ratios as well as problems, and the depth bound
+of a tolerant target uses the coarsest composition within it (8.1). `GeneratorSource` and
+`train.source=generator` train PPO from a generator (13). The truncation penalty's cache is
+keyed by target content, so it no longer grows per instance (10.3). Rollouts store each env's
+observation trimmed and pad per minibatch (11.4). Env padding defaults cover the 1.3 ranges
+(9.2). `configs/costs/geometric.yaml`: the fixed 64 / 8 / 1 profile chosen for the MEDA stages
+(6.3); PPO's `reward_scale` keeps its returns near unit scale (11.4). `tree` gets a plot colour
+(a producer since 0.12, it crashed `evaluate_cli`'s plots).
+
 
 Changes in 0.14: droplet volume per target ranges up to M, not M/2 (1.3; M/2 had no physical
 reason, only the split tree's limit). The split tree gains a **dilute-up** step, one mix of a
@@ -592,6 +608,10 @@ w_mix: 1.0
 w_waste: 1.0
 ```
 These defaults are placeholders: the sample is the scarcest fluid. Make every weight overridable.
+The MEDA stages use `configs/costs/geometric.yaml` (chosen 2026-10-20): sample 64, reagent 8,
+buffer 1, mix 1, waste 1, e-MRCM's geometric scheme with the buffer kept above 0 (a free
+fluid gives degenerate plans). `default.yaml` stays, because the stored optima of the existing
+frozen sets use it.
 
 Weights are **exact rationals** (`CostWeights`, parsed with `Rational.parse`; YAML may use ints,
 decimals such as `0.5`, or strings such as `"1/3"`). The scalar cost is therefore an exact
@@ -691,8 +711,21 @@ are an error. Fields:
     (`generators.synthetic`), so they are reachable under the chip limits. Redrawn until the
     support really has `support_size` fluids, since a short walk can leave one unused.
   - `fixed_list`: explicit `fixed_compositions` (for tests).
-- `support_size`: how many fluids are nonzero in a target (dilution = 2: one sample + buffer).
-- `droplet_volume`: a fixed value or a `[low, high]` range, drawn per target. A draw above the
+- `support_size`: how many fluids are nonzero in a target (dilution = 2: one sample + buffer);
+  a fixed value or a `[low, high]` range drawn per target (capped at the instance's F).
+  `reachable_walk` takes a fixed value.
+- `accuracy_denominator`: a fixed D, or a `[low, high]` range drawn per target (0.15). From a
+  range, an exact target (tolerance 0) draws only D whose prime factors are at most the
+  instance's M, so every M gets non-dyadic grids it can reach (12 = 2²·3 at M >= 3, 120 at
+  M >= 5); a tolerant target may draw any D.
+- `tolerance`: a value, or a list drawn from per target (e.g. `[0, "1/200", "1/1000"]`). A
+  tolerant target need not be reachable; the witness builds the coarsest reachable composition
+  within it (10.4).
+- `max_denominator` (optional): the bound on any droplet's denominator for this problem (1.7:
+  a property of the problem, not the chip), replacing the chip config's value. A tolerance of
+  1/1000 needs grids finer than 256.
+- `droplet_volume`: a fixed value or a `[low, high]` range, drawn per target; `[low, M]` ends at
+  each instance's own M (1.3: 1 to M, with M drawn per instance). A draw above the
   instance's M raises (no droplet could be delivered); `tolerance`.
 - `max_mix_volume`, `storage_capacity` (optional, `[low, high]`): chip inputs drawn per instance
   (1.3). The instance's chip is the configured chip with these two fields replaced and named
@@ -727,6 +760,20 @@ naive construction, else from the split tree (10.4); `metadata["witness_source"]
 Naive goes first, so every instance it already witnessed is unchanged. `metadata` records the generator name and version, the config hash, the
 composition sampler, `witness_actions`, `witness_source` and, when `weights` is given,
 `known_upper_bound` (the witness cost as an exact `"a/b"` string).
+
+**Tolerant targets in the depth rule.** A target's mix-depth bound uses the smallest
+denominator of any composition within its tolerance (a plan may deliver that one), so a
+tolerant target's budget is not sized by the fine grid it was written on.
+
+**Training from a generator.** `GeneratorSource(config, chip, weights, exclude,
+exclude_compositions)` is an env instance source that draws a fresh problem every episode
+(picklable, for `AsyncVectorEnv`). A draw no construction can witness raises
+`UnwitnessedError` from `sample_instance`; the source redraws it instead of ending a training
+run, records the count in `metadata["unwitnessed_redraws"]` (measured: 2 in 150 draws over the
+full 1.3 ranges, all at storage 2), and raises after `max_unwitnessed` (100) in a row.
+`exclude_compositions` (also a `sample_instance` argument)
+holds out target **ratios**: no target of a draw has one, which is what an unseen-ratio test set
+needs (whole-problem hashes cannot express it).
 
 `exclude` is a set of canonical instance hashes (8.4) to avoid. A small stage needs it: stage 1
 holds only 31 distinct problems, so training must be told which ones the frozen evaluation sets
@@ -1160,8 +1207,9 @@ Taking the cheaper construction keeps it as close to the true cost of finishing 
 constructions allow. It is hypothetical, so it is computed on a relaxed instance and need not fit
 the step limit that was just exceeded; the chip, storage included, is the instance's own. Both
 constructions build each target on its own from an empty chip, so the remaining cost is a sum
-over targets, cached per (instance, target, remaining demand); the object is picklable for
-`AsyncVectorEnv`.
+over targets, cached per (target, remaining demand, fluid kinds, chip limits), so a generator
+drawing a fresh problem per episode does not grow the cache per instance (it is cleared at
+200,000 entries; values never depend on it); the object is picklable for `AsyncVectorEnv`.
 
 **Scope.** Every reachable target: one whose reduced denominator has no prime factor above M
 (a mix of k + l <= M units can introduce no larger prime), given storage for the tree's depth.
@@ -1197,9 +1245,27 @@ serves as tabular Q's value prior (11.3).
   l = s - k units of a pure fluid, x_a = (s·x − l·e_fluid)/k; fewest mixes first, at most 4
   stacked. The split is always tried first, so every plan the split alone built is unchanged
   (checked on 71,250 single targets: 0 changed, 9,508 newly built). With it the tree builds every
-  dilution n/D (D <= 64, M-smooth) at every volume up to M for M = 3–10. Measured limit: a few
-  3-fluid 1/64ths at volume 7 on M = 7 need an intermediate finer than `max_denominator` (256)
-  and are not found. One droplet serves as many deliveries of its target as its top mix allows. It
+  dilution n/D (D <= 64, M-smooth) at every volume up to M for M = 3–10.
+
+  0.15: **storage-aware.** Each recipe's storage peak is computed exactly (the running droplet
+  waits on chip while the next piece is built; leftovers go to waste after each mix), and a
+  recipe must fit the chip's storage capacity; when the split does not, a dilute-up (at most
+  two droplets on chip) or a **blend** does. A blend makes the droplet as one mix of two built
+  droplets a and b (a is the target with one 1/D unit moved between two fluids; b is what makes
+  the blend exact), needed for a many-fluid target at volume M where neither input can be pure
+  (5/16, 5/16, 3/16, 3/16 at volume 3 on M = 3); its inputs use no blends. The search deepens
+  one extra step at a time (so the shortest recipe is found first) and stops after
+  `SEARCH_BUDGET` = 20,000 expansions per query: a target with no recipe under tight storage is
+  "not found" instead of searched for minutes; the budget counts expansions, not seconds, and
+  each query starts from an empty memo, so results are deterministic. Measured: at capacity 2
+  every 3-fluid 1/64th on M = 8 in the test sample is built (the split alone needs 3 for some);
+  6 fluids at M = 3 still need 3–4; the slowest query at capacity 2 takes about 2 s.
+
+  0.15: **tolerant targets.** For a target with tolerance ε > 0 the tree builds the
+  composition with the smallest reachable denominator (prime factors <= M, at most
+  `max_denominator`) within ε, found exactly (`within_tolerance`; FacDA's ratio
+  transformation, which FacDA applies to the nearest grid instead): 70/119 at M = 6 within
+  0.005 becomes 7/12. One droplet serves as many deliveries of its target as its top mix allows. It
   builds **every reachable target** (tested exhaustively on 3- and 4-fluid targets at several
   denominators and M), shares nothing between targets, and returns `None` (not found, never
   "infeasible") when storage is too tight or `min_mix_volume` > 2 blocks a factor. Example:
@@ -1331,8 +1397,11 @@ feature per fluid (`agent.fluid_identity`; reserved, not built: added with the a
 
 **Batch trimming.** Observations are trimmed to the batch's largest real row count per token
 axis (fluids, droplets, targets, candidates; at least 1) before the network sees them, every
-array along every axis it has (`policy.KEY_AXES`); the rollout stores them trimmed per step and
-pads each axis to the widest step of the rollout (`cand_index` with −1, the rest with 0).
+array along every axis it has (`policy.KEY_AXES`); the rollout stores each env's observation
+trimmed to its own widths and pads each axis only to the widest observation of a minibatch
+(`cand_index` with −1, the rest with 0). Candidate counts range from tens to thousands (random
+play reaches about 9,300 at M = 10, F = 6, storage 32), so the stored rollout grows with the
+mean width rather than the widest step.
 
 **Network v1 (removed in 0.11).** MLPs on v1 source and target rows (widths fixed by `F_max`,
 `T_max`), the same Transformer without relation biases, and the same scorer.
@@ -1340,6 +1409,10 @@ pads each axis to the widest step of the rollout (`cand_index` with −1, the re
 **Algorithm (`ppo.py`, CleanRL style):** vectorised rollouts; GAE(λ); clipped surrogate;
 value loss (optionally clipped); entropy bonus; gradient-norm clipping; learning-rate
 annealing; several epochs of minibatches per rollout. γ = 1.0 by default (finite episodes).
+`reward_scale` (0.15, default 1) multiplies rewards before GAE: with γ = 1 a positive constant
+leaves the optimal policy unchanged, and it keeps value targets near unit scale (under
+`costs/geometric` an untrained episode returns about −4,750 and the value loss starts near
+2×10⁵). Episode metrics stay in plan-cost units.
 
 **As built (M8).**
 - `networks.py`: network v2 above, `SetEncoderNet(NetConfig)`. It takes no padding size or
@@ -1349,8 +1422,8 @@ annealing; several epochs of minibatches per rollout. γ = 1.0 by default (finit
   `PPOAgent` implements `Agent` (`save` / `load` keep the weights and `NetConfig` only).
 - `rollout.py`: an episode that ended (success, truncation or dead end) is never bootstrapped,
   because the env already charged `cost_to_finish`. The only bootstrap is at the end of a
-  rollout, for episodes it cut off. Observations are stored trimmed per step and padded to the
-  widest step of the rollout.
+  rollout, for episodes it cut off. Observations are stored trimmed per env and step and padded
+  per minibatch (`minibatch_obs`).
 - `ppo.py`: `PPOConfig.from_dict` (unknown keys raise; `clip_vloss` added to the config);
   advantages normalised per minibatch. `PPOTrainer` takes the vector env from the caller, so
   where problems come from is not its concern, and it refuses one that is not `SAME_STEP`.
@@ -1496,8 +1569,11 @@ vs number of targets; each producer has a fixed colour across all figures).
   with `train.resume=<path>`) and `checkpoints/agent.pt`, and grades the greedy policy into
   `results.parquet` and `summary.md`. Every `train.eval_every_updates` it also grades the
   training instances (`eval/` in the logs). `train.vector` picks `sync` or `async` workers;
-  `train.device: auto` picks CUDA when available, else CPU (MPS is opt-in). Training from a
-  generator, and which sets to validate on, wait for the stage design (8.3).
+  `train.device: auto` picks CUDA when available, else CPU (MPS is opt-in).
+- `train.source=generator` (0.15, PPO only): every episode draws a fresh problem from the
+  `generator` config (`GeneratorSource`, 8.1), never one of `train.exclude` (default
+  `tiny_exact_v1`, `val_stage1_v2`) or of `train.benchmark`, which then serves only to grade.
+  Which generators and sets to use waits for the stage design (8.3).
 - Example commands:
   ```bash
   python -m meda.train agent=tabular_q
