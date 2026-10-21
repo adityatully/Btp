@@ -29,11 +29,12 @@ optimum, never a claim about it, and None means "not found", never "infeasible".
 from __future__ import annotations
 
 import time
-from functools import lru_cache
+from functools import cache
+from typing import NamedTuple
 
 from meda.core.actions import Action, Output, Source
 from meda.core.chip import ChipLimits
-from meda.core.composition import Composition
+from meda.core.composition import Composition, Rational
 from meda.core.costs import CostWeights
 from meda.core.dag import MixingDAG
 from meda.core.problem import Instance, Target
@@ -81,13 +82,37 @@ def _top_factor(comp: Composition, need: int, lo: int, hi: int) -> tuple[int, in
     return None if best is None else (best[1], best[2])
 
 
-MAX_DILUTE_UPS = 4
-"""How many dilute-up steps one recipe may stack. Measured: 2 already builds every dilution
-n/D (D <= 64, no prime factor above M) at every volume up to M, for M = 3..10; 4 leaves room
-for mixtures. A bound, so the search ends: a dilute-up input can be finer than its output."""
+MAX_EXTRA_STEPS = 4
+"""How many dilute-up or blend steps one recipe may stack. Measured: 2 already builds every
+dilution n/D (D <= 64, no prime factor above M) at every volume up to M, for M = 3..10; 4
+leaves room for mixtures and tight storage. A bound, so the search ends: the input of such a
+step can be finer than its output."""
 
-# A recipe step: ("split", e, s, 0) or ("up", s, fluid, l).
+SEARCH_BUDGET = 20_000
+"""Recipe expansions one query may spend. Under tight storage a target may have no recipe,
+and proving that would mean trying every one; the budget stops the search and the target is
+"not found" (never "infeasible"). It counts expansions, not seconds, and every query starts
+with an empty memo, so the outcome is deterministic."""
+
+# A recipe step: ("split", e, s, 0), ("up", s, fluid, l) or ("blend", s, k, move), where
+# `move` = i * F + j moves one 1/D unit from fluid j to fluid i (see `blend_inputs`).
 _Step = tuple[str, int, int, int]
+_Key = tuple[Composition, int, int, int, bool]  # comp, need, cap, extra, blend allowed
+
+
+class _Found(NamedTuple):
+    mixes: int
+    peak: int  # most droplets on chip while it is built, counting its own
+    volume: int  # units its droplet holds; 0 for a reservoir
+    step: _Step | None  # None for a reservoir
+
+    @property
+    def is_droplet(self) -> bool:
+        return self.step is not None
+
+
+class _OutOfBudget(Exception):
+    pass
 
 
 def dilute_up_input(comp: Composition, s: int, fluid: int, l: int) -> Composition | None:
@@ -101,88 +126,206 @@ def dilute_up_input(comp: Composition, s: int, fluid: int, l: int) -> Compositio
     return Composition.from_ints(tuple(num), k * comp.den)
 
 
-@lru_cache(maxsize=200_000)
-def _recipe(
-    comp: Composition, need: int, lo: int, hi: int, max_den: int, ups: int
-) -> tuple[int, _Step | None] | None:
-    """(mixes, first step) of a recipe for `need` units of `comp`, or None if none is found.
-
-    The split comes first, so every target the split alone builds keeps its plan. Otherwise a
-    **dilute-up**: the droplet is one mix of s units (need <= s <= M), k = s - l units of a
-    built droplet x_a with l units of a pure fluid. That is what makes large droplets: a split
-    top mix must be a multiple of a factor of D, so above M / 2 it often does not fit (1/9 at
-    volume 8 on M = 8 is 1 unit of 8/9 with 7 of buffer). Among dilute-ups, the fewest mixes,
-    then the smallest s.
-    """
-    if comp.den == 1:
-        return 0, None
-    top = _top_factor(comp, need, lo, hi)
-    if top is not None:
-        e, s = top
-        total = len(split := split_pieces(comp, e)) - 1
-        for piece, count in split:
-            sub = _recipe(piece, count * s, lo, hi, max_den, ups)
-            if sub is None:
-                break
-            total += sub[0]
-        else:
-            return total, ("split", e, s, 0)
-    if ups == 0:
+def blend_inputs(
+    comp: Composition, s: int, k: int, move: int
+) -> tuple[Composition, Composition] | None:
+    """Two droplets a, b with `Mix(a k, b s - k) = comp`: a is comp with one 1/D unit moved
+    from fluid j to fluid i (`move` = i * F + j), b = (s * comp - k * a) / (s - k). None if
+    either would need a negative amount of a fluid, or a == b."""
+    f = comp.num_fluids
+    i, j = divmod(move, f)
+    if i == j or comp.num[j] == 0:
         return None
-    best: tuple[int, _Step] | None = None
-    for s in range(max(need, lo), hi + 1):
-        for fluid, units in enumerate(comp.num):
-            for l in range(1, min(s - 1, s * units // comp.den) + 1):
-                xa = dilute_up_input(comp, s, fluid, l)
-                if xa is None or xa.den > max_den:
-                    continue
-                sub = _recipe(xa, s - l, lo, hi, max_den, ups - 1)
-                if sub is not None and (best is None or sub[0] + 1 < best[0]):
-                    best = (sub[0] + 1, ("up", s, fluid, l))
-    return best
+    na = list(comp.num)
+    na[i] += 1
+    na[j] -= 1
+    nb = [s * x - k * y for x, y in zip(comp.num, na, strict=True)]
+    if min(nb) < 0:
+        return None
+    a = Composition.from_ints(tuple(na), comp.den)
+    b = Composition.from_ints(tuple(nb), (s - k) * comp.den)
+    return None if a == b else (a, b)
 
 
-def recipe(chip: ChipLimits, comp: Composition, need: int) -> tuple[int, _Step | None] | None:
-    """(mixes, first step) of the tree's recipe for `need` units of `comp` on `chip`."""
-    return _recipe(
-        comp,
-        need,
-        chip.min_mix_volume,
-        chip.max_mix_volume,
-        chip.max_denominator,
-        MAX_DILUTE_UPS,
-    )
+def _left(sub: _Found, take: int) -> int:
+    """1 if taking `take` units of the sub-recipe's droplet leaves some on chip."""
+    return int(sub.is_droplet and sub.volume > take)
 
 
-def build(b: PlanBuilder, comp: Composition, need: int, ups: int = MAX_DILUTE_UPS) -> Source | None:
-    """A source holding at least `need` units of `comp`: its reservoir if pure, else a new
-    droplet. None if this construction cannot make it on this chip."""
+class _Search:
+    """One recipe query on one chip: a memo of finished sub-recipes and an expansion budget.
+
+    `recipe` returns a recipe for a droplet of at least `need` units of `comp` that never holds
+    more than `cap` droplets on chip, or None. The split comes first, so every target the split
+    alone builds keeps its plan. If it does not fit (its top mix is a multiple of a factor of
+    D, so above M / 2 it often cannot hold the volume; or it needs more storage), the fewest-mix
+    recipe whose last step is
+    - a **dilute-up**: one mix of s units (need <= s <= M), k units of a built droplet x_a with
+      l = s - k of a pure fluid (1/9 at volume 8 on M = 8 is 1 unit of 8/9 with 7 of buffer).
+      It holds at most two droplets, so it also serves tight storage; else
+    - a **blend** of two built droplets a and b, themselves built without blends (a mixture at
+      volume M, where neither input can be pure: 5/16, 5/16, 3/16, 3/16 at volume 3 on M = 3).
+    Ties go to the smallest s.
+    """
+
+    def __init__(self, chip: ChipLimits) -> None:
+        self.lo, self.hi = chip.min_mix_volume, chip.max_mix_volume
+        self.max_den = chip.max_denominator
+        self.memo: dict[_Key, _Found | None] = {}
+        self.left = SEARCH_BUDGET
+
+    def find(self, comp: Composition, need: int, cap: int) -> tuple[_Found, _Key] | None:
+        """Iterative deepening over the extra steps, so a short recipe is found first."""
+        try:
+            for extra in range(MAX_EXTRA_STEPS + 1):
+                key = (comp, need, cap, extra, True)
+                found = self.recipe(*key)
+                if found is not None:
+                    return found, key
+        except _OutOfBudget:
+            pass
+        return None
+
+    def recipe(
+        self, comp: Composition, need: int, cap: int, extra: int, blend: bool
+    ) -> _Found | None:
+        if comp.den == 1:
+            return _Found(0, 0, 0, None)
+        if cap < 1:
+            return None
+        key = (comp, need, cap, extra, blend)
+        if key in self.memo:
+            return self.memo[key]
+        if self.left == 0:
+            raise _OutOfBudget
+        self.left -= 1
+        found = self._expand(comp, need, cap, extra, blend)
+        self.memo[key] = found
+        return found
+
+    def _split(self, comp: Composition, e: int, s: int, cap: int, extra: int) -> _Found | None:
+        """The split recipe and its exact storage peak, mirroring `build`: each piece is built
+        while the running droplet waits on chip, then the two mix and leftovers go to waste."""
+        pieces = split_pieces(comp, e)
+        mixes, peak = len(pieces) - 1, 0
+        running: _Found | None = None
+        running_left = 0
+        for piece, count in pieces:
+            take = count * s
+            held = int(running is not None and running.is_droplet)
+            sub = self.recipe(piece, take, cap - held, extra, True)
+            if sub is None:
+                return None
+            mixes += sub.mixes
+            peak = max(peak, held + sub.peak)
+            if running is None:
+                running, running_left = sub, _left(sub, take)
+                continue
+            peak = max(peak, running_left + _left(sub, take) + 1)
+            running = _Found(0, 0, 0, ("split", e, s, 0))  # a mix result, used up next
+            running_left = 0
+        return _Found(mixes, peak, e * s, ("split", e, s, 0))
+
+    def _expand(
+        self, comp: Composition, need: int, cap: int, extra: int, blend: bool
+    ) -> _Found | None:
+        top = _top_factor(comp, need, self.lo, self.hi)
+        if top is not None:
+            found = self._split(comp, top[0], top[1], cap, extra)
+            if found is not None and found.peak <= cap:
+                return found
+        if extra == 0:
+            return None
+        best: _Found | None = None
+        for s in range(max(need, self.lo), self.hi + 1):
+            for fluid, units in enumerate(comp.num):
+                for l in range(1, min(s - 1, s * units // comp.den) + 1):
+                    xa = dilute_up_input(comp, s, fluid, l)
+                    if xa is None or xa.den > self.max_den:
+                        continue
+                    sub = self.recipe(xa, s - l, cap, extra - 1, blend)
+                    if sub is None:
+                        continue
+                    peak = max(sub.peak, _left(sub, s - l) + 1)
+                    if peak <= cap and (best is None or sub.mixes + 1 < best.mixes):
+                        best = _Found(sub.mixes + 1, peak, s, ("up", s, fluid, l))
+        if best is not None or not blend:
+            return best
+        f = comp.num_fluids
+        for s in range(max(need, self.lo), self.hi + 1):
+            for k in range(1, s):
+                for move in range(f * f):
+                    pair = blend_inputs(comp, s, k, move)
+                    if pair is None or max(pair[0].den, pair[1].den) > self.max_den:
+                        continue
+                    ra = self.recipe(pair[0], k, cap, extra - 1, False)
+                    if ra is None:
+                        continue
+                    rb = self.recipe(pair[1], s - k, cap - int(ra.is_droplet), extra - 1, False)
+                    if rb is None:
+                        continue
+                    mixes = ra.mixes + rb.mixes + 1
+                    peak = max(
+                        ra.peak, int(ra.is_droplet) + rb.peak, _left(ra, k) + _left(rb, s - k) + 1
+                    )
+                    if peak <= cap and (best is None or mixes < best.mixes):
+                        best = _Found(mixes, peak, s, ("blend", s, k, move))
+        return best
+
+
+def recipe(chip: ChipLimits, comp: Composition, need: int) -> _Found | None:
+    """The tree's recipe for `need` units of `comp` on `chip`, from an empty chip."""
+    found = _Search(chip).find(comp, need, chip.storage_capacity)
+    return None if found is None else found[0]
+
+
+def build(b: PlanBuilder, comp: Composition, need: int) -> Source | None:
+    """A source holding at least `need` units of `comp`, built from an empty chip: its
+    reservoir if pure, else a new droplet. None if this construction cannot make it here."""
     if comp.den == 1:
         return Source.reservoir(comp.num.index(1))
-    chip = b.instance.chip
-    found = _recipe(comp, need, chip.min_mix_volume, chip.max_mix_volume, chip.max_denominator, ups)
-    if found is None or found[1] is None:
+    search = _Search(b.instance.chip)
+    found = search.find(comp, need, b.instance.chip.storage_capacity)
+    if found is None:
         return None
-    step = found[1]
-    if step[0] == "up":
-        _, s, fluid, l = step
+    return _emit(b, search, found[1])
+
+
+def _emit(b: PlanBuilder, search: _Search, key: _Key) -> Source:
+    """Emit the recipe the search found for `key` (every sub-recipe it used is in the memo)."""
+    comp, _need, cap, extra, blend = key
+    if comp.den == 1:
+        return Source.reservoir(comp.num.index(1))
+    found = search.memo[key]
+    assert found is not None and found.step is not None
+    kind, x, y, z = found.step
+    if kind == "up":
+        s, fluid, l = x, y, z
         xa = dilute_up_input(comp, s, fluid, l)
         assert xa is not None
-        src = build(b, xa, s - l, ups - 1)
-        if src is None:
-            return None
+        src = _emit(b, search, (xa, s - l, cap, extra - 1, blend))
         out = Source.droplet(b.mix(src, s - l, Source.reservoir(fluid), l))
         if not src.is_reservoir:
             b.discard_leftover(src.index)
         return out
-    _, e, s, _ = step
+    if kind == "blend":
+        s, k, move = x, y, z
+        pair = blend_inputs(comp, s, k, move)
+        assert pair is not None
+        sa = _emit(b, search, (pair[0], k, cap, extra - 1, False))
+        sb = _emit(b, search, (pair[1], s - k, cap - int(not sa.is_reservoir), extra - 1, False))
+        out = Source.droplet(b.mix(sa, k, sb, s - k))
+        for used in (sa, sb):
+            if not used.is_reservoir:
+                b.discard_leftover(used.index)
+        return out
+    e, s = x, y
     running: Source | None = None
     weight = 0
     for piece, count in split_pieces(comp, e):
         take = count * s
-        src = build(b, piece, take, ups)
-        if src is None:
-            return None
+        held = int(running is not None and not running.is_reservoir)
+        src = _emit(b, search, (piece, take, cap - held, extra, True))
         if running is None:
             running, weight = src, take
             continue
@@ -192,12 +335,76 @@ def build(b: PlanBuilder, comp: Composition, need: int, ups: int = MAX_DILUTE_UP
         for used in (before, src):
             if not used.is_reservoir:
                 b.discard_leftover(used.index)
+    assert running is not None
     return running
+
+
+def within_tolerance(comp: Composition, tolerance: Rational, den: int) -> Composition | None:
+    """A composition with denominator `den` within L-inf `tolerance` of `comp`, as close to it
+    as rounding allows, or None if none exists. Exact: per fluid the allowed numerators are
+    ceil((x - tol) den) .. floor((x + tol) den), clamped to [0, den], and they must be able to
+    sum to `den`."""
+    d, (p, q) = comp.den, (tolerance.num, tolerance.den)
+    lo = [max(0, -((p * d - a * q) * den // (d * q))) for a in comp.num]  # ceil
+    hi = [min(den, (a * q + p * d) * den // (d * q)) for a in comp.num]  # floor
+    if any(x > y for x, y in zip(lo, hi, strict=True)) or not sum(lo) <= den <= sum(hi):
+        return None
+    # Start from the nearest numerators inside the bounds, then fix the sum one unit at a
+    # time, always moving the fluid whose share is furthest from its target in that direction.
+    num = [
+        min(max((2 * a * den + d) // (2 * d), x), y)
+        for a, x, y in zip(comp.num, lo, hi, strict=True)
+    ]
+    while sum(num) != den:
+        up = sum(num) < den
+        room = [i for i in range(len(num)) if (num[i] < hi[i] if up else num[i] > lo[i])]
+        # error of fluid i in units of 1/(d * den): num_i * d - a_i * den
+        i = min(room, key=lambda i: (num[i] * d - comp.num[i] * den) * (1 if up else -1))
+        num[i] += 1 if up else -1
+    return Composition.from_ints(tuple(num), den)
+
+
+@cache
+def _reachable_denominators(lo: int, hi: int, max_den: int) -> tuple[int, ...]:
+    """1 and every denominator up to `max_den` that factorises into mix sizes in [lo, hi]."""
+    return (1, *(d for d in range(2, max_den + 1) if factorise_within(d, lo, hi) is not None))
+
+
+def aim(target: Target, chip: ChipLimits) -> Composition | None:
+    """The composition the tree builds for `target`: the target itself when exact, else the
+    one with the smallest denominator within the tolerance that M can reach (every prime
+    factor <= M, at most `max_denominator`; FacDA's ratio transformation). A smaller
+    denominator means a shallower recipe. None if no reachable composition is close enough."""
+    comp, tol = target.composition, target.tolerance
+    if tol.num == 0:
+        return comp
+    for den in _reachable_denominators(
+        chip.min_mix_volume, chip.max_mix_volume, chip.max_denominator
+    ):
+        found = within_tolerance(comp, tol, den)
+        if found is not None:
+            return found
+    return None
+
+
+def min_denominator_within(comp: Composition, tolerance: Rational, cap: int) -> int:
+    """The smallest denominator of any composition within `tolerance` of `comp` (reachable
+    or not), searched up to `cap`; `comp.den` itself is always within. A lower bound on how
+    fine a delivered droplet must be, for the step-limit depth bound."""
+    if tolerance.num == 0:
+        return comp.den
+    for den in range(1, min(cap, comp.den) + 1):
+        if within_tolerance(comp, tolerance, den) is not None:
+            return den
+    return comp.den
 
 
 def _deliver(b: PlanBuilder, target: Target, count: int) -> bool:
     """Build one droplet for `count` deliveries of `target` and output them."""
-    src = build(b, target.composition, count * target.droplet_volume)
+    comp = aim(target, b.instance.chip)
+    if comp is None:
+        return False
+    src = build(b, comp, count * target.droplet_volume)
     if src is None:
         return False
     for _ in range(count):
@@ -212,7 +419,10 @@ def _deliveries_per_droplet(b: PlanBuilder, target: Target, most: int) -> int:
     total volume the split builds as one droplet, else the largest a dilute-up builds (32nds at
     M = 3 split only into mixes of 2, so a split droplet serves 2 unit deliveries; a dilute-up
     one serves 3). At least 1."""
-    comp, chip = target.composition, b.instance.chip
+    chip = b.instance.chip
+    comp = aim(target, chip)
+    if comp is None:
+        return 1  # nothing to build; `_deliver` reports it
     if comp.den == 1:
         return most  # a reservoir serves any number
     for count in range(most, 0, -1):

@@ -8,15 +8,25 @@ from dataclasses import replace
 
 import pytest
 
-from meda.core.composition import ZERO, Composition
+from meda.core.actions import Mix
+from meda.core.composition import ZERO, Composition, Rational, linf_distance
 from meda.core.dag import MixingDAG, validate
 from meda.core.fluids import Fluid, FluidKind
 from meda.core.problem import Instance, Target
-from meda.core.rules import replay
+from meda.core.rules import apply, replay
+from meda.core.state import PrepState
 from meda.generators.benchmark_io import BenchmarkSet
 from meda.solvers.base import SolveBudget
 from meda.solvers.baselines.naive import factorise_within, naive_plan
-from meda.solvers.baselines.tree import TreeSolver, dilute_up_input, split_pieces, tree_plan
+from meda.solvers.baselines.tree import (
+    TreeSolver,
+    aim,
+    dilute_up_input,
+    min_denominator_within,
+    split_pieces,
+    tree_plan,
+    within_tolerance,
+)
 from meda.solvers.exact_search import ExactSearch
 from tests.core.helpers import chip, default_weights, dilution, mixture
 
@@ -155,22 +165,38 @@ def test_every_reachable_dilution_is_built_at_every_volume_up_to_m(m: int) -> No
                 )
 
 
-def test_a_dilute_up_needing_finer_intermediates_than_the_cap_is_not_found() -> None:
-    """A recorded limit: 13/64 S + 25/64 R + 26/64 B at volume 7 on M = 7 needs an
-    intermediate finer than 1/256, so under the default cap the tree finds nothing; with
-    the cap raised it is built."""
-    inst = single((13, 25, 26), 64, 7, volume=7)
-    assert tree_plan(inst) is None
-    checked(replace(inst, chip=replace(inst.chip, max_denominator=4096)))
+def test_a_mixture_at_volume_m_is_made_by_a_blend_of_two_built_droplets() -> None:
+    """5/16, 5/16, 3/16, 3/16 at volume 3 on M = 3: a dilute-up's built input would still hold
+    all four fluids and need a volume-2 split it cannot fit, so the last mix blends two built
+    droplets (2 units of one, 1 of the other)."""
+    inst = single((5, 5, 3, 3), 16, 3, volume=3)
+    plan = tree_plan(inst)
+    assert plan is not None
+    last = [a for a in plan if isinstance(a, Mix)][-1]
+    assert not last.a.is_reservoir and not last.b.is_reservoir and last.k + last.l == 3
+    checked(inst)
+    # Found before by a dilute-up only with intermediates finer than 1/256; a blend needs none.
+    checked(single((13, 25, 26), 64, 7, volume=7))
 
 
-def test_tight_storage_returns_none_rather_than_raising() -> None:
-    results = [
-        tree_plan(single((a, b, 64 - a - b), 64, 8, storage=2))
-        for a in range(1, 30, 3)
-        for b in range(1, 30, 5)
-    ]
-    assert any(r is None for r in results) and any(r is not None for r in results)
+def test_tight_storage_picks_a_recipe_that_fits() -> None:
+    """The recipe's storage peak is computed exactly and must fit the chip, so at capacity 2
+    every 3-fluid 64th of this sample is built on M = 8 (the split alone needs 3 for some),
+    and the plan really never holds more than 2 droplets."""
+    for a in range(1, 30, 3):
+        for b in range(1, 30, 5):
+            inst = single((a, b, 64 - a - b), 64, 8, storage=2)
+            plan = tree_plan(inst)
+            assert plan is not None, (a, b)
+            state = PrepState.initial(inst)
+            for action in plan:
+                state, _, _ = apply(state, action, inst)
+                assert len(state.droplets) <= 2
+
+
+def test_a_target_with_no_recipe_in_budget_is_not_found_rather_than_raising() -> None:
+    """Six fluids in 16ths on M = 3 at capacity 2: no recipe within the search budget."""
+    assert tree_plan(single((3, 3, 3, 3, 2, 2), 16, 3, storage=2)) is None
 
 
 @pytest.mark.parametrize(
@@ -222,3 +248,35 @@ def test_on_dilutions_it_agrees_with_reachability_like_naive() -> None:
     for n in range(1, 16):
         inst = dilution([(n, 16)], chip_limits=chip("dmfb_m2"), step_limit=200)
         assert (tree_plan(inst) is None) == (naive_plan(inst) is None)
+
+
+@pytest.mark.parametrize(
+    ("num", "den", "tol", "grid"),
+    [((70, 49), 119, (1, 200), 12), ((3, 7), 10, (1, 20), 6), ((1, 2, 4), 7, (1, 50), 16)],
+)
+def test_within_tolerance_matches_brute_force(
+    num: tuple[int, ...], den: int, tol: tuple[int, int], grid: int
+) -> None:
+    comp, eps = Composition.from_ints(num, den), Rational.of(*tol)
+    for d in range(1, grid + 1):
+        exists = any(
+            linf_distance(Composition.from_ints((*parts, d - sum(parts)), d), comp) <= eps
+            for parts in itertools.product(range(d + 1), repeat=len(num) - 1)
+            if sum(parts) <= d
+        )
+        found = within_tolerance(comp, eps, d)
+        assert (found is not None) == exists, d
+        if found is not None:
+            assert linf_distance(found, comp) <= eps and d % found.den == 0
+
+
+def test_a_tolerant_target_is_built_at_the_coarsest_reachable_grid() -> None:
+    """FacDA's example: 70:49 (= 70/119, 119 = 7 x 17) at M = 6 has no exact plan; within
+    0.005 the coarsest reachable composition is 7/12 (FacDA's own rewrite is 71/120)."""
+    target = Target(0, 0, Composition.from_ints((70, 49), 119), Rational.of(1, 200), 1, 1)
+    inst = Instance("facda", fluids(2), (target,), chip(max_mix_volume=6), 1_000)
+    assert aim(target, inst.chip) == Composition.from_ints((7, 5), 12)
+    checked(inst)
+    assert min_denominator_within(target.composition, target.tolerance, 256) == 12
+    exact = replace(target, tolerance=ZERO)
+    assert tree_plan(replace(inst, targets=(exact,))) is None  # 17 > M
