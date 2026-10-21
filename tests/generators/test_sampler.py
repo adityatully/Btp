@@ -22,7 +22,10 @@ from meda.generators.benchmark_io import instance_hash
 from meda.generators.curriculum import Curriculum, Stage, StageStats
 from meda.generators.sampler import (
     GeneratorConfig,
+    GeneratorSource,
+    UnwitnessedError,
     dilution_grid,
+    is_smooth,
     make_fluids,
     mix_depth_bound,
     sample_instance,
@@ -224,9 +227,9 @@ def test_sampled_instances_respect_their_stage(name: str) -> None:
         for t in inst.targets:
             assert cfg.demand[0] <= t.demand <= cfg.demand[1]
             assert cfg.droplet_volume[0] <= t.droplet_volume <= cfg.droplet_volume[1]
-            assert t.tolerance == cfg.tolerance
+            assert t.tolerance in cfg.tolerance
             assert t.composition.den <= chip_limits.max_denominator
-            assert support_size_of(t.composition) >= min(cfg.support_size, inst.num_fluids)
+            assert support_size_of(t.composition) >= min(cfg.support_size[0], inst.num_fluids)
             assert t.composition.num[0] > 0 or support_size_of(t.composition) >= 2
 
 
@@ -284,9 +287,9 @@ def test_snap_to_denominator_hits_the_support_and_accuracy() -> None:
     rng = np.random.default_rng(0)
     for _ in range(50):
         comp = snap_to_denominator(rng, cfg, 4)
-        assert support_size_of(comp) == cfg.support_size
+        assert support_size_of(comp) == cfg.support_size[0]
         assert comp.num[0] > 0  # fluid 0 (a SAMPLE) is always in the support
-        assert cfg.accuracy_denominator % comp.den == 0
+        assert cfg.accuracy_denominator[0] % comp.den == 0
 
 
 def test_snap_rejects_support_above_accuracy() -> None:
@@ -593,3 +596,153 @@ def test_bad_step_limit_settings_raise(key: str, value: object) -> None:
 def test_existing_stages_keep_the_witness_rule(name: str) -> None:
     cfg, _ = load_stage(name)
     assert cfg.step_limit_rule == "witness" and cfg.step_limit_multiple == (2.0, 2.0)
+
+
+# --------------------------------------------------------------------------- input ranges (1.3)
+
+
+def test_accuracy_range_draws_only_denominators_the_instance_m_can_reach() -> None:
+    """An exact target's D is drawn per target from the range, keeping only D whose prime
+    factors are at most that instance's M, so non-dyadic grids (9, 12, 15, ...) appear."""
+    cfg = ranged_dilution(max_mix_volume=[3, 10], accuracy_denominator=[8, 64], support_size=2)
+    drawn = sample_instances(cfg, chip("meda_m8"), np.random.default_rng(6), 40, WEIGHTS)
+    dens = set()
+    for inst in drawn:
+        for t in inst.targets:
+            assert is_smooth(t.composition.den, inst.chip.max_mix_volume)
+            dens.add(t.composition.den)
+        final, _, _ = replay(inst, witness_of(inst))
+        assert final.is_success
+    assert any(d % 3 == 0 or d % 5 == 0 for d in dens) and any(d & (d - 1) == 0 for d in dens)
+
+
+def test_support_size_range_is_drawn_per_target() -> None:
+    data = stage_dict(
+        "mixture_multi",
+        composition_sampler="dirichlet_snapped",
+        num_fluids={"samples": 1, "reagents": [2, 3], "buffers": 1},
+        support_size=[2, 4],
+        accuracy_denominator=[16, 32],
+    )
+    drawn = sample_instances(
+        GeneratorConfig.from_dict(data), chip("meda_m8"), np.random.default_rng(7), 15, WEIGHTS
+    )
+    sizes = {support_size_of(t.composition) for i in drawn for t in i.targets}
+    assert sizes == {2, 3, 4}
+
+
+def test_tolerant_targets_are_witnessed_by_aiming_within_tolerance() -> None:
+    """A tolerant target may sit on a grid M cannot reach (1/1000 at M = 3 or 4); the tree
+    builds the coarsest reachable composition within the tolerance, and the step limit's depth
+    bound uses the smallest denominator within it."""
+    from meda.solvers.fallback import ConstructiveCostToFinish
+
+    cfg = ranged_dilution(
+        max_mix_volume=[3, 4],
+        accuracy_denominator=1000,
+        tolerance=[0, "1/200", "1/1000"],
+        droplet_volume=1,
+    )
+    # Exact targets on 1/1000 cannot be reached at M <= 4, so give them a reachable grid.
+    with pytest.raises(ValueError, match="no feasibility witness"):
+        sample_instances(cfg, chip("meda_m8"), np.random.default_rng(8), 20, WEIGHTS)
+    with pytest.raises(ValueError, match="within its tolerance"):  # 1/1000 needs D > 256
+        sample_instances(
+            ranged_dilution(max_mix_volume=4, accuracy_denominator=1000, tolerance="1/1000"),
+            chip("meda_m8"),
+            np.random.default_rng(8),
+            20,
+            WEIGHTS,
+        )
+    cfg = ranged_dilution(
+        max_mix_volume=[3, 4],
+        accuracy_denominator=[999, 1000],
+        tolerance=["1/200", "1/1000"],
+        max_denominator=4096,
+        step_limit_rule="depth",
+    )
+    fallback = ConstructiveCostToFinish(WEIGHTS)
+    drawn = sample_instances(cfg, chip("meda_m8"), np.random.default_rng(8), 20, WEIGHTS)
+    assert {t.tolerance for i in drawn for t in i.targets} == {
+        Rational.of(1, 200),
+        Rational.of(1, 1000),
+    }
+    for inst in drawn:
+        final, _, _ = replay(inst, witness_of(inst))
+        assert final.is_success
+        assert fallback.supports(inst)
+        assert inst.metadata["step_limit_base"] < sum(
+            t.demand * (mix_depth_bound(t.composition.den, inst.chip.max_mix_volume) + 1)
+            for t in inst.targets
+        )
+
+
+def test_max_denominator_is_a_problem_setting() -> None:
+    cfg = ranged_dilution(max_denominator=1024)
+    inst = sample_instance(cfg, chip("meda_m8"), np.random.default_rng(0), WEIGHTS)
+    assert inst.chip.max_denominator == 1024
+    assert cfg.config_hash() != ranged_dilution().config_hash()
+
+
+def test_held_out_ratios_never_appear_in_a_draw() -> None:
+    """Ratio-level holdout (unseen ratios): no target of any draw has a held-out composition."""
+    cfg = GeneratorConfig.from_dict(stage_dict("dilution_single"))
+    held = frozenset(Composition.from_ints((n, 64 - n), 64) for n in range(1, 64, 4))
+    rng = np.random.default_rng(9)
+    for _ in range(60):
+        inst = sample_instance(cfg, chip("meda_m8"), rng, exclude_compositions=held)
+        assert all(t.composition not in held for t in inst.targets)
+    everything = frozenset(c.targets[0].composition for c in dilution_grid(chip("meda_m8"), 64, 99))
+    with pytest.raises(RuntimeError, match="ratios"):
+        sample_instance(cfg, chip("meda_m8"), rng, exclude_compositions=everything, max_tries=50)
+
+
+def test_droplet_volume_may_range_up_to_each_instance_m() -> None:
+    cfg = ranged_dilution(
+        max_mix_volume=[3, 10], droplet_volume=[1, "M"], accuracy_denominator=[8, 64]
+    )
+    drawn = sample_instances(cfg, chip("meda_m8"), np.random.default_rng(10), 40, WEIGHTS)
+    assert all(t.droplet_volume <= i.chip.max_mix_volume for i in drawn for t in i.targets)
+    assert any(t.droplet_volume == i.chip.max_mix_volume > 5 for i in drawn for t in i.targets)
+    assert cfg.config_hash() != ranged_dilution(accuracy_denominator=[8, 64]).config_hash()
+
+
+def test_generator_source_redraws_unwitnessed_draws_and_counts_them() -> None:
+    """Storage 2 with up to 6 fluids at M = 3: some draws have no witness. A training source
+    redraws them (counted in metadata) instead of crashing the run; `sample_instance` still
+    raises, naming the instance."""
+    cfg = GeneratorConfig.from_dict(
+        stage_dict(
+            "mixture_single",
+            composition_sampler="dirichlet_snapped",
+            num_fluids={"samples": 1, "reagents": 4, "buffers": 1},
+            support_size=6,
+            accuracy_denominator=16,
+            max_mix_volume=3,
+            storage_capacity=2,
+        )
+    )
+    with pytest.raises(UnwitnessedError, match="no feasibility witness"):
+        sample_instances(cfg, chip("meda_m8"), np.random.default_rng(0), 5, WEIGHTS)
+    roomy = GeneratorSource(
+        GeneratorConfig.from_dict(
+            {
+                **stage_dict("mixture_single"),
+                "storage_capacity": [2, 4],
+                "composition_sampler": "dirichlet_snapped",
+                "num_fluids": {"samples": 1, "reagents": 4, "buffers": 1},
+                "support_size": 6,
+                "accuracy_denominator": 16,
+                "max_mix_volume": 3,
+            }
+        ),
+        chip("meda_m8"),
+        WEIGHTS,
+    )
+    rng = np.random.default_rng(1)
+    drawn = [roomy(rng) for _ in range(10)]
+    assert all(i.chip.storage_capacity >= 3 for i in drawn)
+    assert sum(i.metadata["unwitnessed_redraws"] for i in drawn) > 0
+    hopeless = GeneratorSource(cfg, chip("meda_m8"), WEIGHTS, max_unwitnessed=3)
+    with pytest.raises(UnwitnessedError, match="in a row"):
+        hopeless(rng)

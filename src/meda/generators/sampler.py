@@ -7,8 +7,10 @@ training never draws an instance nobody can solve.
 
 Two composition samplers (SPEC 8.1):
 - `dirichlet_snapped` — sample the simplex, then snap to a composition whose denominator divides
-  `accuracy_denominator`. Witnessed by the naive construction, else the split tree, so every
-  prime factor of the accuracy denominator must be at most the chip's M.
+  the accuracy denominator D (fixed, or drawn per target from a range). Witnessed by the naive
+  construction, else the split tree. An exact target (tolerance 0) needs every prime factor of
+  D at most the instance's M, so a range keeps only those D; a tolerant target may use any D,
+  and the tree builds the coarsest reachable composition within its tolerance.
 - `reachable_walk` — compositions a random legal plan actually produced (`generators.synthetic`).
   Reachable by construction, and the walk itself is the witness.
 
@@ -44,7 +46,7 @@ from meda.generators.synthetic import (
     witness_plan,
 )
 from meda.solvers.baselines.naive import naive_plan
-from meda.solvers.baselines.tree import tree_plan
+from meda.solvers.baselines.tree import min_denominator_within, tree_plan
 
 COMPOSITION_SAMPLERS = ("dirichlet_snapped", "reachable_walk", "fixed_list")
 GENERATOR_VERSION = 1
@@ -68,11 +70,11 @@ class GeneratorConfig:
     num_experiments: tuple[int, int]
     targets_per_experiment: tuple[int, int]
     composition_sampler: str
-    accuracy_denominator: int
-    support_size: int
+    accuracy_denominator: tuple[int, int]  # drawn per target when a real range
+    support_size: tuple[int, int]  # drawn per target when a real range
     demand: tuple[int, int]
     droplet_volume: tuple[int, int]  # drawn per target
-    tolerance: Rational
+    tolerance: tuple[Rational, ...]  # one is chosen per target when there are several
     step_limit: int | None  # None: size it by `step_limit_rule`
     step_limit_multiple: tuple[float, float]  # drawn per instance when a real range
     walk_mixes: tuple[int, int]
@@ -81,6 +83,11 @@ class GeneratorConfig:
     max_mix_volume: tuple[int, int] | None = None
     storage_capacity: tuple[int, int] | None = None
     step_limit_rule: str = "depth"
+    # Per-problem bound on intermediate denominators (SPEC 1.7: a property of the problem, not
+    # the chip); None keeps the chip config's value.
+    max_denominator: int | None = None
+    # `droplet_volume: [low, M]`: the high end is each instance's own M (SPEC 1.3: 1 to M).
+    droplet_volume_to_m: bool = False
 
     @property
     def min_fluids(self) -> int:
@@ -107,10 +114,14 @@ class GeneratorConfig:
             fail(f"needs at least 2 fluids, got {self.min_fluids}")
         if self.samples[0] < 1:
             fail("needs at least one SAMPLE fluid")
-        if not 2 <= self.support_size <= self.min_fluids:
-            fail(f"support_size {self.support_size} outside [2, {self.min_fluids}]")
-        if self.accuracy_denominator < 2:
-            fail(f"accuracy_denominator must be >= 2, got {self.accuracy_denominator}")
+        s_low, s_high = self.support_size
+        if not 2 <= s_low <= s_high or s_low > self.min_fluids:
+            fail(f"support_size {s_low} outside [2, {self.min_fluids}] (or not a range)")
+        d_low, d_high = self.accuracy_denominator
+        if d_low < 2 or d_high < d_low:
+            fail(f"accuracy_denominator must be >= 2 (or an increasing range), got {d_low}")
+        if self.max_denominator is not None and self.max_denominator < 2:
+            fail(f"max_denominator must be >= 2, got {self.max_denominator}")
         for field, value in (
             ("num_experiments", self.num_experiments),
             ("targets_per_experiment", self.targets_per_experiment),
@@ -128,13 +139,17 @@ class GeneratorConfig:
                 fail(f"{field} must be an increasing range of positive ints, got {span}")
         if self.max_mix_volume is not None and self.max_mix_volume[0] < 2:
             fail(f"max_mix_volume must be >= 2 (k, l >= 1), got {self.max_mix_volume}")
-        if self.tolerance < 0:
-            fail(f"tolerance must be >= 0, got {self.tolerance}")
+        if not self.tolerance or any(t < 0 for t in self.tolerance):
+            fail(f"tolerance must be >= 0 (or a list of such), got {self.tolerance}")
         if self.step_limit_rule not in STEP_LIMIT_RULES:
             fail(f"step_limit_rule must be one of {STEP_LIMIT_RULES}")
         low, high = self.step_limit_multiple
         if low <= 0 or high < low:
             fail(f"step_limit_multiple must be > 0 (or an increasing range), got {(low, high)}")
+        if self.composition_sampler == "reachable_walk" and (
+            self.support_size[0] != self.support_size[1]
+        ):
+            fail("reachable_walk takes a fixed support_size")
         if self.composition_sampler == "fixed_list" and not self.fixed_compositions:
             fail("fixed_list needs a non-empty fixed_compositions list")
 
@@ -158,6 +173,7 @@ class GeneratorConfig:
             "fixed_compositions",
             "max_mix_volume",
             "storage_capacity",
+            "max_denominator",
         }
         unknown = set(data) - known
         if unknown:
@@ -177,11 +193,12 @@ class GeneratorConfig:
             num_experiments=_as_range(data["num_experiments"]),
             targets_per_experiment=_as_range(data["targets_per_experiment"]),
             composition_sampler=str(data["composition_sampler"]),
-            accuracy_denominator=int(data["accuracy_denominator"]),
-            support_size=int(data["support_size"]),
+            accuracy_denominator=_as_range(data["accuracy_denominator"]),
+            support_size=_as_range(data["support_size"]),
             demand=_as_range(data["demand"]),
-            droplet_volume=_as_range(data["droplet_volume"]),
-            tolerance=Rational.parse(data["tolerance"]),
+            droplet_volume=_as_range(_volume_span(data["droplet_volume"])),
+            droplet_volume_to_m=_to_m(data["droplet_volume"]),
+            tolerance=_choices(data["tolerance"]),
             step_limit=None if step_limit is None else int(step_limit),
             step_limit_rule=rule,
             step_limit_multiple=_float_range(
@@ -193,6 +210,9 @@ class GeneratorConfig:
             ),
             max_mix_volume=_optional_range(data.get("max_mix_volume")),
             storage_capacity=_optional_range(data.get("storage_capacity")),
+            max_denominator=None
+            if data.get("max_denominator") is None
+            else int(data["max_denominator"]),
         )
 
     def config_hash(self) -> str:
@@ -204,11 +224,19 @@ class GeneratorConfig:
             "experiments": list(self.num_experiments),
             "targets": list(self.targets_per_experiment),
             "sampler": self.composition_sampler,
-            "accuracy": self.accuracy_denominator,
-            "support": self.support_size,
+            "accuracy": _hashable_span(self.accuracy_denominator),
+            "support": _hashable_span(self.support_size),
             "demand": list(self.demand),
-            "droplet_volume": _hashable_span(self.droplet_volume),
-            "tolerance": str(self.tolerance),
+            "droplet_volume": (
+                [self.droplet_volume[0], "M"]
+                if self.droplet_volume_to_m
+                else _hashable_span(self.droplet_volume)
+            ),
+            "tolerance": (
+                str(self.tolerance[0])
+                if len(self.tolerance) == 1
+                else [str(t) for t in self.tolerance]
+            ),
             "step_limit": self.step_limit,
             "step_limit_multiple": _hashable_float_span(self.step_limit_multiple),
             "walk_mixes": list(self.walk_mixes),
@@ -222,6 +250,8 @@ class GeneratorConfig:
         ):
             if span is not None:
                 payload[key] = list(span)
+        if self.max_denominator is not None:
+            payload["max_denominator"] = self.max_denominator
         if self.step_limit_rule != "witness":  # the version-1 rule is the unwritten one
             payload["step_limit_rule"] = self.step_limit_rule
         return hashlib.sha256(json.dumps(payload, sort_keys=True).encode()).hexdigest()[:16]
@@ -234,6 +264,32 @@ def _as_range(value: Any) -> tuple[int, int]:
             raise ValueError(f"expected a [low, high] range, got {value}")
         return int(value[0]), int(value[1])
     return int(value), int(value)
+
+
+def _to_m(value: Any) -> bool:
+    """Whether a `droplet_volume` range ends at the instance's own M (`[low, M]`)."""
+    return isinstance(value, Sequence) and not isinstance(value, str) and value[-1] == "M"
+
+
+def _volume_span(value: Any) -> Any:
+    """`[low, M]` as `[low, low]` for validation; the high end is drawn per instance."""
+    return [value[0], value[0]] if _to_m(value) else value
+
+
+def _choices(value: Any) -> tuple[Rational, ...]:
+    """Accepts one tolerance or a list of them (one is chosen per target)."""
+    if isinstance(value, Sequence) and not isinstance(value, str):
+        return tuple(Rational.parse(v) for v in value)
+    return (Rational.parse(value),)
+
+
+def is_smooth(n: int, m: int) -> bool:
+    """Every prime factor of n is at most m: a mix of at most m units can reach denominator n
+    (SPEC 10.3)."""
+    for p in range(2, m + 1):
+        while n % p == 0:
+            n //= p
+    return n == 1
 
 
 def _float_range(value: Any) -> tuple[float, float]:
@@ -260,9 +316,21 @@ def mix_depth_bound(den: int, m: int) -> int:
 
 
 def step_limit_base(instance: Instance) -> int:
-    """The "depth" rule's base: per delivery, its target's mix-depth bound plus one output."""
-    m = instance.chip.max_mix_volume
-    return sum(t.demand * (mix_depth_bound(t.composition.den, m) + 1) for t in instance.targets)
+    """The "depth" rule's base: per delivery, its target's mix-depth bound plus one output. A
+    tolerant target's bound uses the smallest denominator of any composition within its
+    tolerance, since a plan may deliver that one."""
+    chip = instance.chip
+    m = chip.max_mix_volume
+    return sum(
+        t.demand
+        * (
+            mix_depth_bound(
+                min_denominator_within(t.composition, t.tolerance, chip.max_denominator), m
+            )
+            + 1
+        )
+        for t in instance.targets
+    )
 
 
 def _optional_range(value: Any) -> tuple[int, int] | None:
@@ -286,8 +354,11 @@ def _draw_if_range(rng: np.random.Generator, span: tuple[int, int]) -> int:
 
 def sample_chip(cfg: GeneratorConfig, chip: ChipLimits, rng: np.random.Generator) -> ChipLimits:
     """The instance's chip: the config's chip with M and storage capacity drawn from the
-    generator's ranges where it sets them (SPEC 1.3: chip limits are problem inputs). The
-    name records what was drawn; it is a label, not part of the problem (`problem_hash`)."""
+    generator's ranges where it sets them (SPEC 1.3: chip limits are problem inputs), and the
+    generator's `max_denominator` if it sets one. The name records what was drawn; it is a
+    label, not part of the problem (`problem_hash`)."""
+    if cfg.max_denominator is not None:
+        chip = replace(chip, max_denominator=cfg.max_denominator)
     if cfg.max_mix_volume is None and cfg.storage_capacity is None:
         return chip
     m = chip.max_mix_volume if cfg.max_mix_volume is None else _draw(rng, cfg.max_mix_volume)
@@ -322,16 +393,20 @@ def make_fluids(cfg: GeneratorConfig, rng: np.random.Generator) -> tuple[Fluid, 
 
 
 def snap_to_denominator(
-    rng: np.random.Generator, cfg: GeneratorConfig, num_fluids: int
+    rng: np.random.Generator,
+    cfg: GeneratorConfig,
+    num_fluids: int,
+    den: int | None = None,
+    support: int | None = None,
 ) -> Composition:
-    """Sample the simplex (Dirichlet) over `support_size` fluids, then snap to
-    `accuracy_denominator`.
+    """Sample the simplex (Dirichlet) over `support` fluids, then snap to denominator `den`
+    (default: the config's fixed values).
 
     Fluid 0 (a SAMPLE) is always in the support, so a dilution target really is sample+buffer.
     Every share is at least one unit, so the support size is exact.
     """
-    den = cfg.accuracy_denominator
-    support = cfg.support_size
+    den = cfg.accuracy_denominator[0] if den is None else den
+    support = cfg.support_size[0] if support is None else support
     if support > den:
         raise ValueError(
             f"generator '{cfg.name}': support_size {support} exceeds accuracy_denominator {den}"
@@ -358,6 +433,7 @@ def _sample_compositions(
     chip: ChipLimits,
     count: int,
     num_fluids: int,
+    tolerances: Sequence[Rational],
 ) -> tuple[tuple[Composition, ...], tuple[Recipe, ...] | None]:
     """Target compositions, and the recipes that make them when the sampler provides any."""
     if cfg.composition_sampler == "reachable_walk":
@@ -366,7 +442,33 @@ def _sample_compositions(
     if cfg.composition_sampler == "fixed_list":
         picks = rng.choice(len(cfg.fixed_compositions), size=count, replace=True)
         return tuple(Composition.from_ratio(cfg.fixed_compositions[int(i)]) for i in picks), None
-    return tuple(snap_to_denominator(rng, cfg, num_fluids) for _ in range(count)), None
+    if (
+        cfg.accuracy_denominator[0] == cfg.accuracy_denominator[1]
+        and cfg.support_size[0] == (cfg.support_size[1])
+    ):
+        return tuple(snap_to_denominator(rng, cfg, num_fluids) for _ in range(count)), None
+    comps = []
+    for tol in tolerances:
+        dens = _denominators(cfg, chip, exact=tol.num == 0)
+        den = dens[int(rng.integers(len(dens)))]
+        low, high = cfg.support_size
+        support = _draw(rng, (low, min(high, num_fluids, den)))
+        comps.append(snap_to_denominator(rng, cfg, num_fluids, den, support))
+    return tuple(comps), None
+
+
+def _denominators(cfg: GeneratorConfig, chip: ChipLimits, exact: bool) -> list[int]:
+    """The accuracy denominators a target may draw: every D in the range, or for an exact
+    target only those the instance's M can reach (prime factors <= M)."""
+    low, high = cfg.accuracy_denominator
+    dens = [d for d in range(low, high + 1) if not exact or is_smooth(d, chip.max_mix_volume)]
+    if not dens:
+        raise ValueError(
+            f"generator '{cfg.name}': no accuracy denominator in [{low}, {high}] has every "
+            f"prime factor <= max_mix_volume {chip.max_mix_volume} of chip '{chip.name}', so "
+            f"no exact target can be drawn. Widen accuracy_denominator."
+        )
+    return dens
 
 
 def _walk_with_support(
@@ -381,9 +483,11 @@ def _walk_with_support(
     A short walk can leave an allowed fluid unused, so a recipe with too small a support is
     redrawn. A mixture stage asking for support s needs at least s - 1 mixes to reach it.
     """
-    want = min(cfg.support_size, num_fluids)
+    want = min(cfg.support_size[0], num_fluids)
     for _ in range(max_tries):
-        recipe = random_recipe(rng, num_fluids, chip, _draw(rng, cfg.walk_mixes), cfg.support_size)
+        recipe = random_recipe(
+            rng, num_fluids, chip, _draw(rng, cfg.walk_mixes), cfg.support_size[0]
+        )
         if support_size_of(composition_of(recipe, num_fluids)) >= want:
             return recipe
     raise RuntimeError(
@@ -401,6 +505,7 @@ def sample_instance(
     instance_id: str | None = None,
     exclude: Container[str] | None = None,
     max_tries: int = 1000,
+    exclude_compositions: Container[Composition] | None = None,
 ) -> Instance:
     """One instance from this stage, with a verified witness plan recorded in `metadata`.
 
@@ -411,17 +516,67 @@ def sample_instance(
     `problem_hash`; `BenchmarkSet.hashes()` gives both). Training passes a frozen evaluation
     set's hashes so a small stage cannot leak its own held-out instances; a stage with nothing
     left to draw raises rather than looping forever.
+
+    `exclude_compositions` holds out target **ratios** rather than whole problems: no target
+    of a returned instance has one of them (the "unseen ratios" test sets, SPEC 8.4).
     """
-    if exclude is not None:
-        for _ in range(max_tries):
-            candidate = _sample_once(cfg, chip, rng, weights, instance_id)
-            if not _is_excluded(candidate, exclude):
-                return candidate
-        raise RuntimeError(
-            f"generator '{cfg.name}': every one of {max_tries} draws was in the excluded set. "
-            f"This stage is too small to hold out that many instances."
+    if exclude is None and exclude_compositions is None:
+        return _sample_once(cfg, chip, rng, weights, instance_id)
+    for _ in range(max_tries):
+        candidate = _sample_once(cfg, chip, rng, weights, instance_id)
+        if exclude is not None and _is_excluded(candidate, exclude):
+            continue
+        if exclude_compositions is not None and any(
+            t.composition in exclude_compositions for t in candidate.targets
+        ):
+            continue
+        return candidate
+    raise RuntimeError(
+        f"generator '{cfg.name}': every one of {max_tries} draws was in the excluded set. "
+        f"This stage is too small to hold out that many instances or ratios."
+    )
+
+
+class UnwitnessedError(ValueError):
+    """No construction found a feasibility witness for a drawn instance (never a claim that the
+    instance is infeasible)."""
+
+
+@dataclass(frozen=True)
+class GeneratorSource:
+    """An env instance source (`envs.sample_prep_env.InstanceSource`) that draws a fresh
+    problem from one generator stage per episode, never one whose hash is in `exclude` (the
+    frozen evaluation sets, SPEC 8.4). Picklable, so it works with `AsyncVectorEnv`."""
+
+    config: GeneratorConfig
+    chip: ChipLimits
+    weights: CostWeights | None = None
+    exclude: frozenset[str] = frozenset()
+    exclude_compositions: frozenset[Composition] = frozenset()
+    max_unwitnessed: int = 100
+
+    def __call__(self, rng: np.random.Generator) -> Instance:
+        """A fresh instance. A draw no construction can witness (e.g. a many-fluid target under
+        storage 2) is redrawn, never returned, and the count is recorded in the instance's
+        `metadata["unwitnessed_redraws"]` (rule 9: not silent). More than `max_unwitnessed`
+        in a row raises: the stage asks for problems nobody can build."""
+        for redraws in range(self.max_unwitnessed + 1):
+            try:
+                inst = sample_instance(
+                    self.config,
+                    self.chip,
+                    rng,
+                    self.weights,
+                    exclude=self.exclude or None,
+                    exclude_compositions=self.exclude_compositions or None,
+                )
+            except UnwitnessedError:
+                continue
+            return replace(inst, metadata={**inst.metadata, "unwitnessed_redraws": redraws})
+        raise UnwitnessedError(
+            f"generator '{self.config.name}': {self.max_unwitnessed + 1} draws in a row had no "
+            f"feasibility witness; narrow the stage (storage, fluids, accuracy, tolerance)."
         )
-    return _sample_once(cfg, chip, rng, weights, instance_id)
 
 
 def _is_excluded(instance: Instance, exclude: Container[str]) -> bool:
@@ -448,12 +603,23 @@ def _sample_once(
     num_experiments = _draw(rng, cfg.num_experiments)
     per_experiment = [_draw(rng, cfg.targets_per_experiment) for _ in range(num_experiments)]
     total = sum(per_experiment)
-    comps, recipes = _sample_compositions(rng, cfg, chip, total, len(fluids))
+    tolerances = [
+        cfg.tolerance[0]
+        if len(cfg.tolerance) == 1
+        else cfg.tolerance[int(rng.integers(len(cfg.tolerance)))]
+        for _ in range(total)
+    ]
+    comps, recipes = _sample_compositions(rng, cfg, chip, total, len(fluids), tolerances)
 
     targets: list[Target] = []
     experiment_of = [e for e, n in enumerate(per_experiment) for _ in range(n)]
     for i, comp in enumerate(comps):
-        volume = _draw_if_range(rng, cfg.droplet_volume)
+        span = (
+            (cfg.droplet_volume[0], chip.max_mix_volume)
+            if cfg.droplet_volume_to_m
+            else cfg.droplet_volume
+        )
+        volume = _draw_if_range(rng, span)
         if volume > chip.max_mix_volume:
             raise ValueError(
                 f"generator '{cfg.name}': drew droplet_volume {volume} > max_mix_volume "
@@ -465,7 +631,7 @@ def _sample_once(
                 id=i,
                 experiment_id=experiment_of[i],
                 composition=comp,
-                tolerance=cfg.tolerance,
+                tolerance=tolerances[i],
                 droplet_volume=volume,
                 demand=_draw(rng, cfg.demand),
             )
@@ -530,13 +696,15 @@ def _witness(
         return actions, "naive"
     actions = tree_plan(instance)
     if actions is None:
-        raise ValueError(
+        raise UnwitnessedError(
             f"instance '{instance.instance_id}': no feasibility witness on chip "
             f"'{instance.chip.name}'. A target is reachable only if every prime factor of its "
             f"denominator is <= max_mix_volume {instance.chip.max_mix_volume}, and the split "
             f"tree also needs storage for its depth (storage_capacity "
-            f"{instance.chip.storage_capacity}). Lower accuracy_denominator, raise "
-            f"max_mix_volume, or use composition_sampler=reachable_walk."
+            f"{instance.chip.storage_capacity}); a tolerant target needs a reachable "
+            f"composition within its tolerance at denominator <= max_denominator "
+            f"{instance.chip.max_denominator}. Lower accuracy_denominator, raise "
+            f"max_mix_volume or max_denominator, or use composition_sampler=reachable_walk."
         )
     return actions, "tree"
 
