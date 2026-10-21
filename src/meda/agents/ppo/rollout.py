@@ -7,9 +7,11 @@ rollout, for episodes the rollout cut off mid-way: their remaining cost is estim
 value of the next observation. The vector env autoresets in the same step (SPEC 9.1), so
 `dones[t]` marks exactly the steps after which the next observation belongs to a new episode.
 
-**Memory.** Observations are stored per step, every token axis trimmed to that step's real
-widths, and padded only to the widest step of the rollout when the batch is built. A rollout at
-`L_pad = 2048` would otherwise hold gigabytes of padding.
+**Memory.** Observations are stored per step and per env, every token axis trimmed to that
+observation's own real widths, and padded only to the widest observation of a minibatch when
+the minibatch is built. Candidate counts vary widely (tens on an empty chip, thousands at
+M = 10 with many droplets), so padding a whole rollout to its widest step would hold
+gigabytes; the stored rollout grows with the mean width and a minibatch with its own widest.
 """
 
 from __future__ import annotations
@@ -55,7 +57,8 @@ class RolloutBuffer:
 
     def __init__(self, num_steps: int, num_envs: int) -> None:
         self.num_steps, self.num_envs = num_steps, num_envs
-        self.obs: list[dict[str, npt.NDArray[Any]]] = []
+        self.obs: list[dict[str, npt.NDArray[Any]]] = []  # flat index t * num_envs + env
+        self.steps_added = 0
         self.actions = np.zeros((num_steps, num_envs), dtype=np.int64)
         self.logprobs = np.zeros((num_steps, num_envs), dtype=np.float64)
         self.values = np.zeros((num_steps, num_envs), dtype=np.float64)
@@ -71,25 +74,33 @@ class RolloutBuffer:
         rewards: FloatArray,
         dones: npt.NDArray[np.bool_],
     ) -> None:
-        t = len(self.obs)
+        t = self.steps_added
         if t >= self.num_steps:
             raise IndexError(f"rollout buffer is full ({self.num_steps} steps)")
-        self.obs.append(trim_obs(obs))
+        for env in range(self.num_envs):
+            self.obs.append(trim_obs({k: v[env : env + 1] for k, v in obs.items()}))
+        self.steps_added += 1
         self.actions[t], self.logprobs[t], self.values[t] = actions, logprobs, values
         self.rewards[t], self.dones[t] = rewards, dones
 
-    def flat_obs(self) -> dict[str, npt.NDArray[Any]]:
-        """All observations as [T * N, ...], each token axis padded to the widest step."""
-        if len(self.obs) != self.num_steps:
-            raise ValueError(f"rollout has {len(self.obs)} of {self.num_steps} steps")
-        steps = [real_widths(o) for o in self.obs]
-        widths = {axis: max(w[axis] for w in steps) for axis in steps[0]}
+    def minibatch_obs(self, index: npt.NDArray[np.int64]) -> dict[str, npt.NDArray[Any]]:
+        """The observations at flat indices `index` (t * num_envs + env) as [len(index), ...],
+        each token axis padded to the widest of them."""
+        if self.steps_added != self.num_steps:
+            raise ValueError(f"rollout has {self.steps_added} of {self.num_steps} steps")
+        chosen = [self.obs[int(i)] for i in index]
+        each = [real_widths(o) for o in chosen]
+        widths = {axis: max(w[axis] for w in each) for axis in each[0]}
         out: dict[str, npt.NDArray[Any]] = {}
-        for key in self.obs[0]:
+        for key in chosen[0]:
             fill = PAD_FILL.get(key, 0)
-            parts = [_pad_to(o[key], key, widths, fill) for o in self.obs]
+            parts = [_pad_to(o[key], key, widths, fill) for o in chosen]
             out[key] = np.concatenate(parts, axis=0)
         return out
+
+    def flat_obs(self) -> dict[str, npt.NDArray[Any]]:
+        """All observations as [T * N, ...], each token axis padded to the widest."""
+        return self.minibatch_obs(np.arange(self.num_steps * self.num_envs))
 
 
 def _pad_to(a: npt.NDArray[Any], key: str, widths: dict[str, int], fill: int) -> npt.NDArray[Any]:

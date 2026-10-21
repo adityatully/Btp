@@ -5,12 +5,17 @@
 
     uv run python -m meda.train agent=ppo train.instances=[tiny-sharing-m2] env.L_pad=128
 
-Both agents train on instances from a frozen benchmark set (`train.benchmark`,
+    uv run python -m meda.train agent=ppo train.source=generator generator=dilution_multi \
+        train.benchmark=val_stage1_v2
+
+By default both agents train on instances from a frozen benchmark set (`train.benchmark`,
 `train.instances`). Tabular Q (M6) needs that: it keys on exact states, so it only learns about
 instances it will meet again, and the M6 acceptance criterion is per instance. PPO (M8) trains
-one network on the selected instances, which is acceptance (a); training from a generator
-follows the stage design. A PPO run writes `metrics.jsonl`, TensorBoard logs and
-`checkpoints/last.pt` (resume with `train.resume=<path>`).
+one network on the selected instances, which is acceptance (a). With `train.source=generator`,
+PPO instead draws a fresh problem from the `generator` config every episode, never one held in
+`train.exclude` or in `train.benchmark`, which then serves only as the evaluation set. A PPO
+run writes `metrics.jsonl`, TensorBoard logs and `checkpoints/last.pt` (resume with
+`train.resume=<path>`).
 
 Each run writes into Hydra's run directory: the resolved config, one checkpoint per table, and
 the greedy policy graded by the M7 harness (`analysis.evaluate`): `results.parquet`, with the
@@ -41,6 +46,7 @@ from meda.core.costs import CostWeights
 from meda.core.problem import Instance
 from meda.envs.sample_prep_env import EnvConfig
 from meda.generators.benchmark_io import BenchmarkSet
+from meda.generators.sampler import GeneratorConfig, GeneratorSource
 from meda.utils.checkpoint import load_checkpoint, save_checkpoint
 from meda.utils.logging import MetricsLogger
 from meda.utils.seeding import seed_everything
@@ -67,6 +73,8 @@ def subset(bench: BenchmarkSet, instances: list[Instance]) -> BenchmarkSet:
 def train_tabular_q(cfg: dict[str, Any], out_dir: Path) -> pd.DataFrame:
     """One Q table per instance (the M6 acceptance criterion), then a greedy evaluation."""
     train_cfg = cfg["train"]
+    if str(train_cfg.get("source", "benchmark")) != "benchmark":
+        raise ValueError("tabular Q trains on frozen instances only (train.source=benchmark)")
     agent_cfg = TabularQConfig.from_dict({**cfg["agent"], "seed": cfg["seed"]})
     weights = CostWeights.from_dict(cfg["costs"])
     bench, instances = training_instances(train_cfg)
@@ -111,11 +119,35 @@ def resolve_device(name: str) -> torch.device:
     return torch.device(name)
 
 
+def training_source(cfg: dict[str, Any], bench: BenchmarkSet) -> GeneratorSource | None:
+    """The generator to train from (`train.source=generator`), excluding every problem of the
+    sets in `train.exclude` and of `bench`; None to train on the benchmark's instances."""
+    train_cfg = cfg["train"]
+    source = str(train_cfg.get("source", "benchmark"))
+    if source == "benchmark":
+        return None
+    if source != "generator":
+        raise ValueError(f"train.source must be 'benchmark' or 'generator', got {source!r}")
+    held: set[str] = set(bench.hashes())
+    for name in train_cfg.get("exclude") or ():
+        held |= BenchmarkSet.read(str(name)).hashes()
+    return GeneratorSource(
+        GeneratorConfig.from_dict(cfg["generator"]),
+        ChipLimits.from_dict(cfg["chip"]),
+        CostWeights.from_dict(cfg["costs"]),
+        frozenset(held),
+    )
+
+
 def make_vector_env(
-    cfg: dict[str, Any], instances: list[Instance], num_envs: int, mode: str
+    cfg: dict[str, Any],
+    instances: list[Instance],
+    num_envs: int,
+    mode: str,
+    source: GeneratorSource | None = None,
 ) -> VecEnv:
     """`num_envs` copies of the training env, autoresetting in the same step (SPEC 9.1)."""
-    factory = functools.partial(build_env, cfg, instances)
+    factory = functools.partial(build_env, cfg, instances, source)
     if mode == "sync":
         return SyncVectorEnv([factory] * num_envs, autoreset_mode=AutoresetMode.SAME_STEP)
     if mode == "async":
@@ -124,16 +156,18 @@ def make_vector_env(
 
 
 def train_ppo(cfg: dict[str, Any], out_dir: Path) -> pd.DataFrame:
-    """Train one PPO network on the selected frozen instances, then grade its greedy policy."""
+    """Train one PPO network on the selected frozen instances or on a generator, then grade
+    its greedy policy on the selected frozen instances."""
     train_cfg = cfg["train"]
     ppo_cfg = PPOConfig.from_dict(cfg["agent"])
     bench, instances = training_instances(train_cfg)
+    source = training_source(cfg, bench)
     graded = subset(bench, instances)
     schedule = ScheduleConfig.from_dict(cfg["eval"]["schedule"])
     sizes = EnvConfig.from_dict(cfg["env"]).sizes
     device = resolve_device(str(train_cfg["device"]))
     checkpoint = out_dir / "checkpoints" / "last.pt"
-    envs = make_vector_env(cfg, instances, ppo_cfg.num_envs, str(train_cfg["vector"]))
+    envs = make_vector_env(cfg, instances, ppo_cfg.num_envs, str(train_cfg["vector"]), source)
     logger = MetricsLogger(out_dir, tensorboard=True)
     try:
         trainer = PPOTrainer(ppo_cfg, sizes, envs, device, seed=int(cfg["seed"]))
@@ -145,7 +179,12 @@ def train_ppo(cfg: dict[str, Any], out_dir: Path) -> pd.DataFrame:
         eval_env = build_env(cfg, instances)
         every_ckpt = int(train_cfg["checkpoint_every_updates"])
         every_eval = int(train_cfg["eval_every_updates"])
-        print(f"PPO on {len(instances)} instance(s), {ppo_cfg.num_updates} updates, {device}")
+        drawn = (
+            f"{len(instances)} instance(s)"
+            if source is None
+            else f"generator '{source.config.name}' ({len(source.exclude)} hashes held out)"
+        )
+        print(f"PPO on {drawn}, {ppo_cfg.num_updates} updates, {device}")
         while not trainer.done:
             metrics = trainer.iteration()
             logger.log(trainer.update, metrics)

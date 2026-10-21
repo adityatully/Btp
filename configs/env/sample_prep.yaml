@@ -1,10 +1,12 @@
 # Environment padding sizes and feature scales (SPEC 9.2). Padding sizes are memory settings,
 # not limits of a trained network: raising one never invalidates weights. An instance larger
 # than a padding size raises an error naming it. The step limit belongs to each instance.
-F_pad: 4                      # fluid rows (mixture_*: 1 sample + 2 reagents + 1 buffer)
-T_pad: 12                     # target rows (mixture_multi: 4 experiments x 3)
-N_pad: 10                     # droplet rows; must cover every chip's storage_capacity
-L_pad: 2048                   # candidate rows (mixture stages peak near 1600; lower per run)
+# Sized for the input ranges of SPEC 1.3, probes included; a run may lower them.
+F_pad: 10                     # fluid rows (training F <= 6, probes up to 10)
+T_pad: 20                     # target rows (training T <= 10, probes up to 20)
+N_pad: 32                     # droplet rows; must cover every chip's storage_capacity
+                              # (training 2-16; 32 stands in for "unbounded")
+L_pad: 16384                  # candidate rows (random play peaks near 9,300 at M = 10, F = 6, S = 32)
 volume_ref: 16                # absolute volume scale: volume / volume_ref (a scale, not a cap)
 count_ref: 16                 # absolute count scale: demand, steps left, storage capacity
 preference_conditioning: false

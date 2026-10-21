@@ -32,6 +32,7 @@ from meda.solvers.baselines.naive import naive_plan
 from meda.solvers.baselines.tree import tree_plan
 
 RELAXED_STEP_LIMIT = 100_000
+CACHE_LIMIT = 200_000  # entries; the cache is cleared when full (values never depend on it)
 CONSTRUCTIONS: tuple[Callable[[Instance], tuple[Action, ...] | None], ...] = (
     naive_plan,
     tree_plan,
@@ -63,13 +64,15 @@ class ConstructiveCostToFinish:
 
     Both constructions build each target on its own from an empty chip, so the cost of the
     remaining demand is a sum over targets, each the cheaper construction for that target.
-    It is cached per (instance, target, remaining demand); the waste part is added per state.
-    Picklable, so it works with `AsyncVectorEnv`.
+    It is cached per (target, remaining demand, fluid kinds, chip limits), so the same target
+    on another instance reuses it and a generator that draws a fresh problem every episode
+    does not grow the cache per instance; the waste part is added per state. Picklable, so it
+    works with `AsyncVectorEnv`.
     """
 
     def __init__(self, weights: CostWeights) -> None:
         self.weights = weights
-        self._cache: dict[tuple[str, int, int], Rational] = {}
+        self._cache: dict[tuple[object, ...], Rational] = {}
 
     def __call__(self, state: PrepState, instance: Instance) -> Rational:
         on_chip = sum(d.volume for d in state.droplets)
@@ -85,11 +88,22 @@ class ConstructiveCostToFinish:
         return total
 
     def _target_cost(self, instance: Instance, target_id: int, demand: int) -> Rational:
-        key = (instance.instance_id, target_id, demand)
+        target = replace(instance.targets[target_id], id=0, experiment_id=0, demand=demand)
+        chip = instance.chip
+        key = (
+            target,
+            tuple(f.kind for f in instance.fluids),
+            chip.max_mix_volume,
+            chip.min_mix_volume,
+            chip.min_droplet_volume,
+            chip.allow_partial_take,
+            chip.storage_capacity,
+            chip.max_denominator,
+            chip.allow_same_composition_merge,
+        )
         hit = self._cache.get(key)
         if hit is not None:
             return hit
-        target = replace(instance.targets[target_id], id=0, demand=demand)
         relaxed = Instance(
             f"{instance.instance_id}#finish-t{target_id}",
             instance.fluids,
@@ -106,6 +120,8 @@ class ConstructiveCostToFinish:
                 f"max_mix_volume {instance.chip.max_mix_volume}, and the split tree needs "
                 f"storage for its depth (storage_capacity {instance.chip.storage_capacity})."
             )
+        if len(self._cache) >= CACHE_LIMIT:
+            self._cache.clear()
         self._cache[key] = best[1]
         return best[1]
 

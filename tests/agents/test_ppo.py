@@ -203,8 +203,8 @@ def test_gae_hand_case_with_episode_end_and_cut_off() -> None:
     np.testing.assert_allclose(ret, expected + values)
 
 
-def test_rollout_buffer_pads_every_token_axis_to_the_widest_step() -> None:
-    """Steps are stored trimmed; the batch pads each axis to the widest step (operands -1)."""
+def test_rollout_buffer_pads_every_token_axis_to_the_widest_in_the_batch() -> None:
+    """Observations are stored trimmed; a batch pads each axis to its widest (operands -1)."""
     env = make_env([mixture([(1, 1, 2), (1, 2, 1)], demand=2, step_limit=14)], L_pad=2048)
     first, _ = env.reset(seed=0)  # empty chip
     later = mid_episode_obs()  # droplets on chip, more candidates
@@ -220,6 +220,10 @@ def test_rollout_buffer_pads_every_token_axis_to_the_widest_step() -> None:
     n0 = int(first["action_mask"].sum())
     assert (flat["cand_index"][0, n0:] == -1).all() and (flat["action_mask"][0, n0:] == 0).all()
     assert flat["fluids"].shape == (2, 3, 3) and flat["globals"].shape == (2, 7)
+    # A minibatch pads only to its own widest observation, not the rollout's.
+    alone = buf.minibatch_obs(np.array([0]))
+    assert alone["candidates"].shape[1] == n0 < widths["action_mask"]
+    assert alone["droplets"].shape[1] == 1  # empty chip: one (masked) row
 
 
 # --------------------------------------------------------------------------- trainer
@@ -338,3 +342,55 @@ def test_overfits_one_tiny_instance_to_its_optimum(
     row = df.iloc[0]
     assert row["success"], row["status"]
     assert row["gap_to_optimal"] == 0, (row["cost_exact"], row["reference_cost"])
+
+
+def test_trains_from_a_generator_and_never_draws_a_held_out_problem(tmp_path: Path) -> None:
+    """`train.source=generator`: every episode is a fresh draw from the stage, none of them a
+    problem of the frozen sets, and the benchmark is used only to grade the result."""
+    from meda.generators.benchmark_io import BenchmarkSet, problem_hash
+    from meda.train import training_source
+
+    config = {
+        **cfg(),
+        "seed": 0,
+        "chip": load_yaml("chip/dmfb_m2.yaml"),
+        "generator": load_yaml("generator/tiny_dilution.yaml"),
+        "agent": {
+            **load_yaml("agent/ppo.yaml"),
+            "num_envs": 2,
+            "rollout_steps": 16,
+            "num_minibatches": 2,
+            "d_model": 32,
+            "n_layers": 1,
+            "total_env_steps": 64,
+        },
+        "train": {
+            **load_yaml("train/default.yaml"),
+            "source": "generator",
+            "benchmark": "val_stage1_v2",
+            "device": "cpu",
+            "checkpoint_every_updates": 0,
+            "eval_every_updates": 0,
+        },
+        "eval": load_yaml("eval/default.yaml"),
+    }
+    config["generator"].pop("defaults", None)
+    bench = BenchmarkSet.read("val_stage1_v2")
+    source = training_source(config, bench)
+    assert source is not None
+    held = {
+        problem_hash(i)
+        for name in ("tiny_exact_v1", "val_stage1_v2")
+        for i in BenchmarkSet.read(name).instances
+    }
+    rng = np.random.default_rng(0)
+    for _ in range(40):
+        assert problem_hash(source(rng)) not in held
+    df = train_ppo(config, tmp_path)
+    assert len(df) == len(bench.instances) and (df["env_steps"] == 64).all()
+
+
+def test_reward_scale_must_be_positive() -> None:
+    with pytest.raises(ValueError, match="reward_scale"):
+        ppo_cfg(reward_scale=0.0)
+    assert ppo_cfg(reward_scale=1 / 64).reward_scale == 1 / 64

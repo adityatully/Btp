@@ -58,3 +58,12 @@ def test_m7_acceptance_random_naive_exact_on_tiny(tmp_path: Path) -> None:
         c, o = Rational.parse(cost), ref.cost
         assert naive.at[iid, "gap_to_optimal"] == pytest.approx(float(c - o) / float(o))
     assert (tmp_path / "summary.md").exists() and (tmp_path / "results.parquet").exists()
+
+
+def test_every_cli_producer_has_a_plot_colour() -> None:
+    """`tree` (0.12) was a producer without a colour slot, so plotting crashed on it."""
+    from meda.analysis.plots import colour
+    from meda.evaluate_cli import PRODUCERS
+
+    for name in PRODUCERS:
+        colour(name)

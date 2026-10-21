@@ -49,6 +49,7 @@ class PPOConfig:
     num_envs: int
     rollout_steps: int
     gamma: float
+    reward_scale: float  # rewards are multiplied by this before GAE (SPEC 11.4)
     gae_lambda: float
     clip_coef: float
     clip_vloss: bool
@@ -62,6 +63,8 @@ class PPOConfig:
     total_env_steps: int
 
     def __post_init__(self) -> None:
+        if self.reward_scale <= 0:
+            raise ValueError(f"ppo: reward_scale must be > 0, got {self.reward_scale}")
         if self.batch_size % self.num_minibatches:
             raise ValueError(
                 f"ppo: num_envs * rollout_steps = {self.batch_size} is not divisible by "
@@ -165,7 +168,14 @@ class PPOTrainer:
             act = actions.cpu().numpy()
             self.next_obs, rewards, terminated, truncated, info = self.envs.step(act)
             dones = np.logical_or(terminated, truncated)
-            buf.add(obs, act, logprobs.cpu().numpy(), values.cpu().numpy(), rewards, dones)
+            buf.add(
+                obs,
+                act,
+                logprobs.cpu().numpy(),
+                values.cpu().numpy(),
+                rewards * cfg.reward_scale,
+                dones,
+            )
             legal_counts.append(float(obs["action_mask"].sum(axis=1).mean()))
             episodes += _finished_episodes(info, dones)
             self.global_step += cfg.num_envs
@@ -195,7 +205,6 @@ class PPOTrainer:
         self, buf: RolloutBuffer, adv: npt.NDArray[np.float64], ret: npt.NDArray[np.float64]
     ) -> dict[str, float]:
         cfg = self.cfg
-        obs = buf.flat_obs()
         b_actions = torch.as_tensor(buf.actions.reshape(-1), device=self.device)
         b_logprobs = torch.as_tensor(buf.logprobs.reshape(-1), dtype=torch.float32)
         b_values = torch.as_tensor(buf.values.reshape(-1), dtype=torch.float32)
@@ -214,7 +223,7 @@ class PPOTrainer:
             self.rng.shuffle(index)
             for start in range(0, cfg.batch_size, cfg.minibatch_size):
                 mb = index[start : start + cfg.minibatch_size]
-                t = batch_obs({k: v[mb] for k, v in obs.items()}, self.device)
+                t = batch_obs(buf.minibatch_obs(mb), self.device)
                 logits, new_values = self.net(t)
                 dist = masked_distribution(logits, t["action_mask"])
                 new_logprobs = dist.log_prob(b_actions[mb])

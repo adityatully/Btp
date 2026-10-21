@@ -6,6 +6,9 @@ n_heads: 4
 num_envs: 32
 rollout_steps: 128
 gamma: 1.0
+reward_scale: 1.0             # rewards x this before GAE; a positive constant leaves the optimal
+                              # policy unchanged (gamma = 1) but keeps value targets near unit
+                              # scale: under costs/geometric (sample 64) returns reach thousands
 gae_lambda: 0.95
 clip_coef: 0.2
 clip_vloss: true              # clip the value loss like the policy ratio (CleanRL default)

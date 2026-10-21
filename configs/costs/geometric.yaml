@@ -1,0 +1,12 @@
+# Cost weights for the MEDA stages (SPEC 6.3, chosen 2026-10-20): e-MRCM's geometric scheme
+# (after CoDOS), sample 64x and reagent 8x the buffer, so plans save sample at the price of
+# mixes, the axis every published baseline optimises. Buffer stays at 1, not 0: a free fluid
+# gives degenerate plans. One weight per fluid kind, so every reagent costs 8 (e-MRCM gives
+# each reagent its own weight; reproducing it exactly needs a per-fluid profile).
+# default.yaml stays as it is: the stored optima of the existing frozen sets use it.
+w_fluid:
+  SAMPLE: 64
+  REAGENT: 8
+  BUFFER: 1
+w_mix: 1
+w_waste: 1
