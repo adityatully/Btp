@@ -1,6 +1,11 @@
 # MEDA Design Automation — Codebase Specification
 
-Version 0.16 · 2026-10-21
+Version 0.17 · 2026-10-22
+
+Changes in 0.17 (documentation only): grading references for the benchmark tiers (8.4) from the
+Track 2 experiments E1–E3: constraint cells and the precise frontier, what each reference proves,
+measured interval widths and bound tightness, the options to strengthen grading, and comparison
+with k-input mixes. Tier 5's prerequisites are marked met.
 
 Changes in 0.16 (documentation only): the Track 2 input ranges fixed by the user on 2026-10-20
 are recorded in 1.3 (training ranges and probe values, storage meaning, target volume, fixed
@@ -889,7 +894,7 @@ the job of tiers 3–6.
 | 2 Engine check (DMFB) | Does our core reproduce published 1:1 results? | `dmfb_sweep_v1` | exact search, bitscan, published DMFB numbers | M9 |
 | 3 Literature | Do we reproduce, then beat, MEDA methods on their own problems? | `literature_<paper>_v1` | the paper's reported numbers + our reproduction | M9 |
 | 4 Generalisation | Does the policy transfer to unseen and larger problems? | `unseen_ratios_v1`, `larger_v1` | [bound, best known] | after M8 stage 2 |
-| 5 Frontier | How does the agent do where no published method applies? | `frontier_v1` | [bound, best known] | after a general mixture fallback (10.3) |
+| 5 Frontier | How does the agent do where no published method applies? | `frontier_v1` | [bound, best known] (see Grading references) | with the stage design (the mixture fallback exists since 0.12) |
 | 6 Assays | Does it work on ratios from real protocols? | `assays_v1` | [bound, best known] | M9 |
 
 Tier 2 and 3 rules:
@@ -919,15 +924,63 @@ Tier 5 rules:
   published method adapted to the instance. Adapted results are labelled `adapted`, for example
   e-MRCM run per target and then replicated to meet demand, and are never presented as the
   published method.
-- Before this set can be used, two things are needed: env padding sizes that cover its
-  largest instance (otherwise the env raises rather than truncate; with observation v2 this is
-  a memory setting and needs no retraining, 9.2), and a cost-to-finish fallback that supports
-  mixtures (10.3).
+- Both prerequisites are met: env padding covers the 1.3 ranges (0.15; beyond them it raises,
+  and with observation v2 padding is a memory setting, 9.2), and the cost-to-finish fallback
+  supports mixtures (10.3, since 0.12).
 - **Claim rule.** "No published method can attempt these" is false as written. Naive always
   produces a plan, and an exact solver can attempt any instance given unlimited time. Report
   what was measured instead: the instance lies outside every published method's input class,
   exact search did not finish within budget B, and the agent's cost is within x of the lower
   bound and y below the best adapted baseline, at inference time t.
+
+**Grading references (Track 2 experiments E1–E3, `notes/track2/`, 2026-10-21).**
+
+*Cells.* A problem's constraint cell is fluids (dilution / mixture) × targets (one / many) ×
+demand (1 / more) × storage (unbounded / limited). Published MEDA heuristics cover only the cells
+with demand 1 and unbounded storage (WSPM, FacDA, MRCM, e-MRCM, MTWM; the map is in
+`notes/track2/e1_coverage.md`). The **frontier** is exactly: demand > 1 together with many targets
+or a mixture, plus every cell with limited storage. In a covered cell the agent is compared with
+every method that applies, on each method's own metric and on every proxy column of 12.1, not
+only on the weighted cost, since each heuristic optimises a different objective.
+
+*References, and what each proves:*
+| Reference | Available | Proves |
+|---|---|---|
+| exact optimum (10.2) | small problems only (measured: 16% of small draws within 60 s; almost none with ≥ 4 deliveries) | the true gap |
+| lower bound (10.2) | every size | `gap_to_lower_bound`: the agent is at most that far from optimal |
+| naive and split tree (10.4) | every size | a floor baseline; they never share across targets, so beating them is a weak result |
+| published methods | covered cells, as each is reproduced (tier 3) | "beats the state of the art" |
+| adapted methods | frontier: 1:1 demand/storage planners (MTMD, DDMT, NFSP; a 1:1 plan is a legal MEDA plan) and MEDA methods run per droplet | labelled `adapted` (claim rule above) |
+
+*Measured.* On the frontier, exact search never improves the construction within 300 s
+(0 of 45 medium problems), and the interval [bound, best known] is 28–60% wide (median per cell).
+Where the optimum is known, the bound is within 5% of it whenever the optimal plan wastes almost
+nothing (14 of 18 multi-target problems). It is loose only when waste is forced, for example a
+delivery smaller than the minimum mix volume. So on multi-target problems the width is mostly
+the construction's excess, not the bound's (inferred from small problems), and
+`gap_to_lower_bound` is a usable certificate at scale.
+
+*Options to strengthen grading, none needed before training:*
+1. **A sharing-aware search baseline** (beam or large-neighbourhood search over the engine,
+   seeded by the split tree). It tightens the best-known end on the frontier and is the
+   non-learned competitor. No new dependency.
+2. **Faster exact search** (no re-check of generated legal moves, cached heuristic, dedupe of
+   equivalent children). It enlarges the provable region for tier 0/1. No new dependency.
+3. **A forced-waste term in the lower bound**, for deliveries a mix cannot produce without
+   leftovers. It stays admissible. Cheap.
+4. **An LP relaxation over fluid flows**, behind the same `lower_bound` field. It needs an LP
+   solver (a new dependency, section 3).
+5. **An exact ILP/SMT formulation** for small and medium problems. It needs a solver (a new
+   dependency).
+6. **Mixes with more than two inputs, for comparisons only.** A k-input mix equals a chain of
+   k − 1 two-input mixes with identical fluid use and no extra waste (checked in the engine).
+   Baseline plans with k-input mixes are expanded into chains and run through the engine.
+   `dag_metrics` gains a contracted mix count, which merges a chain in which each intermediate
+   is used whole, once and immediately into one mix, so mixes are reported on the papers'
+   terms. The agent stays at two inputs.
+
+*Reporting.* Under the fixed 64 / 8 / 1 weights the cost is mostly sample, so sample units
+saved are reported next to cost.
 
 Tier 6: `assays_v1` uses target ratios from real protocols, with a citation per instance: PCR
 master mix, the colorimetric protein serial dilution, and the scaled Protein 1/4/5/7 family.
