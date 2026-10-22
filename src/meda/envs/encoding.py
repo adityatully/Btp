@@ -29,7 +29,7 @@ import numpy as np
 import numpy.typing as npt
 from gymnasium import spaces
 
-from meda.core.actions import Action, Discard, Mix, Output, Source
+from meda.core.actions import Action, Discard, Mix, Output, SourceKind
 from meda.core.fluids import FluidKind
 from meda.core.problem import Instance
 from meda.core.state import PrepState
@@ -243,24 +243,28 @@ class Encoder:
 
         # ---- candidates: exact afterstates
         nl = len(actions)
-        op = np.zeros(nl, dtype=np.int64)
-        ia = np.zeros(nl, dtype=np.int64)  # source row of operand a
-        ib = np.full(nl, -1, dtype=np.int64)  # source row (Mix) or target id (Output)
-        kk = np.zeros(nl, dtype=np.int64)
-        ll = np.zeros(nl, dtype=np.int64)
-
-        def row(src: Source) -> int:
-            return src.index if src.is_reservoir else row_of[src.index]
-
-        for j, act in enumerate(actions):
-            if isinstance(act, Mix):
-                op[j], ia[j], ib[j], kk[j], ll[j] = OP_MIX, row(act.a), row(act.b), act.k, act.l
-            elif isinstance(act, Output):
-                op[j], ia[j], ib[j] = OP_OUTPUT, row(act.src), act.target
-                kk[j] = inst.targets[act.target].droplet_volume
-            elif isinstance(act, Discard):
-                op[j], ia[j] = OP_DISCARD, row_of[act.uid]
-                kk[j] = svol[ia[j]]
+        # One (op, row of a, row of b or target id, k, l) per action, built as plain tuples and
+        # converted once: per-element numpy writes dominated the encoder at a few thousand rows.
+        out_vol = [t.droplet_volume for t in inst.targets]
+        res = SourceKind.RESERVOIR
+        rows: list[tuple[int, int, int, int, int]] = []
+        for act in actions:
+            if type(act) is Mix:
+                a, b = act.a, act.b
+                ra = a.index if a.kind is res else row_of[a.index]
+                rb = b.index if b.kind is res else row_of[b.index]
+                rows.append((OP_MIX, ra, rb, act.k, act.l))
+            elif type(act) is Output:
+                s = act.src
+                rs = s.index if s.kind is res else row_of[s.index]
+                rows.append((OP_OUTPUT, rs, act.target, out_vol[act.target], 0))
+            elif type(act) is Discard:
+                r = row_of[act.uid]
+                rows.append((OP_DISCARD, r, -1, int(svol[r]), 0))
+            else:
+                raise TypeError(f"unknown action type {type(act).__name__}")
+        cols = np.array(rows, dtype=np.int64).reshape(nl, 5)
+        op, ia, ib, kk, ll = (np.ascontiguousarray(cols[:, c]) for c in range(5))
 
         is_mix = op == OP_MIX
         ib_src = np.where(is_mix, ib, ia)  # second source row (only meaningful for Mix)

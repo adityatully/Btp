@@ -220,9 +220,11 @@ def legal_actions(state: PrepState, instance: Instance) -> tuple[Action, ...]:
                     if n - a_used - (b.volume == l) + 1 > cap:
                         continue
                     den = (k + l) * dd
-                    g = gcd(*[k * x + l * y for x, y in zip(pa, pb, strict=True)], den)
-                    if den // g > max_den:
-                        continue
+                    # The reduced denominator divides `den`, so the gcd is only needed above it.
+                    if den > max_den:
+                        g = gcd(*[k * x + l * y for x, y in zip(pa, pb, strict=True)], den)
+                        if den // g > max_den:
+                            continue
                     actions.append(Mix(a.source, k, b.source, l))
 
     for src in reps:
