@@ -1592,7 +1592,14 @@ padded candidate rows (observations × the widest of them; one wider observation
 its own). Each chunk's loss is weighted by its share of the minibatch and the gradients are
 accumulated before the one clipped optimiser step, with advantages normalised over the whole
 minibatch first, so the update equals the unchunked one (tested to 1e-5); only peak memory
-changes.
+changes. A chunk is built by one preallocated array per key and a slice copy per observation:
+`np.pad` per observation and key was most of an update's time (measured on stage 1–3 random
+play, 32 × 128 steps: 1.23 s an epoch against 0.17 s).
+
+Measured on the workstation (0.18; 32 async envs, A5000, stages 1–3, random policy, before the
+slice copy): an iteration of 4,096 steps took 5.8 s waiting for the env workers, 1.6 s in the
+policy and copies and 7.6 s in the update, so about 270 steps/s end to end (the logged
+`env_steps_per_second` counts collection only). GPU memory held at 2.7 GB with chunking.
 
 **Network v1 (removed in 0.11).** MLPs on v1 source and target rows (widths fixed by `F_max`,
 `T_max`), the same Transformer without relation biases, and the same scorer.

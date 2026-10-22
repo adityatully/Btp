@@ -25,7 +25,7 @@ from typing import Any
 import numpy as np
 import numpy.typing as npt
 
-from meda.agents.ppo.policy import KEY_AXES, PAD_FILL, real_widths, trim_obs
+from meda.agents.ppo.policy import AXIS_MASKS, KEY_AXES, PAD_FILL, trim_obs
 
 FloatArray = npt.NDArray[np.float64]
 
@@ -105,13 +105,21 @@ class RolloutBuffer:
         if self.steps_added != self.num_steps:
             raise ValueError(f"rollout has {self.steps_added} of {self.num_steps} steps")
         chosen = [self.obs[int(i)] for i in index]
-        each = [real_widths(o) for o in chosen]
-        widths = {axis: max(w[axis] for w in each) for axis in each[0]}
+        # Stored observations are trimmed to their own widths, so a width is an array shape.
+        widths = {axis: max(o[mask].shape[1] for o in chosen) for axis, mask in AXIS_MASKS.items()}
         out: dict[str, npt.NDArray[Any]] = {}
-        for key in chosen[0]:
-            fill = PAD_FILL.get(key, 0)
-            parts = [_pad_to(o[key], key, widths, fill) for o in chosen]
-            out[key] = np.concatenate(parts, axis=0)
+        for key, first in chosen[0].items():
+            shape = [len(chosen), *first.shape[1:]]
+            for dim, axis in KEY_AXES[key]:
+                shape[dim] = widths[axis]
+            # One preallocated array per key and a slice copy per observation (np.pad per
+            # observation and key was most of an update's time).
+            batch = np.full(shape, PAD_FILL.get(key, 0), dtype=first.dtype)
+            for row, o in enumerate(chosen):
+                a = o[key]
+                where: tuple[int | slice, ...] = (row, *(slice(0, n) for n in a.shape[1:]))
+                batch[where] = a[0]
+            out[key] = batch
         return out
 
     def candidate_widths(self) -> npt.NDArray[np.int64]:
@@ -121,12 +129,3 @@ class RolloutBuffer:
     def flat_obs(self) -> dict[str, npt.NDArray[Any]]:
         """All observations as [T * N, ...], each token axis padded to the widest."""
         return self.minibatch_obs(np.arange(self.num_steps * self.num_envs))
-
-
-def _pad_to(a: npt.NDArray[Any], key: str, widths: dict[str, int], fill: int) -> npt.NDArray[Any]:
-    pad = [(0, 0)] * a.ndim
-    for dim, axis in KEY_AXES[key]:
-        pad[dim] = (0, widths[axis] - a.shape[dim])
-    if all(p == (0, 0) for p in pad):
-        return a
-    return np.pad(a, pad, constant_values=fill)
