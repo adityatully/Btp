@@ -1,6 +1,10 @@
 # MEDA Design Automation — Codebase Specification
 
-Version 0.18 · 2026-10-22
+Version 0.19 · 2026-10-22
+
+Changes in 0.19: `scripts/regime_report.py --at-step N|common` grades unfinished or stopped runs
+at one shared validation round, from `metrics.jsonl` and the last checkpoint's regime state, so
+the comparison can stop early at equal env steps (8.3).
 
 Changes in 0.18 (stage design and training regimes, chosen by the user on 2026-10-22): the stage
 design `track2_v1` over the constraint cells, five stages that each add one constraint, one
@@ -927,6 +931,9 @@ before the runs:
 3. If two regimes' seed ranges of that gap overlap, prefer the simpler (mixed, then expanding,
    then sequential), then the one that forgets less (best validation success during the run
    minus final success, per stage).
+"Final" is each run's end-of-run grading, or with `--at-step N` (or `common`, the latest round
+every run has reached) its validation round at or before env step N: the pilot may stop once the
+curves separate, and runs graded at different rounds are refused rather than compared.
 A deferred arm, prioritised level replay over instances (D-PLR,
 `notes/training_regime_research.md`), is tried only if C and D both stall.
 
@@ -1805,6 +1812,7 @@ vs number of targets; each producer has a fixed colour across all figures).
       agent.reward_scale=0.015625 agent.total_env_steps=<budget> \
       regime=sequential,expanding,mixed regime.num_stages=3 seed=0,1
   python scripts/regime_report.py multirun/<date>/<time> --out notes/track2/regime_pilot.md
+  python scripts/regime_report.py outputs/pilot --at-step common   # runs still going or stopped
   python -m meda.evaluate_cli eval.producers=[random,naive,exact_search] eval.benchmark=tiny_exact_v1
   ```
 - Each run directory stores: the resolved config, git commit hash and dirty flag, seed, library
