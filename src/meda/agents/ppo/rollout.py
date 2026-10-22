@@ -12,6 +12,9 @@ observation's own real widths, and padded only to the widest observation of a mi
 the minibatch is built. Candidate counts vary widely (tens on an empty chip, thousands at
 M = 10 with many droplets), so padding a whole rollout to its widest step would hold
 gigabytes; the stored rollout grows with the mean width and a minibatch with its own widest.
+Each stored observation is a **copy** (`split_obs`): a trimmed view would keep the whole padded
+batch it came from alive (measured: 21 GB at 32 envs and L_pad 16384), and a vector env built
+with `copy=False` overwrites that batch at its next step.
 """
 
 from __future__ import annotations
@@ -52,6 +55,15 @@ def compute_gae(
     return adv, adv + values
 
 
+def split_obs(obs: Mapping[str, npt.NDArray[Any]]) -> list[dict[str, npt.NDArray[Any]]]:
+    """A batched observation as one trimmed, owned copy per env (row i of every key)."""
+    rows = len(next(iter(obs.values())))
+    return [
+        {k: np.array(v) for k, v in trim_obs({k: v[i : i + 1] for k, v in obs.items()}).items()}
+        for i in range(rows)
+    ]
+
+
 class RolloutBuffer:
     """One rollout of `num_envs` envs: per-step observations and the PPO quantities."""
 
@@ -67,18 +79,22 @@ class RolloutBuffer:
 
     def add(
         self,
-        obs: Mapping[str, npt.NDArray[Any]],
+        obs: Mapping[str, npt.NDArray[Any]] | list[dict[str, npt.NDArray[Any]]],
         actions: npt.NDArray[np.int64],
         logprobs: FloatArray,
         values: FloatArray,
         rewards: FloatArray,
         dones: npt.NDArray[np.bool_],
     ) -> None:
+        """`obs` is the batched observation the actions were taken in, or `split_obs` of it
+        (taken before the vector env stepped, when it reuses its observation buffer)."""
         t = self.steps_added
         if t >= self.num_steps:
             raise IndexError(f"rollout buffer is full ({self.num_steps} steps)")
-        for env in range(self.num_envs):
-            self.obs.append(trim_obs({k: v[env : env + 1] for k, v in obs.items()}))
+        kept = obs if isinstance(obs, list) else split_obs(obs)
+        if len(kept) != self.num_envs:
+            raise ValueError(f"{len(kept)} observations for {self.num_envs} envs")
+        self.obs.extend(kept)
         self.steps_added += 1
         self.actions[t], self.logprobs[t], self.values[t] = actions, logprobs, values
         self.rewards[t], self.dones[t] = rewards, dones

@@ -1294,6 +1294,17 @@ The M5–M8 acceptance runs before 0.11 used it; nothing trained on it was kept.
 - Observation v2 adds pair matrices: `cand_target` is L_pad × T_pad × 2 floats per step (for
   example 2048 × 12 × 2, about 200 KB). The encoder computes them vectorised from the same exact
   integers as the candidate features; profile v2 against v1 before and after the switch.
+- **Measured 2026-10-22 (0.18), stages 1–3 of `track2_v1`, random policy.** One env steps at
+  about 190–230 steps/s (mean 4.3 ms, p90 8.7, p99 21: legal enumeration and encoding). At the
+  default pads one observation is 4.7 MB, almost all candidate padding. The first workstation
+  run (32 async workers, A5000) reached only about 280 steps/s with the cores mostly idle: the
+  main process deep-copied every padded batch (about 150 MB a step) and the rollout kept views
+  into those batches (21 GB). Training vector envs are now built with `copy=False` and the
+  trainer keeps one trimmed copy per env before the next step (11.4); without the network,
+  7 workers went from 129 to 313 steps/s on a laptop. Workers step in lockstep, so a vector
+  step waits for its slowest env; that tail bounds 32 workers at roughly 1,500–2,000 steps/s
+  under a random policy, short of the 10,000 target. Fewer droplets on chip (a trained policy)
+  make steps cheaper.
 
 ### 9.5 Wrappers (`wrappers.py`)
 - `EpisodeStats`: accumulates totals for logging.
@@ -1592,8 +1603,10 @@ leaves the optimal policy unchanged, and it keeps value targets near unit scale 
   `PPOAgent` implements `Agent` (`save` / `load` keep the weights and `NetConfig` only).
 - `rollout.py`: an episode that ended (success, truncation or dead end) is never bootstrapped,
   because the env already charged `cost_to_finish`. The only bootstrap is at the end of a
-  rollout, for episodes it cut off. Observations are stored trimmed per env and step and padded
-  per minibatch (`minibatch_obs`).
+  rollout, for episodes it cut off. Observations are stored trimmed per env and step, as owned
+  copies taken before the vector env steps (`split_obs`: a view would pin the whole padded
+  batch, and a `copy=False` vector env reuses its buffer), and padded per minibatch
+  (`minibatch_obs`).
 - `ppo.py`: `PPOConfig.from_dict` (unknown keys raise; `clip_vloss` added to the config);
   advantages normalised per minibatch. `PPOTrainer` takes the vector env from the caller, so
   where problems come from is not its concern, and it refuses one that is not `SAME_STEP`.

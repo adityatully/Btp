@@ -153,12 +153,18 @@ def make_vector_env(
     mode: str,
     source: InstanceSource | None = None,
 ) -> VecEnv:
-    """`num_envs` copies of the training env, autoresetting in the same step (SPEC 9.1)."""
+    """`num_envs` copies of the training env, autoresetting in the same step (SPEC 9.1).
+
+    `copy=False`: the vector env hands back its own observation buffer instead of a deep copy
+    of every padded observation (about 150 MB a step at 32 envs and L_pad 16384, which made
+    the main process the bottleneck); the trainer copies what it keeps, trimmed, before the
+    next step (`rollout.split_obs`)."""
     factory = functools.partial(build_env, cfg, instances, source)
+    reset = AutoresetMode.SAME_STEP
     if mode == "sync":
-        return SyncVectorEnv([factory] * num_envs, autoreset_mode=AutoresetMode.SAME_STEP)
+        return SyncVectorEnv([factory] * num_envs, autoreset_mode=reset, copy=False)
     if mode == "async":
-        return AsyncVectorEnv([factory] * num_envs, autoreset_mode=AutoresetMode.SAME_STEP)
+        return AsyncVectorEnv([factory] * num_envs, autoreset_mode=reset, copy=False)
     raise ValueError(f"train.vector must be 'sync' or 'async', got {mode!r}")
 
 

@@ -31,7 +31,7 @@ from torch import nn
 
 from meda.agents.ppo.networks import NetConfig, SetEncoderNet
 from meda.agents.ppo.policy import PPOAgent, batch_obs, masked_distribution
-from meda.agents.ppo.rollout import RolloutBuffer, compute_gae
+from meda.agents.ppo.rollout import RolloutBuffer, compute_gae, split_obs
 from meda.envs.encoding import EnvSizes
 
 # The two vector envs that can read and write per-worker env snapshots (SPEC 9.1).
@@ -166,17 +166,20 @@ class PPOTrainer:
                 actions = dist.sample()
                 logprobs = dist.log_prob(actions)
             act = actions.cpu().numpy()
+            # Keep this step's observations before stepping: a vector env built with
+            # `copy=False` (the training default) reuses its observation buffer.
+            kept = split_obs(obs)
+            legal_counts.append(float(obs["action_mask"].sum(axis=1).mean()))
             self.next_obs, rewards, terminated, truncated, info = self.envs.step(act)
             dones = np.logical_or(terminated, truncated)
             buf.add(
-                obs,
+                kept,
                 act,
                 logprobs.cpu().numpy(),
                 values.cpu().numpy(),
                 rewards * cfg.reward_scale,
                 dones,
             )
-            legal_counts.append(float(obs["action_mask"].sum(axis=1).mean()))
             episodes += _finished_episodes(info, dones)
             self.global_step += cfg.num_envs
 
