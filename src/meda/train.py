@@ -130,7 +130,8 @@ def resolve_device(name: str, gpu_memory_fraction: float = 1.0) -> torch.device:
     if not 0 < gpu_memory_fraction <= 1:
         raise ValueError(f"train.gpu_memory_fraction must be in (0, 1], got {gpu_memory_fraction}")
     if device.type == "cuda":
-        torch.cuda.set_per_process_memory_fraction(gpu_memory_fraction, device)
+        index = torch.cuda.current_device() if device.index is None else device.index
+        torch.cuda.set_per_process_memory_fraction(gpu_memory_fraction, index)
     return device
 
 
