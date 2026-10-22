@@ -20,10 +20,12 @@ from meda.core.composition import Rational
 TIERS = {
     "tiny_exact": "0 Correctness",
     "val_stage": "1 In-distribution",
+    "val_s": "1 In-distribution",
     "dmfb_sweep": "2 Engine check (DMFB)",
     "literature_": "3 Literature",
     "unseen_ratios": "4 Generalisation",
     "larger": "4 Generalisation",
+    "heldout_combo": "4 Generalisation",
     "frontier": "5 Frontier",
     "assays": "6 Assays",
 }

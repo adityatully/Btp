@@ -1,0 +1,56 @@
+# Stage design (SPEC 8.3), chosen by the user on 2026-10-22 from the Track 2 constraint cells.
+# A cell is one value per axis; its generator config is `base` updated by each axis value's
+# keys, then by every matching `overrides` entry. Stage 1 is the `start` cell; each later stage
+# adds one axis value, and its cells are every new combination of the values unlocked so far,
+# minus `held_out`. Ranges are SPEC 1.3's training ranges.
+name: track2_v1
+chip: meda_m8                 # platform constants; M and storage are drawn per cell
+costs: geometric              # the cost profile the answer keys of the validation sets use
+
+base:
+  composition_sampler: dirichlet_snapped
+  accuracy_denominator: [4, 256]   # exact targets keep only D whose prime factors are <= M
+  tolerance: [0, 0, "1/200", "1/1000"]  # half exact, half tolerant (one drawn per target)
+  max_denominator: 1024       # a 1/1000 tolerance needs grids finer than 256
+  droplet_volume: [1, M]
+  max_mix_volume: [3, 10]
+  num_experiments: 1
+  step_limit_rule: depth
+
+axes:
+  fluids:
+    dilution: {num_fluids: {samples: 1, reagents: 0, buffers: 1}, support_size: 2}
+    mixture: {num_fluids: {samples: 1, reagents: [1, 4], buffers: 1}, support_size: [3, 6]}
+  targets:
+    one: {targets_per_experiment: 1}
+    many: {targets_per_experiment: [2, 10]}
+  demand:
+    single: {demand: 1}
+    multi: {demand: [2, 4]}
+  storage:
+    loose: {storage_capacity: 32}     # 32 stands in for unbounded (env N_pad)
+    limited: {storage_capacity: [2, 16]}
+
+overrides:
+  - when: {fluids: dilution, targets: many}
+    set: {target_structure: [independent, gradient]}
+
+start: {fluids: dilution, targets: one, demand: single, storage: loose}
+stages:
+  - {name: s1_dilution, val: val_s1_v1}
+  - {name: s2_mixture, adds: {fluids: mixture}, val: val_s2_v1}
+  - {name: s3_demand, adds: {demand: multi}, val: val_s3_v1}
+  - {name: s4_targets, adds: {targets: many}, val: val_s4_v1}
+  - {name: s5_storage, adds: {storage: limited}, val: val_s5_v1}
+
+# Never drawn in training; tested on its own tier-4 set (compositional generalisation).
+held_out:
+  cells: [{fluids: dilution, targets: many, demand: multi, storage: limited}]
+  val: heldout_combo_v1
+
+# Stage shares once every stage is in: most draws where Track 2 E2 found headroom.
+final_weights: {s1_dilution: 0.05, s2_mixture: 0.05, s3_demand: 0.2, s4_targets: 0.35,
+                s5_storage: 0.35}
+
+val_size: 40                  # instances per validation set, split evenly over its cells
+val_seed: 20261022

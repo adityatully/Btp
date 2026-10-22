@@ -49,6 +49,10 @@ from meda.solvers.baselines.naive import naive_plan
 from meda.solvers.baselines.tree import min_denominator_within, tree_plan
 
 COMPOSITION_SAMPLERS = ("dirichlet_snapped", "reachable_walk", "fixed_list")
+# How an instance's targets relate (SPEC 8.1): drawn independently by the composition sampler,
+# or a linear dilution gradient (one denominator, evenly spaced sample shares), the structured
+# multi-target case where sharing pays most (Track 2 E2).
+TARGET_STRUCTURES = ("independent", "gradient")
 GENERATOR_VERSION = 1
 # How an instance's step limit is sized when `step_limit` is null (SPEC 8.1):
 # - "depth": multiple x a bound from the problem alone, sum over deliveries of (the fewest mix
@@ -88,6 +92,8 @@ class GeneratorConfig:
     max_denominator: int | None = None
     # `droplet_volume: [low, M]`: the high end is each instance's own M (SPEC 1.3: 1 to M).
     droplet_volume_to_m: bool = False
+    # One is chosen per instance when there are several (repeat an entry to weight it).
+    target_structure: tuple[str, ...] = ("independent",)
 
     @property
     def min_fluids(self) -> int:
@@ -152,6 +158,19 @@ class GeneratorConfig:
             fail("reachable_walk takes a fixed support_size")
         if self.composition_sampler == "fixed_list" and not self.fixed_compositions:
             fail("fixed_list needs a non-empty fixed_compositions list")
+        if not self.target_structure or any(
+            t not in TARGET_STRUCTURES for t in self.target_structure
+        ):
+            fail(f"target_structure entries must be among {TARGET_STRUCTURES}")
+        if "gradient" in self.target_structure and (
+            self.composition_sampler != "dirichlet_snapped"
+            or self.support_size != (2, 2)
+            or self.max_fluids != 2
+        ):
+            fail(
+                "a gradient is a dilution: it needs dirichlet_snapped, support_size 2 and "
+                "exactly one sample and one buffer"
+            )
 
     @staticmethod
     def from_dict(data: Mapping[str, Any]) -> GeneratorConfig:
@@ -174,6 +193,7 @@ class GeneratorConfig:
             "max_mix_volume",
             "storage_capacity",
             "max_denominator",
+            "target_structure",
         }
         unknown = set(data) - known
         if unknown:
@@ -213,6 +233,7 @@ class GeneratorConfig:
             max_denominator=None
             if data.get("max_denominator") is None
             else int(data["max_denominator"]),
+            target_structure=_names(data.get("target_structure", "independent")),
         )
 
     def config_hash(self) -> str:
@@ -254,6 +275,8 @@ class GeneratorConfig:
             payload["max_denominator"] = self.max_denominator
         if self.step_limit_rule != "witness":  # the version-1 rule is the unwritten one
             payload["step_limit_rule"] = self.step_limit_rule
+        if self.target_structure != ("independent",):
+            payload["target_structure"] = list(self.target_structure)
         return hashlib.sha256(json.dumps(payload, sort_keys=True).encode()).hexdigest()[:16]
 
 
@@ -264,6 +287,13 @@ def _as_range(value: Any) -> tuple[int, int]:
             raise ValueError(f"expected a [low, high] range, got {value}")
         return int(value[0]), int(value[1])
     return int(value), int(value)
+
+
+def _names(value: Any) -> tuple[str, ...]:
+    """Accepts one name or a list of them."""
+    if isinstance(value, Sequence) and not isinstance(value, str):
+        return tuple(str(v) for v in value)
+    return (str(value),)
 
 
 def _to_m(value: Any) -> bool:
@@ -457,6 +487,26 @@ def _sample_compositions(
     return tuple(comps), None
 
 
+def _gradient(
+    rng: np.random.Generator, cfg: GeneratorConfig, chip: ChipLimits, count: int
+) -> tuple[Composition, ...]:
+    """A linear dilution gradient of `count` targets: one exact denominator D the instance's M
+    can reach, sample shares lo, lo + step, ... evenly spaced inside (0, D)."""
+    dens = [d for d in _denominators(cfg, chip, exact=True) if d - 1 >= count]
+    if not dens:
+        raise ValueError(
+            f"generator '{cfg.name}': no accuracy denominator in {list(cfg.accuracy_denominator)} "
+            f"reachable at M = {chip.max_mix_volume} has {count} distinct shares for a "
+            f"{count}-target gradient. Widen accuracy_denominator."
+        )
+    den = dens[int(rng.integers(len(dens)))]
+    step = max(1, (den - 1) // (count + 1))
+    low = int(rng.integers(1, den - (count - 1) * step))
+    return tuple(
+        Composition.from_ints((low + i * step, den - low - i * step), den) for i in range(count)
+    )
+
+
 def _denominators(cfg: GeneratorConfig, chip: ChipLimits, exact: bool) -> list[int]:
     """The accuracy denominators a target may draw: every D in the range, or for an exact
     target only those the instance's M can reach (prime factors <= M)."""
@@ -609,7 +659,15 @@ def _sample_once(
         else cfg.tolerance[int(rng.integers(len(cfg.tolerance)))]
         for _ in range(total)
     ]
-    comps, recipes = _sample_compositions(rng, cfg, chip, total, len(fluids), tolerances)
+    structure = (
+        cfg.target_structure[0]
+        if len(cfg.target_structure) == 1
+        else cfg.target_structure[int(rng.integers(len(cfg.target_structure)))]
+    )
+    if structure == "gradient":
+        comps, recipes = _gradient(rng, cfg, chip, total), None
+    else:
+        comps, recipes = _sample_compositions(rng, cfg, chip, total, len(fluids), tolerances)
 
     targets: list[Target] = []
     experiment_of = [e for e, n in enumerate(per_experiment) for _ in range(n)]
@@ -668,6 +726,7 @@ def _sample_once(
         "generator_version": GENERATOR_VERSION,
         "config_hash": cfg.config_hash(),
         "composition_sampler": cfg.composition_sampler,
+        **({"target_structure": structure} if structure != "independent" else {}),
         "witness_actions": len(actions),
         "witness_source": witness_source,
         **sizing,

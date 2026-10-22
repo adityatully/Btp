@@ -1,0 +1,2864 @@
+{
+ "format": "meda-benchmark/1",
+ "name": "val_s1",
+ "version": 1,
+ "description": "Validation for stage s1_dilution of stage design track2_v1: 40 draws per cell over dilution-one-single-loose. Graded under costs/geometric.",
+ "generator": {
+  "builder": "scripts/make_benchmark.py:build_design_set",
+  "design": "track2_v1",
+  "which": "stage s1_dilution",
+  "cells": {
+   "dilution-one-single-loose": "80913e935c534624"
+  },
+  "chip": "meda_m8",
+  "costs": "geometric",
+  "answer_key": "[root fluid bound, cheaper of naive and tree]"
+ },
+ "seeds": [
+  20261022
+ ],
+ "reference": {
+  "val_s1-000": {
+   "cost": "203",
+   "status": "feasible",
+   "producer": "cheapest_construction",
+   "detail": {
+    "lower_bound_producer": "exact_search fluid_bound at the root",
+    "mix_ops": 3
+   },
+   "lower_bound": "79/2"
+  },
+  "val_s1-001": {
+   "cost": "338",
+   "status": "feasible",
+   "producer": "cheapest_construction",
+   "detail": {
+    "lower_bound_producer": "exact_search fluid_bound at the root",
+    "mix_ops": 2
+   },
+   "lower_bound": "6357/40"
+  },
+  "val_s1-002": {
+   "cost": "329",
+   "status": "feasible",
+   "producer": "cheapest_construction",
+   "detail": {
+    "lower_bound_producer": "exact_search fluid_bound at the root",
+    "mix_ops": 4
+   },
+   "lower_bound": "491/4"
+  },
+  "val_s1-003": {
+   "cost": "402",
+   "status": "feasible",
+   "producer": "cheapest_construction",
+   "detail": {
+    "lower_bound_producer": "exact_search fluid_bound at the root",
+    "mix_ops": 6
+   },
+   "lower_bound": "3845/32"
+  },
+  "val_s1-004": {
+   "cost": "329",
+   "status": "feasible",
+   "producer": "cheapest_construction",
+   "detail": {
+    "lower_bound_producer": "exact_search fluid_bound at the root",
+    "mix_ops": 2
+   },
+   "lower_bound": "290"
+  },
+  "val_s1-005": {
+   "cost": "397",
+   "status": "feasible",
+   "producer": "cheapest_construction",
+   "detail": {
+    "lower_bound_producer": "exact_search fluid_bound at the root",
+    "mix_ops": 2
+   },
+   "lower_bound": "5247/16"
+  },
+  "val_s1-006": {
+   "cost": "276",
+   "status": "feasible",
+   "producer": "cheapest_construction",
+   "detail": {
+    "lower_bound_producer": "exact_search fluid_bound at the root",
+    "mix_ops": 3
+   },
+   "lower_bound": "973/6"
+  },
+  "val_s1-007": {
+   "cost": "144",
+   "status": "feasible",
+   "producer": "cheapest_construction",
+   "detail": {
+    "lower_bound_producer": "exact_search fluid_bound at the root",
+    "mix_ops": 4
+   },
+   "lower_bound": "580/19"
+  },
+  "val_s1-008": {
+   "cost": "475",
+   "status": "feasible",
+   "producer": "cheapest_construction",
+   "detail": {
+    "lower_bound_producer": "exact_search fluid_bound at the root",
+    "mix_ops": 7
+   },
+   "lower_bound": "2201/80"
+  },
+  "val_s1-009": {
+   "cost": "71",
+   "status": "feasible",
+   "producer": "cheapest_construction",
+   "detail": {
+    "lower_bound_producer": "exact_search fluid_bound at the root",
+    "mix_ops": 1
+   },
+   "lower_bound": "67/4"
+  },
+  "val_s1-010": {
+   "cost": "201",
+   "status": "feasible",
+   "producer": "cheapest_construction",
+   "detail": {
+    "lower_bound_producer": "exact_search fluid_bound at the root",
+    "mix_ops": 2
+   },
+   "lower_bound": "205/4"
+  },
+  "val_s1-011": {
+   "cost": "69",
+   "status": "feasible",
+   "producer": "cheapest_construction",
+   "detail": {
+    "lower_bound_producer": "exact_search fluid_bound at the root",
+    "mix_ops": 1
+   },
+   "lower_bound": "3012/59"
+  },
+  "val_s1-012": {
+   "cost": "77",
+   "status": "feasible",
+   "producer": "cheapest_construction",
+   "detail": {
+    "lower_bound_producer": "exact_search fluid_bound at the root",
+    "mix_ops": 2
+   },
+   "lower_bound": "79/8"
+  },
+  "val_s1-013": {
+   "cost": "208",
+   "status": "feasible",
+   "producer": "cheapest_construction",
+   "detail": {
+    "lower_bound_producer": "exact_search fluid_bound at the root",
+    "mix_ops": 4
+   },
+   "lower_bound": "19"
+  },
+  "val_s1-014": {
+   "cost": "136",
+   "status": "feasible",
+   "producer": "cheapest_construction",
+   "detail": {
+    "lower_bound_producer": "exact_search fluid_bound at the root",
+    "mix_ops": 3
+   },
+   "lower_bound": "110"
+  },
+  "val_s1-015": {
+   "cost": "464",
+   "status": "feasible",
+   "producer": "cheapest_construction",
+   "detail": {
+    "lower_bound_producer": "exact_search fluid_bound at the root",
+    "mix_ops": 4
+   },
+   "lower_bound": "23253/128"
+  },
+  "val_s1-016": {
+   "cost": "454",
+   "status": "feasible",
+   "producer": "cheapest_construction",
+   "detail": {
+    "lower_bound_producer": "exact_search fluid_bound at the root",
+    "mix_ops": 1
+   },
+   "lower_bound": "300"
+  },
+  "val_s1-017": {
+   "cost": "141",
+   "status": "feasible",
+   "producer": "cheapest_construction",
+   "detail": {
+    "lower_bound_producer": "exact_search fluid_bound at the root",
+    "mix_ops": 3
+   },
+   "lower_bound": "1214/103"
+  },
+  "val_s1-018": {
+   "cost": "134",
+   "status": "feasible",
+   "producer": "cheapest_construction",
+   "detail": {
+    "lower_bound_producer": "exact_search fluid_bound at the root",
+    "mix_ops": 1
+   },
+   "lower_bound": "110"
+  },
+  "val_s1-019": {
+   "cost": "197",
+   "status": "feasible",
+   "producer": "cheapest_construction",
+   "detail": {
+    "lower_bound_producer": "exact_search fluid_bound at the root",
+    "mix_ops": 1
+   },
+   "lower_bound": "325/2"
+  },
+  "val_s1-020": {
+   "cost": "267",
+   "status": "feasible",
+   "producer": "cheapest_construction",
+   "detail": {
+    "lower_bound_producer": "exact_search fluid_bound at the root",
+    "mix_ops": 3
+   },
+   "lower_bound": "1607/8"
+  },
+  "val_s1-021": {
+   "cost": "541",
+   "status": "feasible",
+   "producer": "cheapest_construction",
+   "detail": {
+    "lower_bound_producer": "exact_search fluid_bound at the root",
+    "mix_ops": 5
+   },
+   "lower_bound": "1798/35"
+  },
+  "val_s1-022": {
+   "cost": "77",
+   "status": "feasible",
+   "producer": "cheapest_construction",
+   "detail": {
+    "lower_bound_producer": "exact_search fluid_bound at the root",
+    "mix_ops": 1
+   },
+   "lower_bound": "1315/32"
+  },
+  "val_s1-023": {
+   "cost": "262",
+   "status": "feasible",
+   "producer": "cheapest_construction",
+   "detail": {
+    "lower_bound_producer": "exact_search fluid_bound at the root",
+    "mix_ops": 3
+   },
+   "lower_bound": "29802/169"
+  },
+  "val_s1-024": {
+   "cost": "213",
+   "status": "feasible",
+   "producer": "cheapest_construction",
+   "detail": {
+    "lower_bound_producer": "exact_search fluid_bound at the root",
+    "mix_ops": 4
+   },
+   "lower_bound": "1536/25"
+  },
+  "val_s1-025": {
+   "cost": "78",
+   "status": "feasible",
+   "producer": "cheapest_construction",
+   "detail": {
+    "lower_bound_producer": "exact_search fluid_bound at the root",
+    "mix_ops": 2
+   },
+   "lower_bound": "6525/221"
+  },
+  "val_s1-026": {
+   "cost": "393",
+   "status": "feasible",
+   "producer": "cheapest_construction",
+   "detail": {
+    "lower_bound_producer": "exact_search fluid_bound at the root",
+    "mix_ops": 3
+   },
+   "lower_bound": "1084/5"
+  },
+  "val_s1-027": {
+   "cost": "78",
+   "status": "feasible",
+   "producer": "cheapest_construction",
+   "detail": {
+    "lower_bound_producer": "exact_search fluid_bound at the root",
+    "mix_ops": 2
+   },
+   "lower_bound": "395/16"
+  },
+  "val_s1-028": {
+   "cost": "338",
+   "status": "feasible",
+   "producer": "cheapest_construction",
+   "detail": {
+    "lower_bound_producer": "exact_search fluid_bound at the root",
+    "mix_ops": 4
+   },
+   "lower_bound": "4945/94"
+  },
+  "val_s1-029": {
+   "cost": "201",
+   "status": "feasible",
+   "producer": "cheapest_construction",
+   "detail": {
+    "lower_bound_producer": "exact_search fluid_bound at the root",
+    "mix_ops": 1
+   },
+   "lower_bound": "154"
+  },
+  "val_s1-030": {
+   "cost": "402",
+   "status": "feasible",
+   "producer": "cheapest_construction",
+   "detail": {
+    "lower_bound_producer": "exact_search fluid_bound at the root",
+    "mix_ops": 4
+   },
+   "lower_bound": "362/5"
+  },
+  "val_s1-031": {
+   "cost": "526",
+   "status": "feasible",
+   "producer": "cheapest_construction",
+   "detail": {
+    "lower_bound_producer": "exact_search fluid_bound at the root",
+    "mix_ops": 3
+   },
+   "lower_bound": "2575/11"
+  },
+  "val_s1-032": {
+   "cost": "401",
+   "status": "feasible",
+   "producer": "cheapest_construction",
+   "detail": {
+    "lower_bound_producer": "exact_search fluid_bound at the root",
+    "mix_ops": 5
+   },
+   "lower_bound": "7499/32"
+  },
+  "val_s1-033": {
+   "cost": "855",
+   "status": "feasible",
+   "producer": "cheapest_construction",
+   "detail": {
+    "lower_bound_producer": "exact_search fluid_bound at the root",
+    "mix_ops": 3
+   },
+   "lower_bound": "4321/20"
+  },
+  "val_s1-034": {
+   "cost": "589",
+   "status": "feasible",
+   "producer": "cheapest_construction",
+   "detail": {
+    "lower_bound_producer": "exact_search fluid_bound at the root",
+    "mix_ops": 2
+   },
+   "lower_bound": "21534/61"
+  },
+  "val_s1-035": {
+   "cost": "83",
+   "status": "feasible",
+   "producer": "cheapest_construction",
+   "detail": {
+    "lower_bound_producer": "exact_search fluid_bound at the root",
+    "mix_ops": 3
+   },
+   "lower_bound": "381/64"
+  },
+  "val_s1-036": {
+   "cost": "277",
+   "status": "feasible",
+   "producer": "cheapest_construction",
+   "detail": {
+    "lower_bound_producer": "exact_search fluid_bound at the root",
+    "mix_ops": 4
+   },
+   "lower_bound": "5139/25"
+  },
+  "val_s1-037": {
+   "cost": "207",
+   "status": "feasible",
+   "producer": "cheapest_construction",
+   "detail": {
+    "lower_bound_producer": "exact_search fluid_bound at the root",
+    "mix_ops": 2
+   },
+   "lower_bound": "428/25"
+  },
+  "val_s1-038": {
+   "cost": "336",
+   "status": "feasible",
+   "producer": "cheapest_construction",
+   "detail": {
+    "lower_bound_producer": "exact_search fluid_bound at the root",
+    "mix_ops": 5
+   },
+   "lower_bound": "6520/173"
+  },
+  "val_s1-039": {
+   "cost": "93",
+   "status": "feasible",
+   "producer": "cheapest_construction",
+   "detail": {
+    "lower_bound_producer": "exact_search fluid_bound at the root",
+    "mix_ops": 4
+   },
+   "lower_bound": "52/5"
+  }
+ },
+ "instances": [
+  {
+   "instance_id": "val_s1-000",
+   "fluids": [
+    {
+     "id": 0,
+     "name": "S",
+     "kind": "SAMPLE"
+    },
+    {
+     "id": 1,
+     "name": "B",
+     "kind": "BUFFER"
+    }
+   ],
+   "targets": [
+    {
+     "id": 0,
+     "experiment_id": 0,
+     "composition": {
+      "num": [
+       11,
+       7
+      ],
+      "den": 18
+     },
+     "tolerance": {
+      "num": 0,
+      "den": 1
+     },
+     "droplet_volume": 1,
+     "demand": 1
+    }
+   ],
+   "chip": {
+    "name": "meda_m8-M4-S32",
+    "max_mix_volume": 4,
+    "min_mix_volume": 2,
+    "unit_volume": 1,
+    "min_droplet_volume": 1,
+    "allow_partial_take": true,
+    "storage_capacity": 32,
+    "max_denominator": 1024,
+    "allow_same_composition_merge": false
+   },
+   "step_limit": 16,
+   "metadata": {
+    "generator": "dilution-one-single-loose",
+    "generator_version": 1,
+    "config_hash": "80913e935c534624",
+    "composition_sampler": "dirichlet_snapped",
+    "witness_actions": 7,
+    "witness_source": "naive",
+    "step_limit_rule": "depth",
+    "step_limit_base": 4,
+    "step_limit_multiple": 4.0,
+    "step_limit_raised_to_witness": false,
+    "known_upper_bound": "267",
+    "unwitnessed_redraws": 0,
+    "cell": "dilution-one-single-loose"
+   }
+  },
+  {
+   "instance_id": "val_s1-001",
+   "fluids": [
+    {
+     "id": 0,
+     "name": "S",
+     "kind": "SAMPLE"
+    },
+    {
+     "id": 1,
+     "name": "B",
+     "kind": "BUFFER"
+    }
+   ],
+   "targets": [
+    {
+     "id": 0,
+     "experiment_id": 0,
+     "composition": {
+      "num": [
+       33,
+       7
+      ],
+      "den": 40
+     },
+     "tolerance": {
+      "num": 0,
+      "den": 1
+     },
+     "droplet_volume": 3,
+     "demand": 1
+    }
+   ],
+   "chip": {
+    "name": "meda_m8-M9-S32",
+    "max_mix_volume": 9,
+    "min_mix_volume": 2,
+    "unit_volume": 1,
+    "min_droplet_volume": 1,
+    "allow_partial_take": true,
+    "storage_capacity": 32,
+    "max_denominator": 1024,
+    "allow_same_composition_merge": false
+   },
+   "step_limit": 12,
+   "metadata": {
+    "generator": "dilution-one-single-loose",
+    "generator_version": 1,
+    "config_hash": "80913e935c534624",
+    "composition_sampler": "dirichlet_snapped",
+    "witness_actions": 5,
+    "witness_source": "naive",
+    "step_limit_rule": "depth",
+    "step_limit_base": 3,
+    "step_limit_multiple": 4.0,
+    "step_limit_raised_to_witness": false,
+    "known_upper_bound": "591",
+    "unwitnessed_redraws": 0,
+    "cell": "dilution-one-single-loose"
+   }
+  },
+  {
+   "instance_id": "val_s1-002",
+   "fluids": [
+    {
+     "id": 0,
+     "name": "S",
+     "kind": "SAMPLE"
+    },
+    {
+     "id": 1,
+     "name": "B",
+     "kind": "BUFFER"
+    }
+   ],
+   "targets": [
+    {
+     "id": 0,
+     "experiment_id": 0,
+     "composition": {
+      "num": [
+       23,
+       1
+      ],
+      "den": 24
+     },
+     "tolerance": {
+      "num": 0,
+      "den": 1
+     },
+     "droplet_volume": 2,
+     "demand": 1
+    }
+   ],
+   "chip": {
+    "name": "meda_m8-M3-S32",
+    "max_mix_volume": 3,
+    "min_mix_volume": 2,
+    "unit_volume": 1,
+    "min_droplet_volume": 1,
+    "allow_partial_take": true,
+    "storage_capacity": 32,
+    "max_denominator": 1024,
+    "allow_same_composition_merge": false
+   },
+   "step_limit": 16,
+   "metadata": {
+    "generator": "dilution-one-single-loose",
+    "generator_version": 1,
+    "config_hash": "80913e935c534624",
+    "composition_sampler": "dirichlet_snapped",
+    "witness_actions": 8,
+    "witness_source": "naive",
+    "step_limit_rule": "depth",
+    "step_limit_base": 4,
+    "step_limit_multiple": 4.0,
+    "step_limit_raised_to_witness": false,
+    "known_upper_bound": "329",
+    "unwitnessed_redraws": 0,
+    "cell": "dilution-one-single-loose"
+   }
+  },
+  {
+   "instance_id": "val_s1-003",
+   "fluids": [
+    {
+     "id": 0,
+     "name": "S",
+     "kind": "SAMPLE"
+    },
+    {
+     "id": 1,
+     "name": "B",
+     "kind": "BUFFER"
+    }
+   ],
+   "targets": [
+    {
+     "id": 0,
+     "experiment_id": 0,
+     "composition": {
+      "num": [
+       59,
+       69
+      ],
+      "den": 128
+     },
+     "tolerance": {
+      "num": 0,
+      "den": 1
+     },
+     "droplet_volume": 4,
+     "demand": 1
+    }
+   ],
+   "chip": {
+    "name": "meda_m8-M5-S32",
+    "max_mix_volume": 5,
+    "min_mix_volume": 2,
+    "unit_volume": 1,
+    "min_droplet_volume": 1,
+    "allow_partial_take": true,
+    "storage_capacity": 32,
+    "max_denominator": 1024,
+    "allow_same_composition_merge": false
+   },
+   "step_limit": 20,
+   "metadata": {
+    "generator": "dilution-one-single-loose",
+    "generator_version": 1,
+    "config_hash": "80913e935c534624",
+    "composition_sampler": "dirichlet_snapped",
+    "witness_actions": 10,
+    "witness_source": "naive",
+    "step_limit_rule": "depth",
+    "step_limit_base": 5,
+    "step_limit_multiple": 4.0,
+    "step_limit_raised_to_witness": false,
+    "known_upper_bound": "402",
+    "unwitnessed_redraws": 0,
+    "cell": "dilution-one-single-loose"
+   }
+  },
+  {
+   "instance_id": "val_s1-004",
+   "fluids": [
+    {
+     "id": 0,
+     "name": "S",
+     "kind": "SAMPLE"
+    },
+    {
+     "id": 1,
+     "name": "B",
+     "kind": "BUFFER"
+    }
+   ],
+   "targets": [
+    {
+     "id": 0,
+     "experiment_id": 0,
+     "composition": {
+      "num": [
+       4,
+       5
+      ],
+      "den": 9
+     },
+     "tolerance": {
+      "num": 0,
+      "den": 1
+     },
+     "droplet_volume": 10,
+     "demand": 1
+    }
+   ],
+   "chip": {
+    "name": "meda_m8-M10-S32",
+    "max_mix_volume": 10,
+    "min_mix_volume": 2,
+    "unit_volume": 1,
+    "min_droplet_volume": 1,
+    "allow_partial_take": true,
+    "storage_capacity": 32,
+    "max_denominator": 1024,
+    "allow_same_composition_merge": false
+   },
+   "step_limit": 8,
+   "metadata": {
+    "generator": "dilution-one-single-loose",
+    "generator_version": 1,
+    "config_hash": "80913e935c534624",
+    "composition_sampler": "dirichlet_snapped",
+    "witness_actions": 4,
+    "witness_source": "tree",
+    "step_limit_rule": "depth",
+    "step_limit_base": 2,
+    "step_limit_multiple": 4.0,
+    "step_limit_raised_to_witness": false,
+    "known_upper_bound": "329",
+    "unwitnessed_redraws": 0,
+    "cell": "dilution-one-single-loose"
+   }
+  },
+  {
+   "instance_id": "val_s1-005",
+   "fluids": [
+    {
+     "id": 0,
+     "name": "S",
+     "kind": "SAMPLE"
+    },
+    {
+     "id": 1,
+     "name": "B",
+     "kind": "BUFFER"
+    }
+   ],
+   "targets": [
+    {
+     "id": 0,
+     "experiment_id": 0,
+     "composition": {
+      "num": [
+       9,
+       7
+      ],
+      "den": 16
+     },
+     "tolerance": {
+      "num": 0,
+      "den": 1
+     },
+     "droplet_volume": 9,
+     "demand": 1
+    }
+   ],
+   "chip": {
+    "name": "meda_m8-M10-S32",
+    "max_mix_volume": 10,
+    "min_mix_volume": 2,
+    "unit_volume": 1,
+    "min_droplet_volume": 1,
+    "allow_partial_take": true,
+    "storage_capacity": 32,
+    "max_denominator": 1024,
+    "allow_same_composition_merge": false
+   },
+   "step_limit": 12,
+   "metadata": {
+    "generator": "dilution-one-single-loose",
+    "generator_version": 1,
+    "config_hash": "80913e935c534624",
+    "composition_sampler": "dirichlet_snapped",
+    "witness_actions": 4,
+    "witness_source": "tree",
+    "step_limit_rule": "depth",
+    "step_limit_base": 3,
+    "step_limit_multiple": 4.0,
+    "step_limit_raised_to_witness": false,
+    "known_upper_bound": "397",
+    "unwitnessed_redraws": 0,
+    "cell": "dilution-one-single-loose"
+   }
+  },
+  {
+   "instance_id": "val_s1-006",
+   "fluids": [
+    {
+     "id": 0,
+     "name": "S",
+     "kind": "SAMPLE"
+    },
+    {
+     "id": 1,
+     "name": "B",
+     "kind": "BUFFER"
+    }
+   ],
+   "targets": [
+    {
+     "id": 0,
+     "experiment_id": 0,
+     "composition": {
+      "num": [
+       19,
+       35
+      ],
+      "den": 54
+     },
+     "tolerance": {
+      "num": 0,
+      "den": 1
+     },
+     "droplet_volume": 7,
+     "demand": 1
+    }
+   ],
+   "chip": {
+    "name": "meda_m8-M9-S32",
+    "max_mix_volume": 9,
+    "min_mix_volume": 2,
+    "unit_volume": 1,
+    "min_droplet_volume": 1,
+    "allow_partial_take": true,
+    "storage_capacity": 32,
+    "max_denominator": 1024,
+    "allow_same_composition_merge": false
+   },
+   "step_limit": 12,
+   "metadata": {
+    "generator": "dilution-one-single-loose",
+    "generator_version": 1,
+    "config_hash": "80913e935c534624",
+    "composition_sampler": "dirichlet_snapped",
+    "witness_actions": 5,
+    "witness_source": "naive",
+    "step_limit_rule": "depth",
+    "step_limit_base": 3,
+    "step_limit_multiple": 4.0,
+    "step_limit_raised_to_witness": false,
+    "known_upper_bound": "276",
+    "unwitnessed_redraws": 0,
+    "cell": "dilution-one-single-loose"
+   }
+  },
+  {
+   "instance_id": "val_s1-007",
+   "fluids": [
+    {
+     "id": 0,
+     "name": "S",
+     "kind": "SAMPLE"
+    },
+    {
+     "id": 1,
+     "name": "B",
+     "kind": "BUFFER"
+    }
+   ],
+   "targets": [
+    {
+     "id": 0,
+     "experiment_id": 0,
+     "composition": {
+      "num": [
+       2,
+       17
+      ],
+      "den": 19
+     },
+     "tolerance": {
+      "num": 1,
+      "den": 200
+     },
+     "droplet_volume": 4,
+     "demand": 1
+    }
+   ],
+   "chip": {
+    "name": "meda_m8-M5-S32",
+    "max_mix_volume": 5,
+    "min_mix_volume": 2,
+    "unit_volume": 1,
+    "min_droplet_volume": 1,
+    "allow_partial_take": true,
+    "storage_capacity": 32,
+    "max_denominator": 1024,
+    "allow_same_composition_merge": false
+   },
+   "step_limit": 12,
+   "metadata": {
+    "generator": "dilution-one-single-loose",
+    "generator_version": 1,
+    "config_hash": "80913e935c534624",
+    "composition_sampler": "dirichlet_snapped",
+    "witness_actions": 7,
+    "witness_source": "tree",
+    "step_limit_rule": "depth",
+    "step_limit_base": 3,
+    "step_limit_multiple": 4.0,
+    "step_limit_raised_to_witness": false,
+    "known_upper_bound": "144",
+    "unwitnessed_redraws": 0,
+    "cell": "dilution-one-single-loose"
+   }
+  },
+  {
+   "instance_id": "val_s1-008",
+   "fluids": [
+    {
+     "id": 0,
+     "name": "S",
+     "kind": "SAMPLE"
+    },
+    {
+     "id": 1,
+     "name": "B",
+     "kind": "BUFFER"
+    }
+   ],
+   "targets": [
+    {
+     "id": 0,
+     "experiment_id": 0,
+     "composition": {
+      "num": [
+       101,
+       139
+      ],
+      "den": 240
+     },
+     "tolerance": {
+      "num": 0,
+      "den": 1
+     },
+     "droplet_volume": 1,
+     "demand": 1
+    }
+   ],
+   "chip": {
+    "name": "meda_m8-M6-S32",
+    "max_mix_volume": 6,
+    "min_mix_volume": 2,
+    "unit_volume": 1,
+    "min_droplet_volume": 1,
+    "allow_partial_take": true,
+    "storage_capacity": 32,
+    "max_denominator": 1024,
+    "allow_same_composition_merge": false
+   },
+   "step_limit": 20,
+   "metadata": {
+    "generator": "dilution-one-single-loose",
+    "generator_version": 1,
+    "config_hash": "80913e935c534624",
+    "composition_sampler": "dirichlet_snapped",
+    "witness_actions": 11,
+    "witness_source": "naive",
+    "step_limit_rule": "depth",
+    "step_limit_base": 5,
+    "step_limit_multiple": 4.0,
+    "step_limit_raised_to_witness": false,
+    "known_upper_bound": "475",
+    "unwitnessed_redraws": 0,
+    "cell": "dilution-one-single-loose"
+   }
+  },
+  {
+   "instance_id": "val_s1-009",
+   "fluids": [
+    {
+     "id": 0,
+     "name": "S",
+     "kind": "SAMPLE"
+    },
+    {
+     "id": 1,
+     "name": "B",
+     "kind": "BUFFER"
+    }
+   ],
+   "targets": [
+    {
+     "id": 0,
+     "experiment_id": 0,
+     "composition": {
+      "num": [
+       1,
+       3
+      ],
+      "den": 4
+     },
+     "tolerance": {
+      "num": 0,
+      "den": 1
+     },
+     "droplet_volume": 1,
+     "demand": 1
+    }
+   ],
+   "chip": {
+    "name": "meda_m8-M6-S32",
+    "max_mix_volume": 6,
+    "min_mix_volume": 2,
+    "unit_volume": 1,
+    "min_droplet_volume": 1,
+    "allow_partial_take": true,
+    "storage_capacity": 32,
+    "max_denominator": 1024,
+    "allow_same_composition_merge": false
+   },
+   "step_limit": 8,
+   "metadata": {
+    "generator": "dilution-one-single-loose",
+    "generator_version": 1,
+    "config_hash": "80913e935c534624",
+    "composition_sampler": "dirichlet_snapped",
+    "witness_actions": 2,
+    "witness_source": "naive",
+    "step_limit_rule": "depth",
+    "step_limit_base": 2,
+    "step_limit_multiple": 4.0,
+    "step_limit_raised_to_witness": false,
+    "known_upper_bound": "71",
+    "unwitnessed_redraws": 0,
+    "cell": "dilution-one-single-loose"
+   }
+  },
+  {
+   "instance_id": "val_s1-010",
+   "fluids": [
+    {
+     "id": 0,
+     "name": "S",
+     "kind": "SAMPLE"
+    },
+    {
+     "id": 1,
+     "name": "B",
+     "kind": "BUFFER"
+    }
+   ],
+   "targets": [
+    {
+     "id": 0,
+     "experiment_id": 0,
+     "composition": {
+      "num": [
+       3,
+       13
+      ],
+      "den": 16
+     },
+     "tolerance": {
+      "num": 0,
+      "den": 1
+     },
+     "droplet_volume": 4,
+     "demand": 1
+    }
+   ],
+   "chip": {
+    "name": "meda_m8-M4-S32",
+    "max_mix_volume": 4,
+    "min_mix_volume": 2,
+    "unit_volume": 1,
+    "min_droplet_volume": 1,
+    "allow_partial_take": true,
+    "storage_capacity": 32,
+    "max_denominator": 1024,
+    "allow_same_composition_merge": false
+   },
+   "step_limit": 12,
+   "metadata": {
+    "generator": "dilution-one-single-loose",
+    "generator_version": 1,
+    "config_hash": "80913e935c534624",
+    "composition_sampler": "dirichlet_snapped",
+    "witness_actions": 4,
+    "witness_source": "naive",
+    "step_limit_rule": "depth",
+    "step_limit_base": 3,
+    "step_limit_multiple": 4.0,
+    "step_limit_raised_to_witness": false,
+    "known_upper_bound": "201",
+    "unwitnessed_redraws": 0,
+    "cell": "dilution-one-single-loose"
+   }
+  },
+  {
+   "instance_id": "val_s1-011",
+   "fluids": [
+    {
+     "id": 0,
+     "name": "S",
+     "kind": "SAMPLE"
+    },
+    {
+     "id": 1,
+     "name": "B",
+     "kind": "BUFFER"
+    }
+   ],
+   "targets": [
+    {
+     "id": 0,
+     "experiment_id": 0,
+     "composition": {
+      "num": [
+       15,
+       44
+      ],
+      "den": 59
+     },
+     "tolerance": {
+      "num": 1,
+      "den": 200
+     },
+     "droplet_volume": 3,
+     "demand": 1
+    }
+   ],
+   "chip": {
+    "name": "meda_m8-M5-S32",
+    "max_mix_volume": 5,
+    "min_mix_volume": 2,
+    "unit_volume": 1,
+    "min_droplet_volume": 1,
+    "allow_partial_take": true,
+    "storage_capacity": 32,
+    "max_denominator": 1024,
+    "allow_same_composition_merge": false
+   },
+   "step_limit": 8,
+   "metadata": {
+    "generator": "dilution-one-single-loose",
+    "generator_version": 1,
+    "config_hash": "80913e935c534624",
+    "composition_sampler": "dirichlet_snapped",
+    "witness_actions": 2,
+    "witness_source": "tree",
+    "step_limit_rule": "depth",
+    "step_limit_base": 2,
+    "step_limit_multiple": 4.0,
+    "step_limit_raised_to_witness": false,
+    "known_upper_bound": "69",
+    "unwitnessed_redraws": 0,
+    "cell": "dilution-one-single-loose"
+   }
+  },
+  {
+   "instance_id": "val_s1-012",
+   "fluids": [
+    {
+     "id": 0,
+     "name": "S",
+     "kind": "SAMPLE"
+    },
+    {
+     "id": 1,
+     "name": "B",
+     "kind": "BUFFER"
+    }
+   ],
+   "targets": [
+    {
+     "id": 0,
+     "experiment_id": 0,
+     "composition": {
+      "num": [
+       1,
+       15
+      ],
+      "den": 16
+     },
+     "tolerance": {
+      "num": 0,
+      "den": 1
+     },
+     "droplet_volume": 2,
+     "demand": 1
+    }
+   ],
+   "chip": {
+    "name": "meda_m8-M5-S32",
+    "max_mix_volume": 5,
+    "min_mix_volume": 2,
+    "unit_volume": 1,
+    "min_droplet_volume": 1,
+    "allow_partial_take": true,
+    "storage_capacity": 32,
+    "max_denominator": 1024,
+    "allow_same_composition_merge": false
+   },
+   "step_limit": 12,
+   "metadata": {
+    "generator": "dilution-one-single-loose",
+    "generator_version": 1,
+    "config_hash": "80913e935c534624",
+    "composition_sampler": "dirichlet_snapped",
+    "witness_actions": 4,
+    "witness_source": "naive",
+    "step_limit_rule": "depth",
+    "step_limit_base": 3,
+    "step_limit_multiple": 4.0,
+    "step_limit_raised_to_witness": false,
+    "known_upper_bound": "77",
+    "unwitnessed_redraws": 0,
+    "cell": "dilution-one-single-loose"
+   }
+  },
+  {
+   "instance_id": "val_s1-013",
+   "fluids": [
+    {
+     "id": 0,
+     "name": "S",
+     "kind": "SAMPLE"
+    },
+    {
+     "id": 1,
+     "name": "B",
+     "kind": "BUFFER"
+    }
+   ],
+   "targets": [
+    {
+     "id": 0,
+     "experiment_id": 0,
+     "composition": {
+      "num": [
+       2,
+       5
+      ],
+      "den": 7
+     },
+     "tolerance": {
+      "num": 1,
+      "den": 200
+     },
+     "droplet_volume": 1,
+     "demand": 1
+    }
+   ],
+   "chip": {
+    "name": "meda_m8-M5-S32",
+    "max_mix_volume": 5,
+    "min_mix_volume": 2,
+    "unit_volume": 1,
+    "min_droplet_volume": 1,
+    "allow_partial_take": true,
+    "storage_capacity": 32,
+    "max_denominator": 1024,
+    "allow_same_composition_merge": false
+   },
+   "step_limit": 12,
+   "metadata": {
+    "generator": "dilution-one-single-loose",
+    "generator_version": 1,
+    "config_hash": "80913e935c534624",
+    "composition_sampler": "dirichlet_snapped",
+    "witness_actions": 7,
+    "witness_source": "tree",
+    "step_limit_rule": "depth",
+    "step_limit_base": 3,
+    "step_limit_multiple": 4.0,
+    "step_limit_raised_to_witness": false,
+    "known_upper_bound": "208",
+    "unwitnessed_redraws": 0,
+    "cell": "dilution-one-single-loose"
+   }
+  },
+  {
+   "instance_id": "val_s1-014",
+   "fluids": [
+    {
+     "id": 0,
+     "name": "S",
+     "kind": "SAMPLE"
+    },
+    {
+     "id": 1,
+     "name": "B",
+     "kind": "BUFFER"
+    }
+   ],
+   "targets": [
+    {
+     "id": 0,
+     "experiment_id": 0,
+     "composition": {
+      "num": [
+       1,
+       2
+      ],
+      "den": 3
+     },
+     "tolerance": {
+      "num": 0,
+      "den": 1
+     },
+     "droplet_volume": 5,
+     "demand": 1
+    }
+   ],
+   "chip": {
+    "name": "meda_m8-M5-S32",
+    "max_mix_volume": 5,
+    "min_mix_volume": 2,
+    "unit_volume": 1,
+    "min_droplet_volume": 1,
+    "allow_partial_take": true,
+    "storage_capacity": 32,
+    "max_denominator": 1024,
+    "allow_same_composition_merge": false
+   },
+   "step_limit": 8,
+   "metadata": {
+    "generator": "dilution-one-single-loose",
+    "generator_version": 1,
+    "config_hash": "80913e935c534624",
+    "composition_sampler": "dirichlet_snapped",
+    "witness_actions": 5,
+    "witness_source": "tree",
+    "step_limit_rule": "depth",
+    "step_limit_base": 2,
+    "step_limit_multiple": 4.0,
+    "step_limit_raised_to_witness": false,
+    "known_upper_bound": "136",
+    "unwitnessed_redraws": 0,
+    "cell": "dilution-one-single-loose"
+   }
+  },
+  {
+   "instance_id": "val_s1-015",
+   "fluids": [
+    {
+     "id": 0,
+     "name": "S",
+     "kind": "SAMPLE"
+    },
+    {
+     "id": 1,
+     "name": "B",
+     "kind": "BUFFER"
+    }
+   ],
+   "targets": [
+    {
+     "id": 0,
+     "experiment_id": 0,
+     "composition": {
+      "num": [
+       121,
+       7
+      ],
+      "den": 128
+     },
+     "tolerance": {
+      "num": 0,
+      "den": 1
+     },
+     "droplet_volume": 3,
+     "demand": 1
+    }
+   ],
+   "chip": {
+    "name": "meda_m8-M4-S32",
+    "max_mix_volume": 4,
+    "min_mix_volume": 2,
+    "unit_volume": 1,
+    "min_droplet_volume": 1,
+    "allow_partial_take": true,
+    "storage_capacity": 32,
+    "max_denominator": 1024,
+    "allow_same_composition_merge": false
+   },
+   "step_limit": 20,
+   "metadata": {
+    "generator": "dilution-one-single-loose",
+    "generator_version": 1,
+    "config_hash": "80913e935c534624",
+    "composition_sampler": "dirichlet_snapped",
+    "witness_actions": 8,
+    "witness_source": "naive",
+    "step_limit_rule": "depth",
+    "step_limit_base": 5,
+    "step_limit_multiple": 4.0,
+    "step_limit_raised_to_witness": false,
+    "known_upper_bound": "464",
+    "unwitnessed_redraws": 0,
+    "cell": "dilution-one-single-loose"
+   }
+  },
+  {
+   "instance_id": "val_s1-016",
+   "fluids": [
+    {
+     "id": 0,
+     "name": "S",
+     "kind": "SAMPLE"
+    },
+    {
+     "id": 1,
+     "name": "B",
+     "kind": "BUFFER"
+    }
+   ],
+   "targets": [
+    {
+     "id": 0,
+     "experiment_id": 0,
+     "composition": {
+      "num": [
+       7,
+       2
+      ],
+      "den": 9
+     },
+     "tolerance": {
+      "num": 1,
+      "den": 1000
+     },
+     "droplet_volume": 6,
+     "demand": 1
+    }
+   ],
+   "chip": {
+    "name": "meda_m8-M10-S32",
+    "max_mix_volume": 10,
+    "min_mix_volume": 2,
+    "unit_volume": 1,
+    "min_droplet_volume": 1,
+    "allow_partial_take": true,
+    "storage_capacity": 32,
+    "max_denominator": 1024,
+    "allow_same_composition_merge": false
+   },
+   "step_limit": 8,
+   "metadata": {
+    "generator": "dilution-one-single-loose",
+    "generator_version": 1,
+    "config_hash": "80913e935c534624",
+    "composition_sampler": "dirichlet_snapped",
+    "witness_actions": 2,
+    "witness_source": "naive",
+    "step_limit_rule": "depth",
+    "step_limit_base": 2,
+    "step_limit_multiple": 4.0,
+    "step_limit_raised_to_witness": false,
+    "known_upper_bound": "454",
+    "unwitnessed_redraws": 0,
+    "cell": "dilution-one-single-loose"
+   }
+  },
+  {
+   "instance_id": "val_s1-017",
+   "fluids": [
+    {
+     "id": 0,
+     "name": "S",
+     "kind": "SAMPLE"
+    },
+    {
+     "id": 1,
+     "name": "B",
+     "kind": "BUFFER"
+    }
+   ],
+   "targets": [
+    {
+     "id": 0,
+     "experiment_id": 0,
+     "composition": {
+      "num": [
+       8,
+       95
+      ],
+      "den": 103
+     },
+     "tolerance": {
+      "num": 1,
+      "den": 200
+     },
+     "droplet_volume": 2,
+     "demand": 1
+    }
+   ],
+   "chip": {
+    "name": "meda_m8-M3-S32",
+    "max_mix_volume": 3,
+    "min_mix_volume": 2,
+    "unit_volume": 1,
+    "min_droplet_volume": 1,
+    "allow_partial_take": true,
+    "storage_capacity": 32,
+    "max_denominator": 1024,
+    "allow_same_composition_merge": false
+   },
+   "step_limit": 16,
+   "metadata": {
+    "generator": "dilution-one-single-loose",
+    "generator_version": 1,
+    "config_hash": "80913e935c534624",
+    "composition_sampler": "dirichlet_snapped",
+    "witness_actions": 6,
+    "witness_source": "tree",
+    "step_limit_rule": "depth",
+    "step_limit_base": 4,
+    "step_limit_multiple": 4.0,
+    "step_limit_raised_to_witness": false,
+    "known_upper_bound": "141",
+    "unwitnessed_redraws": 0,
+    "cell": "dilution-one-single-loose"
+   }
+  },
+  {
+   "instance_id": "val_s1-018",
+   "fluids": [
+    {
+     "id": 0,
+     "name": "S",
+     "kind": "SAMPLE"
+    },
+    {
+     "id": 1,
+     "name": "B",
+     "kind": "BUFFER"
+    }
+   ],
+   "targets": [
+    {
+     "id": 0,
+     "experiment_id": 0,
+     "composition": {
+      "num": [
+       1,
+       2
+      ],
+      "den": 3
+     },
+     "tolerance": {
+      "num": 0,
+      "den": 1
+     },
+     "droplet_volume": 5,
+     "demand": 1
+    }
+   ],
+   "chip": {
+    "name": "meda_m8-M8-S32",
+    "max_mix_volume": 8,
+    "min_mix_volume": 2,
+    "unit_volume": 1,
+    "min_droplet_volume": 1,
+    "allow_partial_take": true,
+    "storage_capacity": 32,
+    "max_denominator": 1024,
+    "allow_same_composition_merge": false
+   },
+   "step_limit": 8,
+   "metadata": {
+    "generator": "dilution-one-single-loose",
+    "generator_version": 1,
+    "config_hash": "80913e935c534624",
+    "composition_sampler": "dirichlet_snapped",
+    "witness_actions": 2,
+    "witness_source": "tree",
+    "step_limit_rule": "depth",
+    "step_limit_base": 2,
+    "step_limit_multiple": 4.0,
+    "step_limit_raised_to_witness": false,
+    "known_upper_bound": "134",
+    "unwitnessed_redraws": 0,
+    "cell": "dilution-one-single-loose"
+   }
+  },
+  {
+   "instance_id": "val_s1-019",
+   "fluids": [
+    {
+     "id": 0,
+     "name": "S",
+     "kind": "SAMPLE"
+    },
+    {
+     "id": 1,
+     "name": "B",
+     "kind": "BUFFER"
+    }
+   ],
+   "targets": [
+    {
+     "id": 0,
+     "experiment_id": 0,
+     "composition": {
+      "num": [
+       1,
+       1
+      ],
+      "den": 2
+     },
+     "tolerance": {
+      "num": 0,
+      "den": 1
+     },
+     "droplet_volume": 5,
+     "demand": 1
+    }
+   ],
+   "chip": {
+    "name": "meda_m8-M9-S32",
+    "max_mix_volume": 9,
+    "min_mix_volume": 2,
+    "unit_volume": 1,
+    "min_droplet_volume": 1,
+    "allow_partial_take": true,
+    "storage_capacity": 32,
+    "max_denominator": 1024,
+    "allow_same_composition_merge": false
+   },
+   "step_limit": 8,
+   "metadata": {
+    "generator": "dilution-one-single-loose",
+    "generator_version": 1,
+    "config_hash": "80913e935c534624",
+    "composition_sampler": "dirichlet_snapped",
+    "witness_actions": 2,
+    "witness_source": "tree",
+    "step_limit_rule": "depth",
+    "step_limit_base": 2,
+    "step_limit_multiple": 4.0,
+    "step_limit_raised_to_witness": false,
+    "known_upper_bound": "197",
+    "unwitnessed_redraws": 0,
+    "cell": "dilution-one-single-loose"
+   }
+  },
+  {
+   "instance_id": "val_s1-020",
+   "fluids": [
+    {
+     "id": 0,
+     "name": "S",
+     "kind": "SAMPLE"
+    },
+    {
+     "id": 1,
+     "name": "B",
+     "kind": "BUFFER"
+    }
+   ],
+   "targets": [
+    {
+     "id": 0,
+     "experiment_id": 0,
+     "composition": {
+      "num": [
+       25,
+       7
+      ],
+      "den": 32
+     },
+     "tolerance": {
+      "num": 0,
+      "den": 1
+     },
+     "droplet_volume": 4,
+     "demand": 1
+    }
+   ],
+   "chip": {
+    "name": "meda_m8-M5-S32",
+    "max_mix_volume": 5,
+    "min_mix_volume": 2,
+    "unit_volume": 1,
+    "min_droplet_volume": 1,
+    "allow_partial_take": true,
+    "storage_capacity": 32,
+    "max_denominator": 1024,
+    "allow_same_composition_merge": false
+   },
+   "step_limit": 16,
+   "metadata": {
+    "generator": "dilution-one-single-loose",
+    "generator_version": 1,
+    "config_hash": "80913e935c534624",
+    "composition_sampler": "dirichlet_snapped",
+    "witness_actions": 6,
+    "witness_source": "naive",
+    "step_limit_rule": "depth",
+    "step_limit_base": 4,
+    "step_limit_multiple": 4.0,
+    "step_limit_raised_to_witness": false,
+    "known_upper_bound": "267",
+    "unwitnessed_redraws": 0,
+    "cell": "dilution-one-single-loose"
+   }
+  },
+  {
+   "instance_id": "val_s1-021",
+   "fluids": [
+    {
+     "id": 0,
+     "name": "S",
+     "kind": "SAMPLE"
+    },
+    {
+     "id": 1,
+     "name": "B",
+     "kind": "BUFFER"
+    }
+   ],
+   "targets": [
+    {
+     "id": 0,
+     "experiment_id": 0,
+     "composition": {
+      "num": [
+       96,
+       149
+      ],
+      "den": 245
+     },
+     "tolerance": {
+      "num": 0,
+      "den": 1
+     },
+     "droplet_volume": 2,
+     "demand": 1
+    }
+   ],
+   "chip": {
+    "name": "meda_m8-M7-S32",
+    "max_mix_volume": 7,
+    "min_mix_volume": 2,
+    "unit_volume": 1,
+    "min_droplet_volume": 1,
+    "allow_partial_take": true,
+    "storage_capacity": 32,
+    "max_denominator": 1024,
+    "allow_same_composition_merge": false
+   },
+   "step_limit": 16,
+   "metadata": {
+    "generator": "dilution-one-single-loose",
+    "generator_version": 1,
+    "config_hash": "80913e935c534624",
+    "composition_sampler": "dirichlet_snapped",
+    "witness_actions": 8,
+    "witness_source": "naive",
+    "step_limit_rule": "depth",
+    "step_limit_base": 4,
+    "step_limit_multiple": 4.0,
+    "step_limit_raised_to_witness": false,
+    "known_upper_bound": "541",
+    "unwitnessed_redraws": 0,
+    "cell": "dilution-one-single-loose"
+   }
+  },
+  {
+   "instance_id": "val_s1-022",
+   "fluids": [
+    {
+     "id": 0,
+     "name": "S",
+     "kind": "SAMPLE"
+    },
+    {
+     "id": 1,
+     "name": "B",
+     "kind": "BUFFER"
+    }
+   ],
+   "targets": [
+    {
+     "id": 0,
+     "experiment_id": 0,
+     "composition": {
+      "num": [
+       11,
+       85
+      ],
+      "den": 96
+     },
+     "tolerance": {
+      "num": 1,
+      "den": 200
+     },
+     "droplet_volume": 5,
+     "demand": 1
+    }
+   ],
+   "chip": {
+    "name": "meda_m8-M10-S32",
+    "max_mix_volume": 10,
+    "min_mix_volume": 2,
+    "unit_volume": 1,
+    "min_droplet_volume": 1,
+    "allow_partial_take": true,
+    "storage_capacity": 32,
+    "max_denominator": 1024,
+    "allow_same_composition_merge": false
+   },
+   "step_limit": 8,
+   "metadata": {
+    "generator": "dilution-one-single-loose",
+    "generator_version": 1,
+    "config_hash": "80913e935c534624",
+    "composition_sampler": "dirichlet_snapped",
+    "witness_actions": 6,
+    "witness_source": "naive",
+    "step_limit_rule": "depth",
+    "step_limit_base": 2,
+    "step_limit_multiple": 4.0,
+    "step_limit_raised_to_witness": false,
+    "known_upper_bound": "404",
+    "unwitnessed_redraws": 0,
+    "cell": "dilution-one-single-loose"
+   }
+  },
+  {
+   "instance_id": "val_s1-023",
+   "fluids": [
+    {
+     "id": 0,
+     "name": "S",
+     "kind": "SAMPLE"
+    },
+    {
+     "id": 1,
+     "name": "B",
+     "kind": "BUFFER"
+    }
+   ],
+   "targets": [
+    {
+     "id": 0,
+     "experiment_id": 0,
+     "composition": {
+      "num": [
+       155,
+       14
+      ],
+      "den": 169
+     },
+     "tolerance": {
+      "num": 1,
+      "den": 200
+     },
+     "droplet_volume": 3,
+     "demand": 1
+    }
+   ],
+   "chip": {
+    "name": "meda_m8-M3-S32",
+    "max_mix_volume": 3,
+    "min_mix_volume": 2,
+    "unit_volume": 1,
+    "min_droplet_volume": 1,
+    "allow_partial_take": true,
+    "storage_capacity": 32,
+    "max_denominator": 1024,
+    "allow_same_composition_merge": false
+   },
+   "step_limit": 16,
+   "metadata": {
+    "generator": "dilution-one-single-loose",
+    "generator_version": 1,
+    "config_hash": "80913e935c534624",
+    "composition_sampler": "dirichlet_snapped",
+    "witness_actions": 6,
+    "witness_source": "tree",
+    "step_limit_rule": "depth",
+    "step_limit_base": 4,
+    "step_limit_multiple": 4.0,
+    "step_limit_raised_to_witness": false,
+    "known_upper_bound": "262",
+    "unwitnessed_redraws": 0,
+    "cell": "dilution-one-single-loose"
+   }
+  },
+  {
+   "instance_id": "val_s1-024",
+   "fluids": [
+    {
+     "id": 0,
+     "name": "S",
+     "kind": "SAMPLE"
+    },
+    {
+     "id": 1,
+     "name": "B",
+     "kind": "BUFFER"
+    }
+   ],
+   "targets": [
+    {
+     "id": 0,
+     "experiment_id": 0,
+     "composition": {
+      "num": [
+       11,
+       64
+      ],
+      "den": 75
+     },
+     "tolerance": {
+      "num": 0,
+      "den": 1
+     },
+     "droplet_volume": 6,
+     "demand": 1
+    }
+   ],
+   "chip": {
+    "name": "meda_m8-M9-S32",
+    "max_mix_volume": 9,
+    "min_mix_volume": 2,
+    "unit_volume": 1,
+    "min_droplet_volume": 1,
+    "allow_partial_take": true,
+    "storage_capacity": 32,
+    "max_denominator": 1024,
+    "allow_same_composition_merge": false
+   },
+   "step_limit": 12,
+   "metadata": {
+    "generator": "dilution-one-single-loose",
+    "generator_version": 1,
+    "config_hash": "80913e935c534624",
+    "composition_sampler": "dirichlet_snapped",
+    "witness_actions": 7,
+    "witness_source": "tree",
+    "step_limit_rule": "depth",
+    "step_limit_base": 3,
+    "step_limit_multiple": 4.0,
+    "step_limit_raised_to_witness": false,
+    "known_upper_bound": "213",
+    "unwitnessed_redraws": 0,
+    "cell": "dilution-one-single-loose"
+   }
+  },
+  {
+   "instance_id": "val_s1-025",
+   "fluids": [
+    {
+     "id": 0,
+     "name": "S",
+     "kind": "SAMPLE"
+    },
+    {
+     "id": 1,
+     "name": "B",
+     "kind": "BUFFER"
+    }
+   ],
+   "targets": [
+    {
+     "id": 0,
+     "experiment_id": 0,
+     "composition": {
+      "num": [
+       8,
+       213
+      ],
+      "den": 221
+     },
+     "tolerance": {
+      "num": 1,
+      "den": 1000
+     },
+     "droplet_volume": 9,
+     "demand": 1
+    }
+   ],
+   "chip": {
+    "name": "meda_m8-M10-S32",
+    "max_mix_volume": 10,
+    "min_mix_volume": 2,
+    "unit_volume": 1,
+    "min_droplet_volume": 1,
+    "allow_partial_take": true,
+    "storage_capacity": 32,
+    "max_denominator": 1024,
+    "allow_same_composition_merge": false
+   },
+   "step_limit": 12,
+   "metadata": {
+    "generator": "dilution-one-single-loose",
+    "generator_version": 1,
+    "config_hash": "80913e935c534624",
+    "composition_sampler": "dirichlet_snapped",
+    "witness_actions": 4,
+    "witness_source": "tree",
+    "step_limit_rule": "depth",
+    "step_limit_base": 3,
+    "step_limit_multiple": 4.0,
+    "step_limit_raised_to_witness": false,
+    "known_upper_bound": "78",
+    "unwitnessed_redraws": 0,
+    "cell": "dilution-one-single-loose"
+   }
+  },
+  {
+   "instance_id": "val_s1-026",
+   "fluids": [
+    {
+     "id": 0,
+     "name": "S",
+     "kind": "SAMPLE"
+    },
+    {
+     "id": 1,
+     "name": "B",
+     "kind": "BUFFER"
+    }
+   ],
+   "targets": [
+    {
+     "id": 0,
+     "experiment_id": 0,
+     "composition": {
+      "num": [
+       38,
+       7
+      ],
+      "den": 45
+     },
+     "tolerance": {
+      "num": 1,
+      "den": 200
+     },
+     "droplet_volume": 4,
+     "demand": 1
+    }
+   ],
+   "chip": {
+    "name": "meda_m8-M4-S32",
+    "max_mix_volume": 4,
+    "min_mix_volume": 2,
+    "unit_volume": 1,
+    "min_droplet_volume": 1,
+    "allow_partial_take": true,
+    "storage_capacity": 32,
+    "max_denominator": 1024,
+    "allow_same_composition_merge": false
+   },
+   "step_limit": 12,
+   "metadata": {
+    "generator": "dilution-one-single-loose",
+    "generator_version": 1,
+    "config_hash": "80913e935c534624",
+    "composition_sampler": "dirichlet_snapped",
+    "witness_actions": 6,
+    "witness_source": "tree",
+    "step_limit_rule": "depth",
+    "step_limit_base": 3,
+    "step_limit_multiple": 4.0,
+    "step_limit_raised_to_witness": false,
+    "known_upper_bound": "393",
+    "unwitnessed_redraws": 0,
+    "cell": "dilution-one-single-loose"
+   }
+  },
+  {
+   "instance_id": "val_s1-027",
+   "fluids": [
+    {
+     "id": 0,
+     "name": "S",
+     "kind": "SAMPLE"
+    },
+    {
+     "id": 1,
+     "name": "B",
+     "kind": "BUFFER"
+    }
+   ],
+   "targets": [
+    {
+     "id": 0,
+     "experiment_id": 0,
+     "composition": {
+      "num": [
+       1,
+       15
+      ],
+      "den": 16
+     },
+     "tolerance": {
+      "num": 0,
+      "den": 1
+     },
+     "droplet_volume": 5,
+     "demand": 1
+    }
+   ],
+   "chip": {
+    "name": "meda_m8-M10-S32",
+    "max_mix_volume": 10,
+    "min_mix_volume": 2,
+    "unit_volume": 1,
+    "min_droplet_volume": 1,
+    "allow_partial_take": true,
+    "storage_capacity": 32,
+    "max_denominator": 1024,
+    "allow_same_composition_merge": false
+   },
+   "step_limit": 12,
+   "metadata": {
+    "generator": "dilution-one-single-loose",
+    "generator_version": 1,
+    "config_hash": "80913e935c534624",
+    "composition_sampler": "dirichlet_snapped",
+    "witness_actions": 4,
+    "witness_source": "naive",
+    "step_limit_rule": "depth",
+    "step_limit_base": 3,
+    "step_limit_multiple": 4.0,
+    "step_limit_raised_to_witness": false,
+    "known_upper_bound": "78",
+    "unwitnessed_redraws": 0,
+    "cell": "dilution-one-single-loose"
+   }
+  },
+  {
+   "instance_id": "val_s1-028",
+   "fluids": [
+    {
+     "id": 0,
+     "name": "S",
+     "kind": "SAMPLE"
+    },
+    {
+     "id": 1,
+     "name": "B",
+     "kind": "BUFFER"
+    }
+   ],
+   "targets": [
+    {
+     "id": 0,
+     "experiment_id": 0,
+     "composition": {
+      "num": [
+       77,
+       17
+      ],
+      "den": 94
+     },
+     "tolerance": {
+      "num": 1,
+      "den": 1000
+     },
+     "droplet_volume": 1,
+     "demand": 1
+    }
+   ],
+   "chip": {
+    "name": "meda_m8-M6-S32",
+    "max_mix_volume": 6,
+    "min_mix_volume": 2,
+    "unit_volume": 1,
+    "min_droplet_volume": 1,
+    "allow_partial_take": true,
+    "storage_capacity": 32,
+    "max_denominator": 1024,
+    "allow_same_composition_merge": false
+   },
+   "step_limit": 12,
+   "metadata": {
+    "generator": "dilution-one-single-loose",
+    "generator_version": 1,
+    "config_hash": "80913e935c534624",
+    "composition_sampler": "dirichlet_snapped",
+    "witness_actions": 7,
+    "witness_source": "tree",
+    "step_limit_rule": "depth",
+    "step_limit_base": 3,
+    "step_limit_multiple": 4.0,
+    "step_limit_raised_to_witness": false,
+    "known_upper_bound": "338",
+    "unwitnessed_redraws": 0,
+    "cell": "dilution-one-single-loose"
+   }
+  },
+  {
+   "instance_id": "val_s1-029",
+   "fluids": [
+    {
+     "id": 0,
+     "name": "S",
+     "kind": "SAMPLE"
+    },
+    {
+     "id": 1,
+     "name": "B",
+     "kind": "BUFFER"
+    }
+   ],
+   "targets": [
+    {
+     "id": 0,
+     "experiment_id": 0,
+     "composition": {
+      "num": [
+       1,
+       2
+      ],
+      "den": 3
+     },
+     "tolerance": {
+      "num": 0,
+      "den": 1
+     },
+     "droplet_volume": 7,
+     "demand": 1
+    }
+   ],
+   "chip": {
+    "name": "meda_m8-M10-S32",
+    "max_mix_volume": 10,
+    "min_mix_volume": 2,
+    "unit_volume": 1,
+    "min_droplet_volume": 1,
+    "allow_partial_take": true,
+    "storage_capacity": 32,
+    "max_denominator": 1024,
+    "allow_same_composition_merge": false
+   },
+   "step_limit": 8,
+   "metadata": {
+    "generator": "dilution-one-single-loose",
+    "generator_version": 1,
+    "config_hash": "80913e935c534624",
+    "composition_sampler": "dirichlet_snapped",
+    "witness_actions": 2,
+    "witness_source": "tree",
+    "step_limit_rule": "depth",
+    "step_limit_base": 2,
+    "step_limit_multiple": 4.0,
+    "step_limit_raised_to_witness": false,
+    "known_upper_bound": "201",
+    "unwitnessed_redraws": 0,
+    "cell": "dilution-one-single-loose"
+   }
+  },
+  {
+   "instance_id": "val_s1-030",
+   "fluids": [
+    {
+     "id": 0,
+     "name": "S",
+     "kind": "SAMPLE"
+    },
+    {
+     "id": 1,
+     "name": "B",
+     "kind": "BUFFER"
+    }
+   ],
+   "targets": [
+    {
+     "id": 0,
+     "experiment_id": 0,
+     "composition": {
+      "num": [
+       19,
+       51
+      ],
+      "den": 70
+     },
+     "tolerance": {
+      "num": 0,
+      "den": 1
+     },
+     "droplet_volume": 4,
+     "demand": 1
+    }
+   ],
+   "chip": {
+    "name": "meda_m8-M7-S32",
+    "max_mix_volume": 7,
+    "min_mix_volume": 2,
+    "unit_volume": 1,
+    "min_droplet_volume": 1,
+    "allow_partial_take": true,
+    "storage_capacity": 32,
+    "max_denominator": 1024,
+    "allow_same_composition_merge": false
+   },
+   "step_limit": 16,
+   "metadata": {
+    "generator": "dilution-one-single-loose",
+    "generator_version": 1,
+    "config_hash": "80913e935c534624",
+    "composition_sampler": "dirichlet_snapped",
+    "witness_actions": 7,
+    "witness_source": "naive",
+    "step_limit_rule": "depth",
+    "step_limit_base": 4,
+    "step_limit_multiple": 4.0,
+    "step_limit_raised_to_witness": false,
+    "known_upper_bound": "402",
+    "unwitnessed_redraws": 0,
+    "cell": "dilution-one-single-loose"
+   }
+  },
+  {
+   "instance_id": "val_s1-031",
+   "fluids": [
+    {
+     "id": 0,
+     "name": "S",
+     "kind": "SAMPLE"
+    },
+    {
+     "id": 1,
+     "name": "B",
+     "kind": "BUFFER"
+    }
+   ],
+   "targets": [
+    {
+     "id": 0,
+     "experiment_id": 0,
+     "composition": {
+      "num": [
+       8,
+       3
+      ],
+      "den": 11
+     },
+     "tolerance": {
+      "num": 1,
+      "den": 200
+     },
+     "droplet_volume": 5,
+     "demand": 1
+    }
+   ],
+   "chip": {
+    "name": "meda_m8-M9-S32",
+    "max_mix_volume": 9,
+    "min_mix_volume": 2,
+    "unit_volume": 1,
+    "min_droplet_volume": 1,
+    "allow_partial_take": true,
+    "storage_capacity": 32,
+    "max_denominator": 1024,
+    "allow_same_composition_merge": false
+   },
+   "step_limit": 12,
+   "metadata": {
+    "generator": "dilution-one-single-loose",
+    "generator_version": 1,
+    "config_hash": "80913e935c534624",
+    "composition_sampler": "dirichlet_snapped",
+    "witness_actions": 5,
+    "witness_source": "tree",
+    "step_limit_rule": "depth",
+    "step_limit_base": 3,
+    "step_limit_multiple": 4.0,
+    "step_limit_raised_to_witness": false,
+    "known_upper_bound": "526",
+    "unwitnessed_redraws": 0,
+    "cell": "dilution-one-single-loose"
+   }
+  },
+  {
+   "instance_id": "val_s1-032",
+   "fluids": [
+    {
+     "id": 0,
+     "name": "S",
+     "kind": "SAMPLE"
+    },
+    {
+     "id": 1,
+     "name": "B",
+     "kind": "BUFFER"
+    }
+   ],
+   "targets": [
+    {
+     "id": 0,
+     "experiment_id": 0,
+     "composition": {
+      "num": [
+       117,
+       11
+      ],
+      "den": 128
+     },
+     "tolerance": {
+      "num": 0,
+      "den": 1
+     },
+     "droplet_volume": 4,
+     "demand": 1
+    }
+   ],
+   "chip": {
+    "name": "meda_m8-M5-S32",
+    "max_mix_volume": 5,
+    "min_mix_volume": 2,
+    "unit_volume": 1,
+    "min_droplet_volume": 1,
+    "allow_partial_take": true,
+    "storage_capacity": 32,
+    "max_denominator": 1024,
+    "allow_same_composition_merge": false
+   },
+   "step_limit": 20,
+   "metadata": {
+    "generator": "dilution-one-single-loose",
+    "generator_version": 1,
+    "config_hash": "80913e935c534624",
+    "composition_sampler": "dirichlet_snapped",
+    "witness_actions": 10,
+    "witness_source": "naive",
+    "step_limit_rule": "depth",
+    "step_limit_base": 5,
+    "step_limit_multiple": 4.0,
+    "step_limit_raised_to_witness": false,
+    "known_upper_bound": "528",
+    "unwitnessed_redraws": 0,
+    "cell": "dilution-one-single-loose"
+   }
+  },
+  {
+   "instance_id": "val_s1-033",
+   "fluids": [
+    {
+     "id": 0,
+     "name": "S",
+     "kind": "SAMPLE"
+    },
+    {
+     "id": 1,
+     "name": "B",
+     "kind": "BUFFER"
+    }
+   ],
+   "targets": [
+    {
+     "id": 0,
+     "experiment_id": 0,
+     "composition": {
+      "num": [
+       67,
+       33
+      ],
+      "den": 100
+     },
+     "tolerance": {
+      "num": 1,
+      "den": 1000
+     },
+     "droplet_volume": 5,
+     "demand": 1
+    }
+   ],
+   "chip": {
+    "name": "meda_m8-M10-S32",
+    "max_mix_volume": 10,
+    "min_mix_volume": 2,
+    "unit_volume": 1,
+    "min_droplet_volume": 1,
+    "allow_partial_take": true,
+    "storage_capacity": 32,
+    "max_denominator": 1024,
+    "allow_same_composition_merge": false
+   },
+   "step_limit": 12,
+   "metadata": {
+    "generator": "dilution-one-single-loose",
+    "generator_version": 1,
+    "config_hash": "80913e935c534624",
+    "composition_sampler": "dirichlet_snapped",
+    "witness_actions": 5,
+    "witness_source": "naive",
+    "step_limit_rule": "depth",
+    "step_limit_base": 3,
+    "step_limit_multiple": 4.0,
+    "step_limit_raised_to_witness": false,
+    "known_upper_bound": "855",
+    "unwitnessed_redraws": 0,
+    "cell": "dilution-one-single-loose"
+   }
+  },
+  {
+   "instance_id": "val_s1-034",
+   "fluids": [
+    {
+     "id": 0,
+     "name": "S",
+     "kind": "SAMPLE"
+    },
+    {
+     "id": 1,
+     "name": "B",
+     "kind": "BUFFER"
+    }
+   ],
+   "targets": [
+    {
+     "id": 0,
+     "experiment_id": 0,
+     "composition": {
+      "num": [
+       56,
+       5
+      ],
+      "den": 61
+     },
+     "tolerance": {
+      "num": 1,
+      "den": 1000
+     },
+     "droplet_volume": 6,
+     "demand": 1
+    }
+   ],
+   "chip": {
+    "name": "meda_m8-M9-S32",
+    "max_mix_volume": 9,
+    "min_mix_volume": 2,
+    "unit_volume": 1,
+    "min_droplet_volume": 1,
+    "allow_partial_take": true,
+    "storage_capacity": 32,
+    "max_denominator": 1024,
+    "allow_same_composition_merge": false
+   },
+   "step_limit": 12,
+   "metadata": {
+    "generator": "dilution-one-single-loose",
+    "generator_version": 1,
+    "config_hash": "80913e935c534624",
+    "composition_sampler": "dirichlet_snapped",
+    "witness_actions": 4,
+    "witness_source": "tree",
+    "step_limit_rule": "depth",
+    "step_limit_base": 3,
+    "step_limit_multiple": 4.0,
+    "step_limit_raised_to_witness": false,
+    "known_upper_bound": "589",
+    "unwitnessed_redraws": 0,
+    "cell": "dilution-one-single-loose"
+   }
+  },
+  {
+   "instance_id": "val_s1-035",
+   "fluids": [
+    {
+     "id": 0,
+     "name": "S",
+     "kind": "SAMPLE"
+    },
+    {
+     "id": 1,
+     "name": "B",
+     "kind": "BUFFER"
+    }
+   ],
+   "targets": [
+    {
+     "id": 0,
+     "experiment_id": 0,
+     "composition": {
+      "num": [
+       1,
+       63
+      ],
+      "den": 64
+     },
+     "tolerance": {
+      "num": 0,
+      "den": 1
+     },
+     "droplet_volume": 3,
+     "demand": 1
+    }
+   ],
+   "chip": {
+    "name": "meda_m8-M5-S32",
+    "max_mix_volume": 5,
+    "min_mix_volume": 2,
+    "unit_volume": 1,
+    "min_droplet_volume": 1,
+    "allow_partial_take": true,
+    "storage_capacity": 32,
+    "max_denominator": 1024,
+    "allow_same_composition_merge": false
+   },
+   "step_limit": 16,
+   "metadata": {
+    "generator": "dilution-one-single-loose",
+    "generator_version": 1,
+    "config_hash": "80913e935c534624",
+    "composition_sampler": "dirichlet_snapped",
+    "witness_actions": 6,
+    "witness_source": "naive",
+    "step_limit_rule": "depth",
+    "step_limit_base": 4,
+    "step_limit_multiple": 4.0,
+    "step_limit_raised_to_witness": false,
+    "known_upper_bound": "83",
+    "unwitnessed_redraws": 0,
+    "cell": "dilution-one-single-loose"
+   }
+  },
+  {
+   "instance_id": "val_s1-036",
+   "fluids": [
+    {
+     "id": 0,
+     "name": "S",
+     "kind": "SAMPLE"
+    },
+    {
+     "id": 1,
+     "name": "B",
+     "kind": "BUFFER"
+    }
+   ],
+   "targets": [
+    {
+     "id": 0,
+     "experiment_id": 0,
+     "composition": {
+      "num": [
+       26,
+       49
+      ],
+      "den": 75
+     },
+     "tolerance": {
+      "num": 0,
+      "den": 1
+     },
+     "droplet_volume": 9,
+     "demand": 1
+    }
+   ],
+   "chip": {
+    "name": "meda_m8-M10-S32",
+    "max_mix_volume": 10,
+    "min_mix_volume": 2,
+    "unit_volume": 1,
+    "min_droplet_volume": 1,
+    "allow_partial_take": true,
+    "storage_capacity": 32,
+    "max_denominator": 1024,
+    "allow_same_composition_merge": false
+   },
+   "step_limit": 12,
+   "metadata": {
+    "generator": "dilution-one-single-loose",
+    "generator_version": 1,
+    "config_hash": "80913e935c534624",
+    "composition_sampler": "dirichlet_snapped",
+    "witness_actions": 7,
+    "witness_source": "tree",
+    "step_limit_rule": "depth",
+    "step_limit_base": 3,
+    "step_limit_multiple": 4.0,
+    "step_limit_raised_to_witness": false,
+    "known_upper_bound": "277",
+    "unwitnessed_redraws": 0,
+    "cell": "dilution-one-single-loose"
+   }
+  },
+  {
+   "instance_id": "val_s1-037",
+   "fluids": [
+    {
+     "id": 0,
+     "name": "S",
+     "kind": "SAMPLE"
+    },
+    {
+     "id": 1,
+     "name": "B",
+     "kind": "BUFFER"
+    }
+   ],
+   "targets": [
+    {
+     "id": 0,
+     "experiment_id": 0,
+     "composition": {
+      "num": [
+       3,
+       22
+      ],
+      "den": 25
+     },
+     "tolerance": {
+      "num": 1,
+      "den": 1000
+     },
+     "droplet_volume": 2,
+     "demand": 1
+    }
+   ],
+   "chip": {
+    "name": "meda_m8-M6-S32",
+    "max_mix_volume": 6,
+    "min_mix_volume": 2,
+    "unit_volume": 1,
+    "min_droplet_volume": 1,
+    "allow_partial_take": true,
+    "storage_capacity": 32,
+    "max_denominator": 1024,
+    "allow_same_composition_merge": false
+   },
+   "step_limit": 12,
+   "metadata": {
+    "generator": "dilution-one-single-loose",
+    "generator_version": 1,
+    "config_hash": "80913e935c534624",
+    "composition_sampler": "dirichlet_snapped",
+    "witness_actions": 4,
+    "witness_source": "naive",
+    "step_limit_rule": "depth",
+    "step_limit_base": 3,
+    "step_limit_multiple": 4.0,
+    "step_limit_raised_to_witness": false,
+    "known_upper_bound": "207",
+    "unwitnessed_redraws": 0,
+    "cell": "dilution-one-single-loose"
+   }
+  },
+  {
+   "instance_id": "val_s1-038",
+   "fluids": [
+    {
+     "id": 0,
+     "name": "S",
+     "kind": "SAMPLE"
+    },
+    {
+     "id": 1,
+     "name": "B",
+     "kind": "BUFFER"
+    }
+   ],
+   "targets": [
+    {
+     "id": 0,
+     "experiment_id": 0,
+     "composition": {
+      "num": [
+       49,
+       124
+      ],
+      "den": 173
+     },
+     "tolerance": {
+      "num": 1,
+      "den": 1000
+     },
+     "droplet_volume": 2,
+     "demand": 1
+    }
+   ],
+   "chip": {
+    "name": "meda_m8-M3-S32",
+    "max_mix_volume": 3,
+    "min_mix_volume": 2,
+    "unit_volume": 1,
+    "min_droplet_volume": 1,
+    "allow_partial_take": true,
+    "storage_capacity": 32,
+    "max_denominator": 1024,
+    "allow_same_composition_merge": false
+   },
+   "step_limit": 20,
+   "metadata": {
+    "generator": "dilution-one-single-loose",
+    "generator_version": 1,
+    "config_hash": "80913e935c534624",
+    "composition_sampler": "dirichlet_snapped",
+    "witness_actions": 9,
+    "witness_source": "tree",
+    "step_limit_rule": "depth",
+    "step_limit_base": 5,
+    "step_limit_multiple": 4.0,
+    "step_limit_raised_to_witness": false,
+    "known_upper_bound": "336",
+    "unwitnessed_redraws": 0,
+    "cell": "dilution-one-single-loose"
+   }
+  },
+  {
+   "instance_id": "val_s1-039",
+   "fluids": [
+    {
+     "id": 0,
+     "name": "S",
+     "kind": "SAMPLE"
+    },
+    {
+     "id": 1,
+     "name": "B",
+     "kind": "BUFFER"
+    }
+   ],
+   "targets": [
+    {
+     "id": 0,
+     "experiment_id": 0,
+     "composition": {
+      "num": [
+       1,
+       209
+      ],
+      "den": 210
+     },
+     "tolerance": {
+      "num": 0,
+      "den": 1
+     },
+     "droplet_volume": 8,
+     "demand": 1
+    }
+   ],
+   "chip": {
+    "name": "meda_m8-M8-S32",
+    "max_mix_volume": 8,
+    "min_mix_volume": 2,
+    "unit_volume": 1,
+    "min_droplet_volume": 1,
+    "allow_partial_take": true,
+    "storage_capacity": 32,
+    "max_denominator": 1024,
+    "allow_same_composition_merge": false
+   },
+   "step_limit": 16,
+   "metadata": {
+    "generator": "dilution-one-single-loose",
+    "generator_version": 1,
+    "config_hash": "80913e935c534624",
+    "composition_sampler": "dirichlet_snapped",
+    "witness_actions": 8,
+    "witness_source": "tree",
+    "step_limit_rule": "depth",
+    "step_limit_base": 4,
+    "step_limit_multiple": 4.0,
+    "step_limit_raised_to_witness": false,
+    "known_upper_bound": "93",
+    "unwitnessed_redraws": 0,
+    "cell": "dilution-one-single-loose"
+   }
+  }
+ ]
+}

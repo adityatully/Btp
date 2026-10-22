@@ -3,6 +3,8 @@
     uv run python scripts/make_benchmark.py tiny_exact_v1
     uv run python scripts/make_benchmark.py val_stage1_v1
     uv run python scripts/make_benchmark.py val_stage1_v2
+    uv run python scripts/make_benchmark.py val_s1_v1      # one per stage of track2_v1 (8.3)
+    uv run python scripts/make_benchmark.py heldout_combo_v1
     uv run python scripts/make_benchmark.py --list
 
 A published version is frozen: the script refuses to overwrite one unless `--overwrite` is
@@ -17,9 +19,10 @@ proved optima (status `optimal`). The instances themselves are untouched.
 from __future__ import annotations
 
 import argparse
+import functools
 from collections.abc import Callable
 from dataclasses import replace
-from math import lcm
+from math import ceil, lcm
 from pathlib import Path
 from typing import Any
 
@@ -34,7 +37,13 @@ from meda.core.fluids import Fluid, FluidKind
 from meda.core.problem import Instance, Target
 from meda.core.rules import replay
 from meda.generators.benchmark_io import BenchmarkSet, InstanceReference, instance_hash
-from meda.generators.sampler import GeneratorConfig, dilution_grid, sample_instances
+from meda.generators.sampler import (
+    GeneratorConfig,
+    GeneratorSource,
+    dilution_grid,
+    sample_instances,
+)
+from meda.generators.stages import Cell, StageDesign
 from meda.solvers.base import SolveBudget
 from meda.solvers.baselines.naive import naive_plan
 from meda.solvers.exact_search import ExactSearch
@@ -50,10 +59,16 @@ def load_chip(name: str) -> ChipLimits:
     return ChipLimits.from_dict(data)  # type: ignore[arg-type]
 
 
-def load_weights() -> CostWeights:
-    data = OmegaConf.to_container(OmegaConf.load(CONFIGS / "costs" / "default.yaml"))
+def load_weights(name: str = "default") -> CostWeights:
+    data = OmegaConf.to_container(OmegaConf.load(CONFIGS / "costs" / f"{name}.yaml"))
     assert isinstance(data, dict)
     return CostWeights.from_dict(data)  # type: ignore[arg-type]
+
+
+def load_design(name: str) -> StageDesign:
+    data = OmegaConf.to_container(OmegaConf.load(CONFIGS / "stages" / f"{name}.yaml"))
+    assert isinstance(data, dict)
+    return StageDesign.from_dict(data)  # type: ignore[arg-type]
 
 
 def load_generator(name: str) -> tuple[GeneratorConfig, str]:
@@ -277,10 +292,99 @@ def build_val_stage1_v2() -> BenchmarkSet:
     )
 
 
+def build_design_set(design_name: str, which: int | None) -> BenchmarkSet:
+    """A validation set of a stage design (SPEC 8.3, 8.4): stage `which`'s cells, or the
+    held-out cells when `which` is None. `val_size` instances split evenly over the cells,
+    each a fresh draw (unwitnessed draws are redrawn), no two the same problem.
+
+    Answer key per instance: [lower bound, best known], where best known is the cheaper of the
+    naive and split-tree plans and the lower bound is exact search's fluid-conservation bound
+    at the root (`max_nodes=0`). Measured on the design's ranges, exact search proved none of
+    24 stage 1-3 draws within 1,000 nodes (1-100 s each), so a node budget buys nothing here;
+    when the two ends meet the construction is proved optimal and stored as `optimal`.
+    """
+    design = load_design(design_name)
+    chip = load_chip(design.chip)
+    weights = load_weights(design.costs)
+    if which is None:
+        cells: tuple[Cell, ...] = design.held_out
+        full, label, offset = design.held_out_val, "held-out cells", len(design.stages)
+    else:
+        stage = design.stages[which]
+        cells, full, label, offset = stage.cells, stage.val, f"stage {stage.name}", which
+    name, version = full.rsplit("_v", 1)
+    seeds = (design.val_seed + offset,)
+    rng = np.random.default_rng(seeds[0])
+    per_cell = ceil(design.val_size / len(cells))
+    seen: set[str] = set()
+    instances: list[Instance] = []
+    for cell in cells:
+        drawn = 0
+        while drawn < per_cell:
+            inst = GeneratorSource(cell.config, chip, weights, frozenset(seen))(rng)
+            seen.add(instance_hash(inst))
+            instances.append(
+                replace(
+                    inst,
+                    instance_id=f"{name}-{len(instances):03d}",
+                    metadata={**inst.metadata, "cell": cell.name},
+                )
+            )
+            drawn += 1
+    solver = ExactSearch(weights)
+    reference: dict[str, InstanceReference] = {}
+    for inst in instances:
+        result = solver.solve(inst, SolveBudget(max_nodes=0))
+        if result.cost is None or result.lower_bound is None:
+            raise RuntimeError(f"instance '{inst.instance_id}': no construction plan")
+        proved = result.cost == result.lower_bound
+        reference[inst.instance_id] = InstanceReference(
+            result.cost,
+            "optimal" if proved else "feasible",
+            "cheapest_construction",
+            {
+                "lower_bound_producer": "exact_search fluid_bound at the root",
+                "mix_ops": result.totals.mix_ops if result.totals else None,
+            },
+            lower_bound=None if proved else result.lower_bound,
+        )
+    return BenchmarkSet(
+        name=name,
+        version=int(version),
+        instances=tuple(instances),
+        reference=reference,
+        generator={
+            "builder": "scripts/make_benchmark.py:build_design_set",
+            "design": design.name,
+            "which": label,
+            "cells": {c.name: c.config.config_hash() for c in cells},
+            "chip": design.chip,
+            "costs": design.costs,
+            "answer_key": "[root fluid bound, cheaper of naive and tree]",
+        },
+        seeds=seeds,
+        description=(
+            f"Validation for {label} of stage design {design.name}: {per_cell} draws per cell "
+            f"over {', '.join(c.name for c in cells)}. Graded under costs/{design.costs}."
+        ),
+    )
+
+
+def design_builders(design_name: str) -> dict[str, Callable[[], BenchmarkSet]]:
+    design = load_design(design_name)
+    out: dict[str, Callable[[], BenchmarkSet]] = {
+        s.val: functools.partial(build_design_set, design_name, i)
+        for i, s in enumerate(design.stages)
+    }
+    out[design.held_out_val] = functools.partial(build_design_set, design_name, None)
+    return out
+
+
 BUILDERS: dict[str, Callable[[], BenchmarkSet]] = {
     "tiny_exact_v1": build_tiny_exact,
     "val_stage1_v1": build_val_stage1,
     "val_stage1_v2": build_val_stage1_v2,
+    **design_builders("track2_v1"),
 }
 
 
