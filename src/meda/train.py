@@ -193,6 +193,7 @@ def train_ppo(cfg: dict[str, Any], out_dir: Path) -> pd.DataFrame:
     checkpoint = out_dir / "checkpoints" / "last.pt"
     envs = make_vector_env(cfg, instances, ppo_cfg.num_envs, str(train_cfg["vector"]), source)
     logger = MetricsLogger(out_dir, tensorboard=True)
+    interrupted = False
     try:
         trainer = PPOTrainer(ppo_cfg, sizes, envs, device, seed=int(cfg["seed"]))
         if train_cfg.get("resume"):
@@ -222,8 +223,13 @@ def train_ppo(cfg: dict[str, Any], out_dir: Path) -> pd.DataFrame:
         trainer.agent.save(out_dir / "checkpoints" / "agent.pt")
         df = evaluate(AgentProducer(trainer.agent, eval_env), graded, schedule)
         return df.assign(updates=trainer.update, env_steps=trainer.global_step)
+    except KeyboardInterrupt:
+        interrupted = True
+        raise
     finally:
-        envs.close()
+        # Ctrl-C (or `timeout -s INT`) reaches the env workers too: terminate them rather
+        # than wait for a step they abandoned (which gymnasium reports as an error).
+        envs.close(terminate=interrupted)
         logger.close()
 
 
@@ -279,6 +285,7 @@ def train_ppo_regime(cfg: dict[str, Any], out_dir: Path) -> pd.DataFrame:
     checkpoint = out_dir / "checkpoints" / "last.pt"
     envs = make_vector_env(cfg, [], ppo_cfg.num_envs, str(train_cfg["vector"]), source())
     logger = MetricsLogger(out_dir, tensorboard=True)
+    interrupted = False
     try:
         trainer = PPOTrainer(ppo_cfg, sizes, envs, device, seed=int(cfg["seed"]))
         if train_cfg.get("resume"):
@@ -333,8 +340,13 @@ def train_ppo_regime(cfg: dict[str, Any], out_dir: Path) -> pd.DataFrame:
         return df.assign(
             regime=regime.cfg.name, updates=trainer.update, env_steps=trainer.global_step
         )
+    except KeyboardInterrupt:
+        interrupted = True
+        raise
     finally:
-        envs.close()
+        # Ctrl-C (or `timeout -s INT`) reaches the env workers too: terminate them rather
+        # than wait for a step they abandoned (which gymnasium reports as an error).
+        envs.close(terminate=interrupted)
         logger.close()
 
 
@@ -347,6 +359,16 @@ def _eval_summary(df: pd.DataFrame) -> dict[str, float]:
     return out
 
 
+def _train(name: str, cfg: DictConfig, data: dict[str, Any], out_dir: Path) -> pd.DataFrame:
+    if name == "tabular_q":
+        return train_tabular_q(data, out_dir)
+    if name == "ppo" and cfg.train.source == "regime":
+        return train_ppo_regime(data, out_dir)
+    if name == "ppo":
+        return train_ppo(data, out_dir)
+    raise NotImplementedError(f"agent '{name}' is not trainable (tabular_q, ppo)")
+
+
 @hydra.main(version_base=None, config_path="../../configs", config_name="config")
 def main(cfg: DictConfig) -> None:
     data = OmegaConf.to_container(cfg, resolve=True)
@@ -357,14 +379,11 @@ def main(cfg: DictConfig) -> None:
     print(f"seed={cfg.seed} agent={cfg.agent.name} chip={chip.name} -> {out_dir}")
 
     name = str(cfg.agent.name)
-    if name == "tabular_q":
-        results = train_tabular_q(data, out_dir)  # type: ignore[arg-type]
-    elif name == "ppo" and cfg.train.source == "regime":
-        results = train_ppo_regime(data, out_dir)  # type: ignore[arg-type]
-    elif name == "ppo":
-        results = train_ppo(data, out_dir)  # type: ignore[arg-type]
-    else:
-        raise NotImplementedError(f"agent '{name}' is not trainable (tabular_q, ppo)")
+    try:
+        results = _train(name, cfg, data, out_dir)  # type: ignore[arg-type]
+    except KeyboardInterrupt:
+        print(f"\ninterrupted; the last checkpoint (if any) is in {out_dir / 'checkpoints'}")
+        raise SystemExit(130) from None
 
     results.to_parquet(out_dir / "results.parquet", index=False)
     benchmarks = results["benchmark"].unique()
