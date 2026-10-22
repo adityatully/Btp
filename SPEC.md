@@ -1,6 +1,14 @@
 # MEDA Design Automation — Codebase Specification
 
-Version 0.17 · 2026-10-22
+Version 0.18 · 2026-10-22
+
+Changes in 0.18 (stage design and training regimes, chosen by the user on 2026-10-22): the stage
+design `track2_v1` over the constraint cells, five stages that each add one constraint, one
+held-out cell, final stage shares (8.3); the gradient target structure (8.1); `MixtureSource`
+and the three regimes `sequential` / `expanding` / `mixed` with a promotion rule on validation
+sets (8.3); validation sets `val_s1_v1`..`val_s5_v1` and `heldout_combo_v1` (8.4);
+`train.source=regime` and the `stages` / `regime` config groups (13); the regime comparison and
+its decision rule, `scripts/regime_report.py` (8.3). M8 (b) moves to `val_s1_v1` (16).
 
 Changes in 0.17 (documentation only): grading references for the benchmark tiers (8.4) from the
 Track 2 experiments E1–E3: constraint cells and the precise frontier, what each reference proves,
@@ -133,7 +141,7 @@ Read sections 1–5 before writing any code. Implement in the milestone order of
 *2026-10-19, updated 2026-10-21. The ranges of 1.3 were fixed by the user on 2026-10-20 from
 the literature survey (PLATFORM_PARAMS.md), taking the widest range the literature supports,
 since generalisation is the argument. The observation and network meet 1.4 (see the status
-note there); the stages and benchmarks do not cover 1.3 yet.*
+note there); the stage design and its validation sets cover 1.3 since 0.18 (8.3, 8.4).*
 
 ### 1.1 The goal
 **One trained policy that takes a sample-preparation problem and the chip's limits as input
@@ -206,8 +214,7 @@ than two inputs.
    input, so a weak decision costs more but never breaks a rule.
 
 *Status (0.11):* observation v2 (9.2, 9.3) and network v2 (11.4) follow rules 1–4 and are
-built; acceptance (d) of M8 tests them (16). The generators can draw the chip inputs (8.1), but
-the stages and benchmarks that use them wait for the stage design (8.3, 8.4).
+built; acceptance (d) of M8 tests them (16). The stage design draws every input of 1.3 (8.3).
 
 ### 1.5 The claim and how it is measured
 > One policy, no retraining: valid plans on any input; near the best known cost across the
@@ -240,8 +247,12 @@ Still open:
 1. The target platform's realistic M, mixer footprint and reservoir count, whether the router
    can serve as a cost oracle, and real assay cost weights (supervisor). The architecture is not
    limited by the answer; the headline results are centred on it.
-2. Goals, benchmarks, generator stages and training regime (Track 2, in that order; 8.3, 8.4).
-3. Optional extensions: total-volume targets, non-pure stock fluids, a hard budget on sample
+2. Training regime: settled by the comparison experiment of 8.3 (stages, held-out cell and
+   validation sets were chosen on 2026-10-22).
+3. Whether limited storage (2–16, uniform) binds often enough: the naive and tree plans
+   exceed the drawn capacity in 1 of 180 draws (8.3), so only plans that share would feel it.
+   Measure on trained agents; a range skewed toward small capacities is the fallback.
+4. Optional extensions: total-volume targets, non-pure stock fluids, a hard budget on sample
    volume, cost weights as an input (preference conditioning, 6.5).
 
 ### 1.8 Infrastructure goals
@@ -343,6 +354,8 @@ meda-da/
 │   │   └── dmfb_m2.yaml       # 1:1 mixing only, for comparison with DMFB literature
 │   ├── costs/
 │   │   └── default.yaml       # cost weights (section 6.5)
+│   ├── stages/                # stage designs over constraint cells (8.3)
+│   ├── regime/                # training regimes: sequential, expanding, mixed (8.3)
 │   ├── generator/             # p(s0) definitions (section 8)
 │   │   ├── tiny_dilution.yaml
 │   │   ├── dilution_multi.yaml
@@ -380,7 +393,9 @@ meda-da/
 │   ├── generators/
 │   │   ├── sampler.py         # random instances from a generator config
 │   │   ├── synthetic.py       # forward-built instances with a known feasible plan
-│   │   ├── curriculum.py      # staged difficulty schedule
+│   │   ├── stages.py          # stage design over cells; MixtureSource
+│   │   ├── regime.py          # training regimes: stage shares and promotion
+│   │   ├── curriculum.py      # v1 ladder's staged difficulty schedule
 │   │   └── benchmark_io.py    # read/write versioned benchmark files
 │   ├── solvers/
 │   │   ├── base.py            # Solver protocol
@@ -415,7 +430,8 @@ meda-da/
 │   └── evaluate_cli.py        # Hydra entry point for evaluation
 ├── scripts/
 │   ├── profile_env.py         # env steps per second
-│   └── make_benchmark.py      # build and freeze a benchmark set
+│   ├── make_benchmark.py      # build and freeze a benchmark set
+│   └── regime_report.py       # compare regime runs, apply the decision rule (8.3)
 ├── tests/
 │   ├── core/
 │   ├── envs/
@@ -738,6 +754,12 @@ are an error. Fields:
     (`generators.synthetic`), so they are reachable under the chip limits. Redrawn until the
     support really has `support_size` fluids, since a short walk can leave one unused.
   - `fixed_list`: explicit `fixed_compositions` (for tests).
+- `target_structure` (0.18): one name or a list drawn from per instance (repeat to weight):
+  `independent` (the default: each target from the composition sampler) or `gradient`, a
+  linear dilution gradient: one exact denominator D the instance's M can reach (with at least
+  T distinct shares), sample shares evenly spaced inside (0, D). Only for plain dilutions
+  (`dirichlet_snapped`, support 2, one sample and one buffer). Recorded as
+  `metadata["target_structure"]`; enters the config hash only when not `independent`.
 - `support_size`: how many fluids are nonzero in a target (dilution = 2: one sample + buffer);
   a fixed value or a `[low, high]` range drawn per target (capped at the instance's F).
   `reachable_walk` takes a fixed value.
@@ -829,31 +851,90 @@ a known **upper bound**. Used for (a) checking agents find plans at least this g
 `reachable_walk` sampler, and (c) optional imitation warm-start (the AlphaTensor idea:
 generating a solved problem forward is easy; solving it backward is hard).
 
-### 8.3 Curriculum (`curriculum.py`)
-`Curriculum(stages, rng, weights, exclude=None)` matches the protocol `envs.wrappers.CurriculumWrapper`
-expects: `source()` returns an instance source for the current stage, `record(info)` takes one
-finished episode's `info`. Each `Stage` is a generator config plus its chip and its exit rule:
-`min_success_rate` and, optionally, a mean plan cost within `cost_within` of `reference_cost`,
-over the last `window` finished episodes. Promotion only ever moves forward — the stages are a
-syllabus, not a controller. `exclude` is the frozen sets' hashes (`BenchmarkSet.hashes()`); every
-draw avoids them. `state_dict` / `load_state_dict` carry the stage across checkpoints.
+### 8.3 Stages and training regime (`stages.py`, `regime.py`; `curriculum.py` for the v1 ladder)
 
-Stage order (matches the research ladder), one config file each:
-1. `tiny_dilution` — dilution, one target, M = 2 (DMFB-like), accuracy 32.
-2. `dilution_single` — dilution, one target, M = 8.
-3. `dilution_multi` — dilution, many targets with demand (sharing becomes useful).
-4. `mixture_single` — mixture (3+ fluids), one target.
-5. `mixture_multi` — mixture, many targets, many experiments.
+*Chosen by the user on 2026-10-22 from the Track 2 constraint cells (8.4, Grading references).*
 
-An accuracy denominator must factorise into mix volumes the chip allows, or the naive witness
-cannot build it (32 = 2⁵ under M = 2; 64 = 8·8 under M = 8).
+**Stage design** (`configs/stages/track2_v1.yaml`, `StageDesign.from_dict`). A **cell** fixes
+one value on each axis: fluids (`dilution` / `mixture`) × targets (`one` / `many`) × demand
+(`single` / `multi`) × storage (`loose` / `limited`). Its generator config (8.1) is the design's
+`base` updated by each axis value's keys, then by every matching `overrides` entry; the cell's
+name (`dilution-one-single-loose`) is the config name. Stage 1 is the `start` cell; each later
+stage **adds one axis value**, and its cells are every combination of the values unlocked so
+far that no earlier stage holds, minus the **held-out** cells, which are never drawn in
+training. Ranges are those of 1.3.
 
-*To be redesigned (owner: the user).* These five stages predate the goals of section 1: each
-fixes M and covers a narrow slice of the input space of 1.3. The stage design will be redone
-against 1.3 (which inputs each stage varies and over what range, which values are held out
-for testing), and the training regime chosen with it (`notes/training_regime_research.md`).
-Until then this list describes the code. Every chip now enters as a problem input, so a stage
-may sample M and storage capacity per instance instead of fixing one chip config.
+| Stage | Adds | Cells (count) | Track 2 E2 headroom |
+|---|---|---|---|
+| `s1_dilution` | (start) | dilution · one · single · loose (1) | almost none: a warm-up |
+| `s2_mixture` | fluids: mixture (F 3–6, support 3–6) | mixture · one · single · loose (1) | small |
+| `s3_demand` | demand: 2–4 | {dilution, mixture} · one · multi · loose (2) | moderate |
+| `s4_targets` | targets: 2–10 | {dil, mix} · many · {single, multi} · loose (4) | large (sharing) |
+| `s5_storage` | storage: 2–16 | every cell above with limited storage (7) | large |
+
+Every cell: one experiment, `dirichlet_snapped` targets, accuracy D from 4–256 (only D whose
+prime factors are ≤ the instance's M for exact targets), tolerance drawn from
+`[0, 0, 1/200, 1/1000]` per target (half exact), `max_denominator` 1024 (a 1/1000 tolerance
+needs grids finer than 256), droplet volume 1 to M, M 3–10, depth step-limit rule. Loose
+storage is 32 (env `N_pad`, standing in for unbounded). Dilution cells with many targets draw a
+linear gradient for half their instances (`target_structure`, 8.1).
+
+**Held out:** dilution · many · multi · limited, tested on its own tier-4 set
+(`heldout_combo_v1`): can the agent combine skills it learned in separate cells? The headline
+cell (mixture · many · multi · limited) is deliberately *not* held out, so the main agent
+trains on the problem the claim is about.
+
+`final_weights` are the stage shares once every stage is in: 0.05, 0.05, 0.2, 0.35, 0.35 (most
+draws where E2 found headroom). A stage's share is split evenly over its cells.
+
+**Measured on 25 draws per cell:** every cell is witnessed (one unwitnessed redraw in 400, at
+limited storage); the depth step limit is raised to the witness on about 30% of mixture draws
+(flagged per instance, 8.1); step limits reach 600 on the largest cells. On the limited-storage
+cells the naive and tree plans almost never exceed the drawn capacity (1 of 180 draws; they keep
+2–4 droplets at a time), so whether a uniform 2–16 binds often enough for plans that share is
+not yet known (1.7).
+
+**Mixture source.** `MixtureSource(parts)` is the env instance source of a training run: each
+episode picks a cell with probability proportional to its weight and draws a fresh problem from
+that cell's `GeneratorSource` (never one of the frozen sets' hashes), recording
+`metadata["cell"]`. `StageDesign.source(stage_weights, chip, weights, exclude)` builds it.
+Picklable, so it works with `AsyncVectorEnv`; it draws only through the env's generator.
+
+**Training regimes** (`Regime`, `configs/regime/*.yaml`). The regimes share the design, the
+source and the validation sets, and differ only in the stage shares they ask for:
+
+| Regime | Draws from | On promotion |
+|---|---|---|
+| `sequential` (E) | the newest stage only | the next stage replaces it |
+| `expanding` (C) | stages 1..k: the newest gets `newest_share` (0.5), earlier stages split the rest evenly | the next stage is added; after the last stage passes, the final weights |
+| `mixed` (D) | every stage at the final weights from step 0 | never promotes |
+
+A stage **passes** at a validation round when its greedy success rate on its validation set is
+at least `min_success` (0.95) and its mean `gap_to_best_known` has plateaued: the best gap of
+the last `patience` (3) rounds is not `min_improvement` (0.01) below the best gap before them.
+Promotion reads only validation results, never training episodes. A stage that has not passed
+after `max_stage_fraction` (0.3) of the run's env steps is promoted anyway, and the event is
+marked `forced`. `num_stages` cuts the design to its first k stages for a pilot (final weights
+renormalised). `state_dict` / `load_state_dict` carry the regime across checkpoints (13).
+
+**Comparison experiment** (user-approved, 2026-10-22). Arms `expanding` (candidate), `mixed`
+(challenger) and `sequential` (baseline); equal env-step budgets and seeds. Pilot: stages 1–3
+(`regime.num_stages=3`), 2 seeds each; then the winner on all five stages with 3 seeds.
+`scripts/regime_report.py` reads the run directories and applies the decision rule, fixed
+before the runs:
+1. Reject a regime whose mean final success over seeds is below 95% on any stage's set.
+2. Among the rest, pick the lowest gap to best known, weighted by the final weights.
+3. If two regimes' seed ranges of that gap overlap, prefer the simpler (mixed, then expanding,
+   then sequential), then the one that forgets less (best validation success during the run
+   minus final success, per stage).
+A deferred arm, prioritised level replay over instances (D-PLR,
+`notes/training_regime_research.md`), is tried only if C and D both stall.
+
+**The version-1 ladder** (`curriculum.py`, `configs/generator/{tiny_dilution, dilution_single,
+dilution_multi, mixture_single, mixture_multi}.yaml`) predates section 1: each stage fixes M and
+D. It stays for the frozen sets built from it (`tiny_exact_v1`, `val_stage1_*`), the M5–M8
+acceptance tests and `train.source=generator`. `Curriculum(stages, rng, weights, exclude)` is
+its per-env promotion schedule on training windows; the regimes above replace it for training.
 
 ### 8.4 Benchmarks (`benchmark_io.py`, `scripts/make_benchmark.py`, `benchmarks/`)
 A benchmark set is a frozen JSON file (`format: "meda-benchmark/1"`) holding `name`, `version`,
@@ -890,10 +971,10 @@ the job of tiers 3–6.
 | Tier | Question | Sets | Answer key | Built in |
 |---|---|---|---|---|
 | 0 Correctness | Does the engine/producer reach a proved optimum? | `tiny_exact_v1` | `optimal` | M5 (done) |
-| 1 In-distribution | Does the agent learn its training stage? | `val_stage<k>_v<n>`, k = 1..5 | `optimal`, else [bound, best known] | stage 1: M7–M8; others with their stage |
+| 1 In-distribution | Does the agent learn its training stage? | `val_s<k>_v1`, k = 1..5 (`track2_v1`); `val_stage1_v2` (v1 ladder) | `optimal`, else [bound, best known] | 0.18 |
 | 2 Engine check (DMFB) | Does our core reproduce published 1:1 results? | `dmfb_sweep_v1` | exact search, bitscan, published DMFB numbers | M9 |
 | 3 Literature | Do we reproduce, then beat, MEDA methods on their own problems? | `literature_<paper>_v1` | the paper's reported numbers + our reproduction | M9 |
-| 4 Generalisation | Does the policy transfer to unseen and larger problems? | `unseen_ratios_v1`, `larger_v1` | [bound, best known] | after M8 stage 2 |
+| 4 Generalisation | Does the policy transfer to unseen and larger problems, and to an unseen combination of constraints? | `heldout_combo_v1` (0.18), `unseen_ratios_v1`, `larger_v1` | [bound, best known] | held-out cell: 0.18; others after training |
 | 5 Frontier | How does the agent do where no published method applies? | `frontier_v1` | [bound, best known] (see Grading references) | with the stage design (the mixture fallback exists since 0.12) |
 | 6 Assays | Does it work on ratios from real protocols? | `assays_v1` | [bound, best known] | M9 |
 
@@ -967,7 +1048,8 @@ the construction's excess, not the bound's (inferred from small problems), and
 2. **Faster exact search** (no re-check of generated legal moves, cached heuristic, dedupe of
    equivalent children). It enlarges the provable region for tier 0/1. No new dependency.
 3. **A forced-waste term in the lower bound**, for deliveries a mix cannot produce without
-   leftovers. It stays admissible. Cheap.
+   leftovers, and whole-unit rounding of each fluid's shortfall (reservoir draws are integer
+   units). It stays admissible. Cheap.
 4. **An LP relaxation over fluid flows**, behind the same `lower_bound` field. It needs an LP
    solver (a new dependency, section 3).
 5. **An exact ILP/SMT formulation** for small and medium problems. It needs a solver (a new
@@ -1030,6 +1112,19 @@ Sets per tier:
   256 and so admits more plans, so 53/2 is a best known there, not a proved optimum (an
   earlier note in this spec had it as proved). The loose intervals (25/32, 15/16) are loose at
   the upper end: nothing beat naive there.
+- `val_s1_v1` … `val_s5_v1` (0.18) — tier 1 for the stages of `track2_v1` (8.3), and
+  `heldout_combo_v1` — tier 4, the held-out cell. Built by
+  `make_benchmark.py:build_design_set`: `val_size` (40) instances per set split evenly over its
+  cells (stage 5 has 7 cells, so 42), seed `val_seed` + stage index, every draw a distinct
+  problem; the sets are disjoint from each other and training excludes them all. Graded under
+  `costs/geometric` (the design's `costs`; `train.source=regime` refuses other weights).
+  Answer key: [lower bound, best known], best known the cheaper of the naive and split-tree
+  plans, lower bound the fluid-conservation bound at the root. Exact search proved none of 24
+  stage 1–3 draws within 1,000 nodes (1–100 s each), so a node budget buys nothing at these
+  sizes. The root bound is loose here: the best known plan is 2.0–5.4 × the bound (median per
+  set). Much of that is integer draws: a target holding 1/195 of sample still needs one whole
+  unit drawn. Rounding each fluid's shortfall up to whole units keeps the bound admissible
+  (grading option 3). Promotion (8.3) uses `gap_to_best_known`, which this does not affect.
 - `dmfb_sweep_v1` — tier 2, see above.
 - `literature_<paper>_v1` — tier 3, one set per paper, filled manually from the PDF.
 - `unseen_ratios_v1` — compositions excluded from training.
@@ -1632,7 +1727,9 @@ vs number of targets; each producer has a fixed colour across all figures).
 
 ## 13. Configuration, runs and reproducibility
 
-- Hydra root `configs/config.yaml` with defaults: chip, costs, generator, env, agent, train, eval.
+- Hydra root `configs/config.yaml` with defaults: chip, costs, generator, env, agent, train, eval,
+  stages (`track2_v1`) and regime (`expanding`); the last two are read only by
+  `train.source=regime`.
 - `meda.train` trains one agent. Tabular Q (M6) trains on a frozen benchmark set, one table per
   instance (`train.per_instance`), because it keys on exact states and the acceptance criterion
   is per instance; PPO (M8) will train from the sampler. Each run writes the resolved config,
@@ -1648,7 +1745,18 @@ vs number of targets; each producer has a fixed colour across all figures).
 - `train.source=generator` (0.15, PPO only): every episode draws a fresh problem from the
   `generator` config (`GeneratorSource`, 8.1), never one of `train.exclude` (default
   `tiny_exact_v1`, `val_stage1_v2`) or of `train.benchmark`, which then serves only to grade.
-  Which generators and sets to use waits for the stage design (8.3).
+- `train.source=regime` (0.18, PPO only): draws from the cells of the `stages` design at the
+  shares `regime` sets (`MixtureSource`, 8.3), on the design's own chip config, excluding every
+  validation set of the design and `train.exclude`. Every `train.eval_every_updates` the greedy
+  policy is graded on every stage's validation set (`eval/<stage>/...` in `metrics.jsonl`, the
+  forgetting record; `eval/seconds` the time taken), then the regime may promote and the new
+  shares go to every env worker (`call("set_instance_source")`), taking effect at its next
+  reset; stage shares are logged under `regime/weight`. The round runs before the checkpoint, so
+  `last.pt` holds the regime after it (`extra["regime"]`); a resume restores the regime and
+  resends the shares. The run writes `regime.json` (state and promotion events) and grades the
+  final policy on every stage's set and on the held-out set (`results.parquet` with a `stage`
+  column, one `summary_<set>.md` each). Measured on a laptop: a round over the three pilot sets
+  (120 instances) with an untrained policy takes about 10 s.
 - Example commands:
   ```bash
   python -m meda.train agent=tabular_q
@@ -1656,6 +1764,11 @@ vs number of targets; each producer has a fixed colour across all figures).
   python -m meda.train agent=ppo "train.instances=[tiny-sharing-m2]" env.L_pad=128
   python -m meda.train agent=ppo train.resume=outputs/<run>/checkpoints/last.pt
   python -m meda.train -m agent.lr=1e-4,3e-4 seed=0,1,2        # sweep
+  # regime pilot (8.3): 3 regimes x 2 seeds on stages 1-3
+  python -m meda.train -m agent=ppo train.source=regime costs=geometric train.vector=async \
+      agent.reward_scale=0.015625 agent.total_env_steps=<budget> \
+      regime=sequential,expanding,mixed regime.num_stages=3 seed=0,1
+  python scripts/regime_report.py multirun/<date>/<time> --out notes/track2/regime_pilot.md
   python -m meda.evaluate_cli eval.producers=[random,naive,exact_search] eval.benchmark=tiny_exact_v1
   ```
 - Each run directory stores: the resolved config, git commit hash and dirty flag, seed, library
@@ -1784,7 +1897,10 @@ and network v2 (v1 removed):
   logits and value are unchanged when fluids, droplets and targets are reordered.
 
 Remaining, in order:
-1. (b) after the stage design (8.3), whose validation sets replace or join `val_stage1_v2`.
+1. (b) after the stage design (8.3): measured on `val_s1_v1` (stage 1 of `track2_v1`), with
+   `val_stage1_v2` kept as the M = 2 sanity check: success > 95% and mean `gap_to_best_known`
+   < 5%, read from a regime run's `eval/s1_dilution` rounds. (The promotion rule asks for the
+   same success but only a gap plateau, so promotion alone does not show (b).)
 2. Done in 0.12: a general mixture cost-to-finish and witness, the split tree (10.3, 10.4).
    Every reachable target now has a truncation penalty and a feasibility witness.
 
@@ -1853,6 +1969,12 @@ skipped by default; run them with `uv run pytest -m slow` when closing a milesto
   `cand_index` remapped); one set of weights accepts instances with different F, T, M and
   storage capacity, and different padding sizes, in one test (M8 acceptance (d)).
 - Evaluation: a hand-made results table gives the expected gaps.
+- Stages and regimes (0.18): the design's stages add one axis value each and never hold the
+  held-out cell; the mixture source draws only weighted cells, deterministically, never a
+  frozen problem; gradients are evenly spaced on one reachable denominator; the frozen design
+  sets rebuild identically and are disjoint; each regime's shares and promotion rule (plateau,
+  success threshold, forced promotion) and its state round trip; a regime training run
+  promotes, sends the new shares to the workers and resumes its regime (slow).
 
 ---
 
