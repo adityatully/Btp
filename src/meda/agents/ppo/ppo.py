@@ -61,6 +61,10 @@ class PPOConfig:
     update_epochs: int
     num_minibatches: int
     total_env_steps: int
+    # Candidate rows (observations x the widest of them) per forward pass in an update. A
+    # minibatch is split into chunks under this budget, widths sorted so chunks pad little;
+    # gradients are accumulated, so the update is the same, only peak memory is bounded.
+    max_chunk_rows: int
 
     def __post_init__(self) -> None:
         if self.reward_scale <= 0:
@@ -70,6 +74,8 @@ class PPOConfig:
                 f"ppo: num_envs * rollout_steps = {self.batch_size} is not divisible by "
                 f"num_minibatches {self.num_minibatches}"
             )
+        if self.max_chunk_rows < 1:
+            raise ValueError(f"ppo: max_chunk_rows must be >= 1, got {self.max_chunk_rows}")
         if self.num_updates < 1:
             raise ValueError(
                 f"ppo: total_env_steps {self.total_env_steps} < one rollout ({self.batch_size})"
@@ -156,6 +162,7 @@ class PPOTrainer:
         episodes: list[dict[str, Any]] = []
         legal_counts: list[float] = []
 
+        env_seconds = 0.0
         self.net.eval()
         for _ in range(cfg.rollout_steps):
             obs = self.next_obs
@@ -170,7 +177,9 @@ class PPOTrainer:
             # `copy=False` (the training default) reuses its observation buffer.
             kept = split_obs(obs)
             legal_counts.append(float(obs["action_mask"].sum(axis=1).mean()))
+            stepped = time.perf_counter()
             self.next_obs, rewards, terminated, truncated, info = self.envs.step(act)
+            env_seconds += time.perf_counter() - stepped
             dones = np.logical_or(terminated, truncated)
             buf.add(
                 kept,
@@ -190,6 +199,7 @@ class PPOTrainer:
         )
         collect_seconds = time.perf_counter() - started
         stats = self._optimise(buf, adv, ret)
+        update_seconds = time.perf_counter() - started - collect_seconds
         self.update += 1
 
         metrics = {
@@ -201,6 +211,11 @@ class PPOTrainer:
             **_episode_metrics(episodes),
             **stats,
             "env_steps_per_second": cfg.batch_size / collect_seconds,
+            # Where an iteration's time goes: waiting for the env workers, everything else
+            # while collecting (policy forward, copies), and the PPO update.
+            "seconds_env": env_seconds,
+            "seconds_policy": collect_seconds - env_seconds,
+            "seconds_update": update_seconds,
         }
         return metrics
 
@@ -219,6 +234,7 @@ class PPOTrainer:
 
         self.net.train()
         index = np.arange(cfg.batch_size)
+        widths = buf.candidate_widths()
         sums = {"policy_loss": 0.0, "value_loss": 0.0, "entropy": 0.0, "approx_kl": 0.0}
         clipped = 0.0
         n = 0
@@ -226,44 +242,55 @@ class PPOTrainer:
             self.rng.shuffle(index)
             for start in range(0, cfg.batch_size, cfg.minibatch_size):
                 mb = index[start : start + cfg.minibatch_size]
-                t = batch_obs(buf.minibatch_obs(mb), self.device)
-                logits, new_values = self.net(t)
-                dist = masked_distribution(logits, t["action_mask"])
-                new_logprobs = dist.log_prob(b_actions[mb])
-                entropy = dist.entropy().mean()
-                log_ratio = new_logprobs - b_logprobs[mb]
-                ratio = log_ratio.exp()
-                with torch.no_grad():
-                    approx_kl = ((ratio - 1) - log_ratio).mean()
-                    clipped += float(((ratio - 1).abs() > cfg.clip_coef).float().mean())
-
-                mb_adv = b_adv[mb]
-                mb_adv = (mb_adv - mb_adv.mean()) / (mb_adv.std() + 1e-8)
-                pg_loss = torch.max(
-                    -mb_adv * ratio,
-                    -mb_adv * ratio.clamp(1 - cfg.clip_coef, 1 + cfg.clip_coef),
-                ).mean()
-                if cfg.clip_vloss:
-                    v_clip = b_values[mb] + (new_values - b_values[mb]).clamp(
-                        -cfg.clip_coef, cfg.clip_coef
-                    )
-                    v_loss = (
-                        0.5
-                        * torch.max((new_values - b_ret[mb]) ** 2, (v_clip - b_ret[mb]) ** 2).mean()
-                    )
-                else:
-                    v_loss = 0.5 * ((new_values - b_ret[mb]) ** 2).mean()
-                loss = pg_loss - cfg.ent_coef * entropy + cfg.vf_coef * v_loss
-
+                # Advantages are normalised over the whole minibatch, before chunking.
+                adv_mean, adv_std = b_adv[mb].mean(), b_adv[mb].std()
                 self.optimizer.zero_grad()
-                loss.backward()
+                totals = dict.fromkeys(sums, 0.0)
+                clip_count = 0.0
+                for chunk in _chunks(mb, widths, cfg.max_chunk_rows):
+                    share = len(chunk) / len(mb)
+                    t = batch_obs(buf.minibatch_obs(chunk), self.device)
+                    logits, new_values = self.net(t)
+                    dist = masked_distribution(logits, t["action_mask"])
+                    new_logprobs = dist.log_prob(b_actions[chunk])
+                    entropy = dist.entropy().mean()
+                    log_ratio = new_logprobs - b_logprobs[chunk]
+                    ratio = log_ratio.exp()
+                    with torch.no_grad():
+                        approx_kl = ((ratio - 1) - log_ratio).mean()
+                        clip_count += float(((ratio - 1).abs() > cfg.clip_coef).float().sum())
+
+                    c_adv = (b_adv[chunk] - adv_mean) / (adv_std + 1e-8)
+                    pg_loss = torch.max(
+                        -c_adv * ratio,
+                        -c_adv * ratio.clamp(1 - cfg.clip_coef, 1 + cfg.clip_coef),
+                    ).mean()
+                    if cfg.clip_vloss:
+                        v_clip = b_values[chunk] + (new_values - b_values[chunk]).clamp(
+                            -cfg.clip_coef, cfg.clip_coef
+                        )
+                        v_loss = (
+                            0.5
+                            * torch.max(
+                                (new_values - b_ret[chunk]) ** 2, (v_clip - b_ret[chunk]) ** 2
+                            ).mean()
+                        )
+                    else:
+                        v_loss = 0.5 * ((new_values - b_ret[chunk]) ** 2).mean()
+                    loss = pg_loss - cfg.ent_coef * entropy + cfg.vf_coef * v_loss
+                    # Each chunk's mean weighted by its share: the minibatch mean, exactly.
+                    (share * loss).backward()
+
+                    totals["policy_loss"] += share * pg_loss.item()
+                    totals["value_loss"] += share * v_loss.item()
+                    totals["entropy"] += share * entropy.item()
+                    totals["approx_kl"] += share * approx_kl.item()
+
                 nn.utils.clip_grad_norm_(self.net.parameters(), cfg.max_grad_norm)
                 self.optimizer.step()
-
-                sums["policy_loss"] += pg_loss.item()
-                sums["value_loss"] += v_loss.item()
-                sums["entropy"] += entropy.item()
-                sums["approx_kl"] += approx_kl.item()
+                for k in sums:
+                    sums[k] += totals[k]
+                clipped += clip_count / len(mb)
                 n += 1
 
         y_true, y_pred = b_ret.cpu().numpy(), b_values.cpu().numpy()
@@ -274,6 +301,23 @@ class PPOTrainer:
             "clip_fraction": clipped / n,
             "explained_variance": explained,
         }
+
+
+def _chunks(
+    mb: npt.NDArray[np.int64], widths: npt.NDArray[np.int64], max_rows: int
+) -> list[npt.NDArray[np.int64]]:
+    """`mb` split into chunks, sorted by candidate width, each holding at most `max_rows`
+    padded candidate rows (len x widest); a single observation wider than the budget is a
+    chunk of its own."""
+    order = mb[np.argsort(widths[mb], kind="stable")]
+    chunks: list[npt.NDArray[np.int64]] = []
+    begin = 0
+    for end in range(1, len(order) + 1):
+        if end < len(order) and (end + 1 - begin) * int(widths[order[end]]) > max_rows:
+            chunks.append(order[begin:end])
+            begin = end
+    chunks.append(order[begin:])
+    return [c for c in chunks if len(c)]
 
 
 def _finished_episodes(

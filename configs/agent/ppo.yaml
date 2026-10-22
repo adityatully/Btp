@@ -20,3 +20,4 @@ anneal_lr: true
 update_epochs: 4
 num_minibatches: 8
 total_env_steps: 5_000_000
+max_chunk_rows: 131072        # candidate rows per forward in an update (memory bound, not maths)

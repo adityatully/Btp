@@ -267,7 +267,9 @@ def test_resume_from_checkpoint_repeats_the_run_exactly(tmp_path: Path) -> None:
     def strip(m: dict[str, float]) -> dict[str, Any]:
         # NaN (no successful episode yet) is written as None so equal runs compare equal.
         return {
-            k: None if math.isnan(v) else v for k, v in m.items() if k != "env_steps_per_second"
+            k: None if math.isnan(v) else v
+            for k, v in m.items()
+            if k != "env_steps_per_second" and not k.startswith("seconds_")  # wall clock
         }
 
     torch.manual_seed(7)
@@ -459,3 +461,21 @@ def test_trains_under_a_regime_promotes_and_resumes_its_shares(tmp_path: Path) -
     df = train_ppo_regime(config(second, resume=first / "checkpoints" / "last.pt"), second)
     assert json.loads((second / "regime.json").read_text()) == state
     assert (df["env_steps"] == 128).all()
+
+
+def test_chunked_update_matches_the_unchunked_one() -> None:
+    """`max_chunk_rows` bounds memory only: one update with every observation in its own chunk
+    gives the same weights as one with each minibatch in a single forward pass."""
+    instances = [TINY.by_id("tiny-sharing-m2")]
+    nets = []
+    for rows in (1, 10**9):
+        torch.manual_seed(0)
+        trainer = trainer_for(instances, ppo_cfg(max_chunk_rows=rows, total_env_steps=4 * 32))
+        trainer.start()
+        metrics = trainer.iteration()
+        assert metrics["seconds_update"] > 0 and metrics["seconds_env"] > 0
+        nets.append(trainer.net.state_dict())
+    for key in nets[0]:
+        assert torch.allclose(nets[0][key], nets[1][key], atol=1e-5), key
+    with pytest.raises(ValueError, match="max_chunk_rows"):
+        ppo_cfg(max_chunk_rows=0)

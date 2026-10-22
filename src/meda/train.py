@@ -119,11 +119,19 @@ def train_tabular_q(cfg: dict[str, Any], out_dir: Path) -> pd.DataFrame:
     return pd.concat(tables, ignore_index=True)
 
 
-def resolve_device(name: str) -> torch.device:
-    """`auto` = cuda if available, else cpu (mps is opt-in: small batches run faster on cpu)."""
-    if name == "auto":
-        return torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    return torch.device(name)
+def resolve_device(name: str, gpu_memory_fraction: float = 1.0) -> torch.device:
+    """`auto` = cuda if available, else cpu (mps is opt-in: small batches run faster on cpu).
+    On CUDA, this process may allocate at most `gpu_memory_fraction` of the GPU's memory
+    (`train.gpu_memory_fraction`): the workstation is shared, so a run that needs more fails
+    with an out-of-memory error instead of taking the GPU from other users."""
+    device = torch.device(
+        ("cuda" if torch.cuda.is_available() else "cpu") if name == "auto" else name
+    )
+    if not 0 < gpu_memory_fraction <= 1:
+        raise ValueError(f"train.gpu_memory_fraction must be in (0, 1], got {gpu_memory_fraction}")
+    if device.type == "cuda":
+        torch.cuda.set_per_process_memory_fraction(gpu_memory_fraction, device)
+    return device
 
 
 def training_source(cfg: dict[str, Any], bench: BenchmarkSet) -> GeneratorSource | None:
@@ -178,7 +186,9 @@ def train_ppo(cfg: dict[str, Any], out_dir: Path) -> pd.DataFrame:
     graded = subset(bench, instances)
     schedule = ScheduleConfig.from_dict(cfg["eval"]["schedule"])
     sizes = EnvConfig.from_dict(cfg["env"]).sizes
-    device = resolve_device(str(train_cfg["device"]))
+    device = resolve_device(
+        str(train_cfg["device"]), float(train_cfg.get("gpu_memory_fraction", 1.0))
+    )
     checkpoint = out_dir / "checkpoints" / "last.pt"
     envs = make_vector_env(cfg, instances, ppo_cfg.num_envs, str(train_cfg["vector"]), source)
     logger = MetricsLogger(out_dir, tensorboard=True)
@@ -262,7 +272,9 @@ def train_ppo_regime(cfg: dict[str, Any], out_dir: Path) -> pd.DataFrame:
 
     schedule = ScheduleConfig.from_dict(cfg["eval"]["schedule"])
     sizes = EnvConfig.from_dict(cfg["env"]).sizes
-    device = resolve_device(str(train_cfg["device"]))
+    device = resolve_device(
+        str(train_cfg["device"]), float(train_cfg.get("gpu_memory_fraction", 1.0))
+    )
     checkpoint = out_dir / "checkpoints" / "last.pt"
     envs = make_vector_env(cfg, [], ppo_cfg.num_envs, str(train_cfg["vector"]), source())
     logger = MetricsLogger(out_dir, tensorboard=True)

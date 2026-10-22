@@ -114,6 +114,10 @@ class RolloutBuffer:
             out[key] = np.concatenate(parts, axis=0)
         return out
 
+    def candidate_widths(self) -> npt.NDArray[np.int64]:
+        """Each stored observation's candidate row count (its trimmed width)."""
+        return np.array([o["action_mask"].shape[1] for o in self.obs], dtype=np.int64)
+
     def flat_obs(self) -> dict[str, npt.NDArray[Any]]:
         """All observations as [T * N, ...], each token axis padded to the widest."""
         return self.minibatch_obs(np.arange(self.num_steps * self.num_envs))

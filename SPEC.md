@@ -1584,6 +1584,16 @@ trimmed to its own widths and pads each axis only to the widest observation of a
 play reaches about 9,300 at M = 10, F = 6, storage 32), so the stored rollout grows with the
 mean width rather than the widest step.
 
+**Chunked updates (0.18).** Padding a minibatch of 512 observations to its widest made one
+update ask for gigabytes of GPU memory under a random policy on stages 1–3 (widths up to about
+5,000; the first workstation run held 21 of 24 GB and hit an out-of-memory retry). The update
+now sorts a minibatch by candidate width and splits it into chunks of at most `max_chunk_rows`
+padded candidate rows (observations × the widest of them; one wider observation is a chunk of
+its own). Each chunk's loss is weighted by its share of the minibatch and the gradients are
+accumulated before the one clipped optimiser step, with advantages normalised over the whole
+minibatch first, so the update equals the unchunked one (tested to 1e-5); only peak memory
+changes.
+
 **Network v1 (removed in 0.11).** MLPs on v1 source and target rows (widths fixed by `F_max`,
 `T_max`), the same Transformer without relation biases, and the same scorer.
 
@@ -1643,11 +1653,14 @@ anneal_lr: true
 update_epochs: 4
 num_minibatches: 8
 total_env_steps: 5_000_000
+max_chunk_rows: 131072   # candidate rows per forward pass in an update (memory, not maths)
 ```
 
 **Logged every update:** mean episode return, success rate, dead-end rate, mean cost and each
 cost component, policy entropy, approximate KL, clip fraction, value explained variance,
-legal-candidate count, env steps/second.
+legal-candidate count, env steps/second, and where the iteration's time went:
+`seconds_env` (waiting for the env workers), `seconds_policy` (the rest of collection: policy
+forward, copies) and `seconds_update` (the PPO update).
 
 ### 11.5 Reserved: search (`mcts/`, milestone 9)
 AlphaZero-style MCTS (PUCT) using the PPO network's policy and value, on `core.apply` (pure,
@@ -1755,6 +1768,9 @@ vs number of targets; each producer has a fixed colour across all figures).
   `results.parquet` and `summary.md`. Every `train.eval_every_updates` it also grades the
   training instances (`eval/` in the logs). `train.vector` picks `sync` or `async` workers;
   `train.device: auto` picks CUDA when available, else CPU (MPS is opt-in).
+  `train.gpu_memory_fraction` (default 0.5) caps how much of the GPU's memory the process may
+  allocate (`torch.cuda.set_per_process_memory_fraction`): the workstation is shared, so a run
+  that needs more raises an out-of-memory error instead of crowding out other users.
 - `train.source=generator` (0.15, PPO only): every episode draws a fresh problem from the
   `generator` config (`GeneratorSource`, 8.1), never one of `train.exclude` (default
   `tiny_exact_v1`, `val_stage1_v2`) or of `train.benchmark`, which then serves only to grade.
