@@ -1,0 +1,8 @@
+# Training regime (SPEC 8.3, generators/regime.py). C: a promotion adds the next stage; earlier stages keep a share of the draws.
+name: expanding
+num_stages: null              # the stage design's first k stages (pilot: 3); null = all
+min_success: 0.95             # promotion: greedy validation success of the newest stage ...
+patience: 3                   # ... and its gap no better over the last 3 validation rounds
+min_improvement: 0.01         # ... than min_improvement below its best before them
+max_stage_fraction: 0.3       # forced (and logged as forced) after this share of env steps
+newest_share: 0.5             # expanding: the newest stage's share; earlier stages split the rest

@@ -10,7 +10,8 @@ eval_every_updates: 50
 # instances (M8 acceptance (a)); training from a generator follows the stage design.
 source: benchmark             # benchmark: train on these instances; generator: draw a fresh
                               # problem per episode from the `generator` config (PPO only), and
-                              # use this benchmark only for evaluation
+                              # use this benchmark only for evaluation; regime: draw from the
+                              # `stages` design's cells as `regime` sets, validate on its sets
 exclude: [tiny_exact_v1, val_stage1_v2]  # frozen sets a generator source never draws from
 benchmark: tiny_exact_v1
 instances: null               # null = every instance in the set; or a list of instance ids

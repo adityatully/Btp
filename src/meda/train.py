@@ -8,14 +8,18 @@
     uv run python -m meda.train agent=ppo train.source=generator generator=dilution_multi \
         train.benchmark=val_stage1_v2
 
+    uv run python -m meda.train agent=ppo train.source=regime regime=expanding costs=geometric
+
 By default both agents train on instances from a frozen benchmark set (`train.benchmark`,
 `train.instances`). Tabular Q (M6) needs that: it keys on exact states, so it only learns about
 instances it will meet again, and the M6 acceptance criterion is per instance. PPO (M8) trains
 one network on the selected instances, which is acceptance (a). With `train.source=generator`,
 PPO instead draws a fresh problem from the `generator` config every episode, never one held in
-`train.exclude` or in `train.benchmark`, which then serves only as the evaluation set. A PPO
-run writes `metrics.jsonl`, TensorBoard logs and `checkpoints/last.pt` (resume with
-`train.resume=<path>`).
+`train.exclude` or in `train.benchmark`, which then serves only as the evaluation set. With
+`train.source=regime`, PPO draws from the cells of the stage design (`stages`) with the shares
+the training regime (`regime`) sets, validates on every stage's set each
+`train.eval_every_updates` and lets the regime promote (SPEC 8.3). A PPO run writes
+`metrics.jsonl`, TensorBoard logs and `checkpoints/last.pt` (resume with `train.resume=<path>`).
 
 Each run writes into Hydra's run directory: the resolved config, one checkpoint per table, and
 the greedy policy graded by the M7 harness (`analysis.evaluate`): `results.parquet`, with the
@@ -25,6 +29,7 @@ training statistics as extra columns, and `summary.md`.
 from __future__ import annotations
 
 import functools
+import json
 import time
 from pathlib import Path
 from typing import Any
@@ -44,9 +49,11 @@ from meda.analysis.evaluate import AgentProducer, build_env, evaluate
 from meda.core.chip import ChipLimits
 from meda.core.costs import CostWeights
 from meda.core.problem import Instance
-from meda.envs.sample_prep_env import EnvConfig
+from meda.envs.sample_prep_env import EnvConfig, InstanceSource
 from meda.generators.benchmark_io import BenchmarkSet
+from meda.generators.regime import Regime, RegimeConfig
 from meda.generators.sampler import GeneratorConfig, GeneratorSource
+from meda.generators.stages import StageDesign
 from meda.utils.checkpoint import load_checkpoint, save_checkpoint
 from meda.utils.logging import MetricsLogger
 from meda.utils.seeding import seed_everything
@@ -144,7 +151,7 @@ def make_vector_env(
     instances: list[Instance],
     num_envs: int,
     mode: str,
-    source: GeneratorSource | None = None,
+    source: InstanceSource | None = None,
 ) -> VecEnv:
     """`num_envs` copies of the training env, autoresetting in the same step (SPEC 9.1)."""
     factory = functools.partial(build_env, cfg, instances, source)
@@ -203,6 +210,115 @@ def train_ppo(cfg: dict[str, Any], out_dir: Path) -> pd.DataFrame:
         logger.close()
 
 
+CONFIGS = Path(__file__).resolve().parents[2] / "configs"
+
+
+def regime_sets(design: StageDesign) -> tuple[dict[str, BenchmarkSet], BenchmarkSet]:
+    """Each stage's frozen validation set, and the held-out cells' set."""
+    return {s.name: BenchmarkSet.read(s.val) for s in design.stages}, BenchmarkSet.read(
+        design.held_out_val
+    )
+
+
+def train_ppo_regime(cfg: dict[str, Any], out_dir: Path) -> pd.DataFrame:
+    """Train one PPO network from the stage design's cells under a training regime (SPEC 8.3).
+
+    Every `train.eval_every_updates` the greedy policy is graded on every stage's validation
+    set (logged per stage, the forgetting record) and the regime may promote; a new set of
+    stage shares is sent to every env worker and takes effect at its next reset. The run ends
+    with a grading on every stage's set and on the held-out cells' set."""
+    train_cfg = cfg["train"]
+    ppo_cfg = PPOConfig.from_dict(cfg["agent"])
+    design = StageDesign.from_dict(cfg["stages"])
+    regime = Regime(RegimeConfig.from_dict(cfg["regime"]), design, ppo_cfg.total_env_steps)
+    weights = CostWeights.from_dict(cfg["costs"])
+    graded_costs = OmegaConf.to_container(
+        OmegaConf.load(CONFIGS / "costs" / f"{design.costs}.yaml")
+    )
+    if cfg["costs"] != graded_costs:
+        raise ValueError(
+            f"stage design '{design.name}' grades under costs/{design.costs}; train with "
+            f"costs={design.costs} or the gaps compare plans under different weights"
+        )
+    # The design names its own chip (platform constants; M and storage are drawn per cell).
+    chip_data = OmegaConf.to_container(OmegaConf.load(CONFIGS / "chip" / f"{design.chip}.yaml"))
+    chip = ChipLimits.from_dict(chip_data)  # type: ignore[arg-type]
+    val_sets, held_out = regime_sets(regime.design)
+    held: set[str] = set(held_out.hashes())
+    for bench in val_sets.values():
+        held |= bench.hashes()
+    for name in train_cfg.get("exclude") or ():
+        held |= BenchmarkSet.read(str(name)).hashes()
+    exclude = frozenset(held)
+
+    def source() -> InstanceSource:
+        return regime.design.source(regime.stage_weights(), chip, weights, exclude)
+
+    schedule = ScheduleConfig.from_dict(cfg["eval"]["schedule"])
+    sizes = EnvConfig.from_dict(cfg["env"]).sizes
+    device = resolve_device(str(train_cfg["device"]))
+    checkpoint = out_dir / "checkpoints" / "last.pt"
+    envs = make_vector_env(cfg, [], ppo_cfg.num_envs, str(train_cfg["vector"]), source())
+    logger = MetricsLogger(out_dir, tensorboard=True)
+    try:
+        trainer = PPOTrainer(ppo_cfg, sizes, envs, device, seed=int(cfg["seed"]))
+        if train_cfg.get("resume"):
+            extra = load_checkpoint(train_cfg["resume"], trainer)
+            regime.load_state_dict(extra["regime"])
+            envs.call("set_instance_source", source())
+            print(f"resumed from {train_cfg['resume']} at update {trainer.update}")
+        else:
+            trainer.start()
+        every_ckpt = int(train_cfg["checkpoint_every_updates"])
+        every_eval = int(train_cfg["eval_every_updates"])
+        eval_env = build_env(cfg, [i for b in val_sets.values() for i in b.instances])
+        print(
+            f"PPO, regime '{regime.cfg.name}' over {regime.names} of design '{design.name}' "
+            f"({len(exclude)} hashes held out), {ppo_cfg.num_updates} updates, {device}"
+        )
+        logger.log(0, regime.stage_weights(), prefix="regime/weight")
+        while not trainer.done:
+            metrics = trainer.iteration()
+            logger.log(trainer.update, metrics)
+            logger.console(trainer.update, ppo_cfg.num_updates, metrics)
+            # Validate before checkpointing, so a checkpoint holds the regime after the round.
+            if every_eval and trainer.update % every_eval == 0:
+                started = time.perf_counter()
+                results = {}
+                for name, bench in val_sets.items():
+                    df = evaluate(AgentProducer(trainer.agent, eval_env), bench, schedule)
+                    summary = _eval_summary(df)
+                    logger.log(trainer.update, summary, prefix=f"eval/{name}")
+                    results[name] = (summary["success_rate"], summary["gap_to_best_known"])
+                logger.log(trainer.update, {"seconds": time.perf_counter() - started}, "eval")
+                if regime.observe(trainer.global_step, results):
+                    envs.call("set_instance_source", source())
+                    print(f"regime: {regime.events[-1]}; shares now {regime.stage_weights()}")
+                    logger.log(trainer.update, regime.stage_weights(), prefix="regime/weight")
+            if every_ckpt and trainer.update % every_ckpt == 0:
+                save_checkpoint(checkpoint, trainer, {"regime": regime.state_dict()})
+        save_checkpoint(checkpoint, trainer, {"regime": regime.state_dict()})
+        trainer.agent.save(out_dir / "checkpoints" / "agent.pt")
+        (out_dir / "regime.json").write_text(json.dumps(regime.state_dict(), indent=2))
+        final_env = build_env(cfg, list(held_out.instances))
+        tables = [
+            evaluate(AgentProducer(trainer.agent, eval_env), bench, schedule).assign(stage=name)
+            for name, bench in val_sets.items()
+        ]
+        tables.append(
+            evaluate(AgentProducer(trainer.agent, final_env), held_out, schedule).assign(
+                stage="held_out"
+            )
+        )
+        df = pd.concat(tables, ignore_index=True)
+        return df.assign(
+            regime=regime.cfg.name, updates=trainer.update, env_steps=trainer.global_step
+        )
+    finally:
+        envs.close()
+        logger.close()
+
+
 def _eval_summary(df: pd.DataFrame) -> dict[str, float]:
     """Greedy success rate and mean gaps over successful plans."""
     out = {"success_rate": float(df["success"].mean())}
@@ -224,13 +340,18 @@ def main(cfg: DictConfig) -> None:
     name = str(cfg.agent.name)
     if name == "tabular_q":
         results = train_tabular_q(data, out_dir)  # type: ignore[arg-type]
+    elif name == "ppo" and cfg.train.source == "regime":
+        results = train_ppo_regime(data, out_dir)  # type: ignore[arg-type]
     elif name == "ppo":
         results = train_ppo(data, out_dir)  # type: ignore[arg-type]
     else:
         raise NotImplementedError(f"agent '{name}' is not trainable (tabular_q, ppo)")
 
     results.to_parquet(out_dir / "results.parquet", index=False)
-    write_summary_md(out_dir / "summary.md", results)
+    benchmarks = results["benchmark"].unique()
+    for bench_name in benchmarks:
+        md = "summary.md" if len(benchmarks) == 1 else f"summary_{bench_name}.md"
+        write_summary_md(out_dir / md, results[results["benchmark"] == bench_name])
     reached = int((results["gap_to_optimal"] == 0).sum())
     print(
         f"\n{reached}/{len(results)} instances reached the stored optimum; "

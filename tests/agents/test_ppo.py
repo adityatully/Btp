@@ -394,3 +394,68 @@ def test_reward_scale_must_be_positive() -> None:
     with pytest.raises(ValueError, match="reward_scale"):
         ppo_cfg(reward_scale=0.0)
     assert ppo_cfg(reward_scale=1 / 64).reward_scale == 1 / 64
+
+
+@pytest.mark.slow  # about 50 s: four rounds of grading on the stage sets
+def test_trains_under_a_regime_promotes_and_resumes_its_shares(tmp_path: Path) -> None:
+    """`train.source=regime`: draws come from the design's cells at the regime's shares, each
+    validation round may promote (here forced after one round), the new shares reach the env
+    workers, and a resumed run restores the regime and its shares."""
+    import json
+
+    from meda.train import train_ppo_regime
+
+    def config(out: Path, resume: Path | None = None) -> dict[str, Any]:
+        return {
+            **cfg(l_pad=4096),
+            "costs": load_yaml("costs/geometric.yaml"),
+            "seed": 0,
+            "stages": load_yaml("stages/track2_v1.yaml"),
+            "regime": {
+                **load_yaml("regime/expanding.yaml"),
+                "num_stages": 2,
+                "max_stage_fraction": 0.01,
+            },
+            "agent": {
+                **load_yaml("agent/ppo.yaml"),
+                "num_envs": 2,
+                "rollout_steps": 32,
+                "num_minibatches": 2,
+                "d_model": 32,
+                "n_layers": 1,
+                "reward_scale": 0.01,
+                "total_env_steps": 128,
+            },
+            "train": {
+                **load_yaml("train/default.yaml"),
+                "source": "regime",
+                "device": "cpu",
+                "checkpoint_every_updates": 1,
+                "eval_every_updates": 1,
+                "resume": resume,
+            },
+            "eval": load_yaml("eval/default.yaml"),
+        }
+
+    first = tmp_path / "first"
+    df = train_ppo_regime(config(first), first)
+    assert set(df["stage"]) == {"s1_dilution", "s2_mixture", "held_out"}
+    state = json.loads((first / "regime.json").read_text())
+    assert [(e["stage"], e["event"], e["forced"]) for e in state["events"]] == [
+        ("s1_dilution", "promoted", True),
+        ("s2_mixture", "finished", True),
+    ]
+    shares = [
+        {k: v for k, v in json.loads(line).items() if k not in ("prefix", "step")}
+        for line in (first / "metrics.jsonl").read_text().splitlines()
+        if json.loads(line)["prefix"] == "regime/weight"
+    ]
+    assert shares[0] == {"s1_dilution": 1.0}
+    assert shares[1] == {"s1_dilution": 0.5, "s2_mixture": 0.5}
+    assert shares[2] == pytest.approx({"s1_dilution": 0.5, "s2_mixture": 0.5})  # final 0.05:0.05
+
+    # Resuming restores the regime (a mismatch would raise) and the run's step count.
+    second = tmp_path / "second"
+    df = train_ppo_regime(config(second, resume=first / "checkpoints" / "last.pt"), second)
+    assert json.loads((second / "regime.json").read_text()) == state
+    assert (df["env_steps"] == 128).all()

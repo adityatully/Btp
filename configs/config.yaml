@@ -7,6 +7,8 @@ defaults:
   - agent: random
   - train: default
   - eval: default
+  - stages: track2_v1       # stage design (SPEC 8.3), used by train.source=regime
+  - regime: expanding       # training regime (SPEC 8.3), used by train.source=regime
   - _self_
 
 seed: 0
