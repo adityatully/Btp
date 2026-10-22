@@ -41,6 +41,7 @@ from gymnasium.vector import AsyncVectorEnv, AutoresetMode, SyncVectorEnv
 from hydra.core.hydra_config import HydraConfig
 from omegaconf import DictConfig, OmegaConf
 
+from meda.agents.ppo.collector import ActorPool
 from meda.agents.ppo.ppo import PPOConfig, PPOTrainer, VecEnv
 from meda.agents.tabular_q import TabularQ, TabularQConfig
 from meda.analysis.compare import write_summary_md
@@ -155,6 +156,24 @@ def training_source(cfg: dict[str, Any], bench: BenchmarkSet) -> GeneratorSource
     )
 
 
+def make_training_envs(
+    cfg: dict[str, Any],
+    instances: list[Instance],
+    num_envs: int,
+    source: InstanceSource | None = None,
+) -> VecEnv | ActorPool:
+    """The PPO training envs for `train.collector`: `lockstep` (a vector env, `train.vector`)
+    or `workers` (an `ActorPool`: one process per env, each with a policy copy; SPEC 11.4)."""
+    train_cfg = cfg["train"]
+    collector = str(train_cfg.get("collector", "lockstep"))
+    if collector == "lockstep":
+        return make_vector_env(cfg, instances, num_envs, str(train_cfg["vector"]), source)
+    if collector == "workers":
+        factory = functools.partial(build_env, cfg, instances, source)
+        return ActorPool([factory] * num_envs, PPOConfig.from_dict(cfg["agent"]).net)
+    raise ValueError(f"train.collector must be 'lockstep' or 'workers', got {collector!r}")
+
+
 def make_vector_env(
     cfg: dict[str, Any],
     instances: list[Instance],
@@ -191,7 +210,7 @@ def train_ppo(cfg: dict[str, Any], out_dir: Path) -> pd.DataFrame:
         str(train_cfg["device"]), float(train_cfg.get("gpu_memory_fraction", 1.0))
     )
     checkpoint = out_dir / "checkpoints" / "last.pt"
-    envs = make_vector_env(cfg, instances, ppo_cfg.num_envs, str(train_cfg["vector"]), source)
+    envs = make_training_envs(cfg, instances, ppo_cfg.num_envs, source)
     logger = MetricsLogger(out_dir, tensorboard=True)
     interrupted = False
     try:
@@ -283,7 +302,7 @@ def train_ppo_regime(cfg: dict[str, Any], out_dir: Path) -> pd.DataFrame:
         str(train_cfg["device"]), float(train_cfg.get("gpu_memory_fraction", 1.0))
     )
     checkpoint = out_dir / "checkpoints" / "last.pt"
-    envs = make_vector_env(cfg, [], ppo_cfg.num_envs, str(train_cfg["vector"]), source())
+    envs = make_training_envs(cfg, [], ppo_cfg.num_envs, source())
     logger = MetricsLogger(out_dir, tensorboard=True)
     interrupted = False
     try:

@@ -398,8 +398,11 @@ def test_reward_scale_must_be_positive() -> None:
     assert ppo_cfg(reward_scale=1 / 64).reward_scale == 1 / 64
 
 
-@pytest.mark.slow  # about 50 s: four rounds of grading on the stage sets
-def test_trains_under_a_regime_promotes_and_resumes_its_shares(tmp_path: Path) -> None:
+@pytest.mark.slow  # about 50 s per collector: four rounds of grading on the stage sets
+@pytest.mark.parametrize("collector", ["lockstep", "workers"])
+def test_trains_under_a_regime_promotes_and_resumes_its_shares(
+    tmp_path: Path, collector: str
+) -> None:
     """`train.source=regime`: draws come from the design's cells at the regime's shares, each
     validation round may promote (here forced after one round), the new shares reach the env
     workers, and a resumed run restores the regime and its shares."""
@@ -431,6 +434,7 @@ def test_trains_under_a_regime_promotes_and_resumes_its_shares(tmp_path: Path) -
             "train": {
                 **load_yaml("train/default.yaml"),
                 "source": "regime",
+                "collector": collector,
                 "device": "cpu",
                 "checkpoint_every_updates": 1,
                 "eval_every_updates": 1,

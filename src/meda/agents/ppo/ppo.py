@@ -10,10 +10,17 @@ The trainer does not know where problems come from: it takes a vector env built 
 (fixed instances, a generator, a curriculum). The vector env must autoreset in the same step
 (SPEC 9.1), so a `done` marks exactly where a new episode begins.
 
-**Determinism.** All randomness is the torch RNG (action sampling) and the trainer's own numpy
-generator (minibatch order). Both are saved by `utils.checkpoint`, together with every env's
-snapshot, so a resumed run repeats the uninterrupted one exactly (on CPU; GPU kernels are not
-bit-deterministic).
+**Collectors.** With a vector env (lockstep), every step runs the policy once on all envs'
+observations. With an `ActorPool` (`train.collector=workers`, `collector.py`), each worker plays
+its env's whole rollout with a frozen copy of the weights; the learner gathers the rollouts and
+the update is the same. Either way, before the first optimiser step of an update the learner's
+log-probabilities and values on the first minibatch must match the collected ones (the
+weights have not changed yet): a mismatch beyond rounding stops training.
+
+**Determinism.** All randomness is the torch RNG (action sampling; with workers, one generator
+per env) and the trainer's own numpy generator (minibatch order). They are saved by
+`utils.checkpoint`, together with every env's snapshot, so a resumed run repeats the
+uninterrupted one exactly (on CPU; GPU kernels are not bit-deterministic).
 """
 
 from __future__ import annotations
@@ -29,6 +36,7 @@ import torch
 from gymnasium.vector import AsyncVectorEnv, SyncVectorEnv
 from torch import nn
 
+from meda.agents.ppo.collector import EPISODE_KEYS, ActorPool, episode_record
 from meda.agents.ppo.networks import NetConfig, SetEncoderNet
 from meda.agents.ppo.policy import PPOAgent, batch_obs, masked_distribution
 from meda.agents.ppo.rollout import RolloutBuffer, compute_gae, split_obs
@@ -36,6 +44,10 @@ from meda.envs.encoding import EnvSizes
 
 # The two vector envs that can read and write per-worker env snapshots (SPEC 9.1).
 VecEnv = SyncVectorEnv | AsyncVectorEnv
+
+# How far the learner's first-minibatch log-probabilities and values may be from the collected
+# ones (float rounding between a CPU batch-1 pass and a padded GPU batch is ~1e-6).
+CONSISTENCY_TOL = 1e-3
 
 
 @dataclass(frozen=True, slots=True)
@@ -115,7 +127,7 @@ class PPOTrainer:
         self,
         cfg: PPOConfig,
         sizes: EnvSizes,
-        envs: VecEnv,
+        envs: VecEnv | ActorPool,
         device: torch.device | str = "cpu",
         seed: int = 0,
     ) -> None:
@@ -132,7 +144,8 @@ class PPOTrainer:
         self.seed = seed
         self.update = 0
         self.global_step = 0
-        self.next_obs: dict[str, npt.NDArray[Any]] | None = None
+        self.next_obs: dict[str, npt.NDArray[Any]] | None = None  # lockstep only
+        self.started = False
 
     @property
     def agent(self) -> PPOAgent:
@@ -142,15 +155,23 @@ class PPOTrainer:
     def done(self) -> bool:
         return self.update >= self.cfg.num_updates
 
+    @property
+    def uses_workers(self) -> bool:
+        return isinstance(self.envs, ActorPool)
+
     def start(self) -> None:
         """Reset every env (env i seeded `seed + i`). Not needed after a checkpoint load."""
-        self.next_obs, _ = self.envs.reset(seed=self.seed)
+        if isinstance(self.envs, ActorPool):
+            self.envs.reset(self.seed)
+        else:
+            self.next_obs, _ = self.envs.reset(seed=self.seed)
+        self.started = True
 
     # ------------------------------------------------------------------ one iteration
 
     def iteration(self) -> dict[str, float]:
         """Collect one rollout, update the network; return this update's metrics."""
-        if self.next_obs is None:
+        if not self.started:
             raise RuntimeError("call start() or load a checkpoint first")
         cfg = self.cfg
         if cfg.anneal_lr:
@@ -158,12 +179,75 @@ class PPOTrainer:
             for group in self.optimizer.param_groups:
                 group["lr"] = frac * cfg.lr
         started = time.perf_counter()
+        self.net.eval()
+        if isinstance(self.envs, ActorPool):
+            buf, last_values, episodes, legal_counts, env_seconds = self._collect_workers()
+        else:
+            buf, last_values, episodes, legal_counts, env_seconds = self._collect_lockstep()
+        adv, ret = compute_gae(
+            buf.rewards, buf.values, buf.dones, last_values, cfg.gamma, cfg.gae_lambda
+        )
+        collect_seconds = time.perf_counter() - started
+        stats = self._optimise(buf, adv, ret)
+        update_seconds = time.perf_counter() - started - collect_seconds
+        self.update += 1
+
+        metrics = {
+            "update": float(self.update),
+            "global_step": float(self.global_step),
+            "lr": float(self.optimizer.param_groups[0]["lr"]),
+            "legal_count": float(np.mean(legal_counts)),
+            "episodes": float(len(episodes)),
+            **_episode_metrics(episodes),
+            **stats,
+            "env_steps_per_second": cfg.batch_size / collect_seconds,
+            # Where an iteration's time goes: waiting for the env workers (with the workers
+            # collector, their whole rollouts including their policy passes), everything else
+            # while collecting (policy forward, copies), and the PPO update.
+            "seconds_env": env_seconds,
+            "seconds_policy": collect_seconds - env_seconds,
+            "seconds_update": update_seconds,
+        }
+        return metrics
+
+    def _collect_workers(
+        self,
+    ) -> tuple[RolloutBuffer, npt.NDArray[np.float64], list[dict[str, Any]], list[float], float]:
+        """Every worker plays its env's rollout with this update's weights (`collector.py`)."""
+        cfg = self.cfg
+        assert isinstance(self.envs, ActorPool)
+        waited = time.perf_counter()
+        rollouts = self.envs.rollout(self.net.state_dict(), self.update, cfg.rollout_steps)
+        env_seconds = time.perf_counter() - waited
+        buf = RolloutBuffer(cfg.rollout_steps, cfg.num_envs)
+        for t in range(cfg.rollout_steps):
+            buf.add(
+                [r.obs[t] for r in rollouts],
+                np.array([r.actions[t] for r in rollouts]),
+                np.array([r.logprobs[t] for r in rollouts]),
+                np.array([r.values[t] for r in rollouts]),
+                np.array([r.rewards[t] for r in rollouts]) * cfg.reward_scale,
+                np.array([r.dones[t] for r in rollouts]),
+            )
+        self.global_step += cfg.batch_size
+        legal_counts = [
+            float(np.mean([r.obs[t]["action_mask"].sum() for r in rollouts]))
+            for t in range(cfg.rollout_steps)
+        ]
+        episodes = [e for r in rollouts for e in r.episodes]
+        last_values = np.array([r.last_value for r in rollouts], dtype=np.float64)
+        return buf, last_values, episodes, legal_counts, env_seconds
+
+    def _collect_lockstep(
+        self,
+    ) -> tuple[RolloutBuffer, npt.NDArray[np.float64], list[dict[str, Any]], list[float], float]:
+        """All envs step together; one policy pass per step on their batched observations."""
+        cfg = self.cfg
+        assert not isinstance(self.envs, ActorPool) and self.next_obs is not None
         buf = RolloutBuffer(cfg.rollout_steps, cfg.num_envs)
         episodes: list[dict[str, Any]] = []
         legal_counts: list[float] = []
-
         env_seconds = 0.0
-        self.net.eval()
         for _ in range(cfg.rollout_steps):
             obs = self.next_obs
             with torch.no_grad():
@@ -194,30 +278,7 @@ class PPOTrainer:
 
         with torch.no_grad():
             _, last = self.net(batch_obs(self.next_obs, self.device))
-        adv, ret = compute_gae(
-            buf.rewards, buf.values, buf.dones, last.cpu().numpy(), cfg.gamma, cfg.gae_lambda
-        )
-        collect_seconds = time.perf_counter() - started
-        stats = self._optimise(buf, adv, ret)
-        update_seconds = time.perf_counter() - started - collect_seconds
-        self.update += 1
-
-        metrics = {
-            "update": float(self.update),
-            "global_step": float(self.global_step),
-            "lr": float(self.optimizer.param_groups[0]["lr"]),
-            "legal_count": float(np.mean(legal_counts)),
-            "episodes": float(len(episodes)),
-            **_episode_metrics(episodes),
-            **stats,
-            "env_steps_per_second": cfg.batch_size / collect_seconds,
-            # Where an iteration's time goes: waiting for the env workers, everything else
-            # while collecting (policy forward, copies), and the PPO update.
-            "seconds_env": env_seconds,
-            "seconds_policy": collect_seconds - env_seconds,
-            "seconds_update": update_seconds,
-        }
-        return metrics
+        return buf, last.cpu().numpy().astype(np.float64), episodes, legal_counts, env_seconds
 
     def _optimise(
         self, buf: RolloutBuffer, adv: npt.NDArray[np.float64], ret: npt.NDArray[np.float64]
@@ -238,6 +299,7 @@ class PPOTrainer:
         sums = {"policy_loss": 0.0, "value_loss": 0.0, "entropy": 0.0, "approx_kl": 0.0}
         clipped = 0.0
         n = 0
+        worst = {"logprob": 0.0, "value": 0.0}  # first minibatch vs collected, before any step
         for _ in range(cfg.update_epochs):
             self.rng.shuffle(index)
             for start in range(0, cfg.batch_size, cfg.minibatch_size):
@@ -256,6 +318,13 @@ class PPOTrainer:
                     entropy = dist.entropy().mean()
                     log_ratio = new_logprobs - b_logprobs[chunk]
                     ratio = log_ratio.exp()
+                    if n == 0:
+                        with torch.no_grad():
+                            v_diff = (new_values - b_values[chunk]).abs() / (
+                                1 + b_values[chunk].abs()
+                            )
+                            worst["logprob"] = max(worst["logprob"], log_ratio.abs().max().item())
+                            worst["value"] = max(worst["value"], v_diff.max().item())
                     with torch.no_grad():
                         approx_kl = ((ratio - 1) - log_ratio).mean()
                         clip_count += float(((ratio - 1).abs() > cfg.clip_coef).float().sum())
@@ -286,6 +355,14 @@ class PPOTrainer:
                     totals["entropy"] += share * entropy.item()
                     totals["approx_kl"] += share * approx_kl.item()
 
+                if n == 0 and max(worst.values()) > CONSISTENCY_TOL:
+                    raise RuntimeError(
+                        f"update {self.update}: the learner's log-probabilities or values on the "
+                        f"first minibatch differ from the collected ones by up to "
+                        f"{worst['logprob']:.3g} (log-prob) and {worst['value']:.3g} (relative "
+                        f"value), above {CONSISTENCY_TOL}: the policy that collected the rollout "
+                        f"is not the one being updated"
+                    )
                 nn.utils.clip_grad_norm_(self.net.parameters(), cfg.max_grad_norm)
                 self.optimizer.step()
                 for k in sums:
@@ -298,6 +375,8 @@ class PPOTrainer:
         explained = float("nan") if var == 0 else 1.0 - float(np.var(y_true - y_pred)) / var
         return {
             **{k: v / n for k, v in sums.items()},
+            "collected_logprob_max_diff": worst["logprob"],
+            "collected_value_max_diff": worst["value"],
             "clip_fraction": clipped / n,
             "explained_variance": explained,
         }
@@ -327,21 +406,7 @@ def _finished_episodes(
     if not dones.any():
         return []
     final = info["final_info"]
-    out = []
-    for i in np.flatnonzero(dones):
-        totals = final["episode_totals"][i]
-        out.append(
-            {
-                "success": bool(final["success"][i]),
-                "dead_end": bool(final["dead_end"][i]),
-                "plan_cost": float(final["plan_cost"][i]),
-                "penalty": float(final["penalty"][i]),
-                "mix_ops": totals.mix_ops,
-                "waste_volume": totals.waste_volume,
-                "total_reagent": totals.total_reagent,
-            }
-        )
-    return out
+    return [episode_record({k: final[k][i] for k in EPISODE_KEYS}) for i in np.flatnonzero(dones)]
 
 
 def _episode_metrics(episodes: list[dict[str, Any]]) -> dict[str, float]:

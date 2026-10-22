@@ -1,6 +1,9 @@
 device: auto                  # auto = cuda if available, else cpu; or cuda / mps / cpu (PPO)
 gpu_memory_fraction: 0.5      # CUDA: most of the GPU's memory this run may take (shared machine)
 vector: sync                  # PPO vector env: sync (one process) or async (one per env)
+collector: lockstep           # PPO: lockstep (the vector env above; one policy pass per step on
+                              # all envs) or workers (one process per env with a policy copy,
+                              # playing its whole rollout; `vector` is then unused; SPEC 11.4)
 resume: null                  # PPO: path to a checkpoint (last.pt) to continue from
 log_dir: tensorboard
 use_wandb: false

@@ -3,8 +3,10 @@
 A checkpoint holds everything the next update depends on: weights, optimiser state, the update
 and step counters, the torch RNG (and CUDA's, if present), the trainer's numpy generator, and
 one `EnvSnapshot` per vector-env worker, so half-finished episodes continue exactly
-(`SamplePrepEnv.snapshot`, SPEC 9.1). `extra` carries the state of whatever the caller built
-around the trainer (for example an instance source that keeps state).
+(`SamplePrepEnv.snapshot`, SPEC 9.1). With the workers collector it also holds each env's
+sampling generator, and a run resumes only with the collector it was saved with. `extra`
+carries the state of whatever the caller built around the trainer (for example an instance
+source that keeps state).
 
 Files are written with `torch.save` and contain pickled env snapshots, so they are loaded with
 `weights_only=False`: load only checkpoints this code wrote.
@@ -44,6 +46,8 @@ def save_checkpoint(
         "cuda_rng": torch.cuda.get_rng_state_all() if torch.cuda.is_available() else None,
         "numpy_rng": trainer.rng.bit_generator.state,
         "env_snapshots": list(trainer.envs.get_attr("env_snapshot")),
+        "collector": "workers" if trainer.uses_workers else "lockstep",
+        "actor_rngs": list(trainer.envs.get_attr("actor_rng")) if trainer.uses_workers else None,
         "extra": dict(extra or {}),
     }
     tmp = path.with_suffix(path.suffix + ".tmp")
@@ -71,12 +75,22 @@ def load_checkpoint(path: str | Path, trainer: PPOTrainer) -> dict[str, Any]:
     trainer.update = int(data["update"])
     trainer.global_step = int(data["global_step"])
     trainer.seed = int(data["seed"])
-    torch.set_rng_state(data["torch_rng"])
+    # RNG states must be CPU byte tensors; `map_location` moved every tensor to the device.
+    torch.set_rng_state(data["torch_rng"].cpu())
     if data["cuda_rng"] is not None and torch.cuda.is_available():
         torch.cuda.set_rng_state_all(data["cuda_rng"])
     trainer.rng = np.random.default_rng()
     trainer.rng.bit_generator.state = data["numpy_rng"]
+    collector = data.get("collector", "lockstep")
+    if collector != ("workers" if trainer.uses_workers else "lockstep"):
+        raise ValueError(
+            f"{path}: saved with the {collector} collector; resume with train.collector={collector}"
+        )
     trainer.envs.set_attr("env_snapshot", snapshots)
-    observed = trainer.envs.call("observe")
-    trainer.next_obs = {k: np.stack([o[k] for o in observed]) for k in observed[0]}
+    if trainer.uses_workers:
+        trainer.envs.set_attr("actor_rng", [s.cpu() for s in data["actor_rngs"]])
+    else:
+        observed = trainer.envs.call("observe")
+        trainer.next_obs = {k: np.stack([o[k] for o in observed]) for k in observed[0]}
+    trainer.started = True
     return dict(data["extra"])

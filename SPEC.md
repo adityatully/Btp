@@ -1,6 +1,13 @@
 # MEDA Design Automation — Codebase Specification
 
-Version 0.19 · 2026-10-22
+Version 0.20 · 2026-10-22
+
+Changes in 0.20 (training speed): the workers collector, `train.collector=workers` (11.4): each
+worker process owns one env and a frozen copy of the policy for a whole rollout (synchronous
+on-policy PPO with decentralised actors), with version-stamped rollouts, a learner-side check of
+the collected log-probabilities and values, per-env sampling generators saved in checkpoints,
+and the old collector (`lockstep`) kept as the default. Env steps about 20% cheaper with
+identical outputs (9.4). Resuming on CUDA no longer moves RNG states to the GPU (13).
 
 Changes in 0.19: `scripts/regime_report.py --at-step N|common` grades unfinished or stopped runs
 at one shared validation round, from `metrics.jsonl` and the last checkpoint's regime state, so
@@ -417,6 +424,7 @@ meda-da/
 │   │   │   ├── networks.py    # set encoder, candidate scorer, value head
 │   │   │   ├── policy.py      # masked categorical over candidates
 │   │   │   ├── rollout.py     # buffer, GAE
+│   │   │   ├── collector.py   # workers collector: one env and a policy copy per process
 │   │   │   └── ppo.py         # update loop
 │   │   └── mcts/              # reserved; AlphaZero-style search (milestone 9)
 │   ├── analysis/
@@ -1312,6 +1320,14 @@ The M5–M8 acceptance runs before 0.11 used it; nothing trained on it was kept.
   step waits for its slowest env; that tail bounds 32 workers at roughly 1,500–2,000 steps/s
   under a random policy, short of the 10,000 target. Fewer droplets on chip (a trained policy)
   make steps cheaper.
+- **Measured 2026-10-22 (0.20), same conditions.** Legal enumeration is about 65% of an env
+  step and encoding about 30%. Two changes with bit-identical outputs (a hash of every legal
+  list, observation and reward over 16,000 random steps across all five stages is unchanged)
+  cut a step by about 20%: `legal_actions` skips the gcd when the unreduced mix denominator is
+  already within `max_denominator` (the reduced one divides it), and the encoder builds the
+  candidate columns from one list instead of per-element array writes. Lockstep efficiency
+  (mean step over the slowest of 32) is about 21%: a step averages about 5 ms but its tail
+  reaches 25–80 ms on a full chip. The workers collector (11.4) removes the per-step wait.
 
 ### 9.5 Wrappers (`wrappers.py`)
 - `EpisodeStats`: accumulates totals for logging.
@@ -1670,10 +1686,37 @@ total_env_steps: 5_000_000
 max_chunk_rows: 131072   # candidate rows per forward pass in an update (memory, not maths)
 ```
 
+**Collectors** (`train.collector`). `lockstep` (default): a vector env (`train.vector`) steps
+all envs together and the policy runs once per step on their batch, so each step waits for the
+slowest env. `workers` (`ppo/collector.py`, `ActorPool`): one process per env, each holding a
+copy of the policy, plays its whole rollout of `rollout_steps` actions alone; the learner then
+builds the same `RolloutBuffer` and runs the same update. This is synchronous on-policy PPO with
+decentralised actors (as DD-PPO), not an asynchronous method (IMPALA, APPO): no actor ever uses
+weights older than the current update. Safeguards:
+- every worker receives the same weights, stamped with the update number, and returns its
+  rollout with that stamp; a different stamp or length is refused;
+- workers share nothing mutable; the learner changes the weights only after every rollout of
+  the update is back;
+- before the first optimiser step of an update, the learner's log-probabilities and values on
+  the first minibatch must equal the collected ones to 1e-3 (absolute log-prob, relative
+  value; measured ~1e-6); a larger difference stops training (also checked under lockstep);
+- each env samples with its own `torch.Generator` (`actor_seed(seed, i)`) from a batch-1
+  forward on one CPU thread, so a run does not depend on timing; the generators are saved in
+  checkpoints, and a checkpoint resumes only with the collector that wrote it;
+- workers start with `spawn` (never fork a process that has initialised CUDA), ignore Ctrl-C,
+  and a failed or dead worker stops the run with its traceback; only env methods that leave
+  the episode alone (`set_instance_source`, `observe`) may be called through the pool.
+The collected log-probabilities come from a CPU pass and the update's from the training
+device, so runs are reproducible per collector but not bit-identical across collectors:
+regimes that are compared must use the same collector. Measured on a laptop (6 envs, CPU):
+collection took about 3 s per update against 7 s in lockstep.
+
 **Logged every update:** mean episode return, success rate, dead-end rate, mean cost and each
 cost component, policy entropy, approximate KL, clip fraction, value explained variance,
-legal-candidate count, env steps/second, and where the iteration's time went:
-`seconds_env` (waiting for the env workers), `seconds_policy` (the rest of collection: policy
+legal-candidate count, env steps/second, the largest first-minibatch differences from the
+collected values (`collected_logprob_max_diff`, `collected_value_max_diff`), and where the
+iteration's time went: `seconds_env` (waiting for the env workers; with `workers`, their whole
+rollouts including their policy passes), `seconds_policy` (the rest of collection: policy
 forward, copies) and `seconds_update` (the PPO update).
 
 ### 11.5 Reserved: search (`mcts/`, milestone 9)
@@ -1780,7 +1823,8 @@ vs number of targets; each producer has a fixed colour across all figures).
   TensorBoard logs, `checkpoints/last.pt` (every `train.checkpoint_every_updates`, resumable
   with `train.resume=<path>`) and `checkpoints/agent.pt`, and grades the greedy policy into
   `results.parquet` and `summary.md`. Every `train.eval_every_updates` it also grades the
-  training instances (`eval/` in the logs). `train.vector` picks `sync` or `async` workers;
+  training instances (`eval/` in the logs). `train.collector` picks `lockstep` (with
+  `train.vector`: `sync` or `async` workers) or `workers` (11.4);
   `train.device: auto` picks CUDA when available, else CPU (MPS is opt-in).
   `train.gpu_memory_fraction` (default 0.5) caps how much of the GPU's memory the process may
   allocate (`torch.cuda.set_per_process_memory_fraction`): the workstation is shared, so a run
