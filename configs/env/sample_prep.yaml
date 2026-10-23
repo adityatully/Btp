@@ -10,3 +10,6 @@ L_pad: 16384                  # candidate rows (random play peaks near 9,300 at 
 volume_ref: 16                # absolute volume scale: volume / volume_ref (a scale, not a cap)
 count_ref: 16                 # absolute count scale: demand, steps left, storage capacity
 preference_conditioning: false
+failure_penalty_factor: 2     # truncation / dead-end penalty = this x the construction's cost to
+                              # finish (SPEC 5.8); at 1, giving up out-earns any finished plan
+                              # worse than ~1.1-1.3x the construction (pilot, 2026-10-23)

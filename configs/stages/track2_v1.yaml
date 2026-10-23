@@ -15,7 +15,7 @@ base:
   droplet_volume: [1, M]
   max_mix_volume: [3, 10]
   num_experiments: 1
-  step_limit_rule: depth
+  step_limit_rule: depth_support   # depth ignores fluid count and under-budgets mixtures (SPEC 8.1)
 
 axes:
   fluids:
@@ -37,16 +37,16 @@ overrides:
 
 start: {fluids: dilution, targets: one, demand: single, storage: loose}
 stages:
-  - {name: s1_dilution, val: val_s1_v1}
-  - {name: s2_mixture, adds: {fluids: mixture}, val: val_s2_v1}
-  - {name: s3_demand, adds: {demand: multi}, val: val_s3_v1}
-  - {name: s4_targets, adds: {targets: many}, val: val_s4_v1}
-  - {name: s5_storage, adds: {storage: limited}, val: val_s5_v1}
+  - {name: s1_dilution, val: val_s1_v2}
+  - {name: s2_mixture, adds: {fluids: mixture}, val: val_s2_v2}
+  - {name: s3_demand, adds: {demand: multi}, val: val_s3_v2}
+  - {name: s4_targets, adds: {targets: many}, val: val_s4_v2}
+  - {name: s5_storage, adds: {storage: limited}, val: val_s5_v2}
 
 # Never drawn in training; tested on its own tier-4 set (compositional generalisation).
 held_out:
   cells: [{fluids: dilution, targets: many, demand: multi, storage: limited}]
-  val: heldout_combo_v1
+  val: heldout_combo_v2
 
 # Stage shares once every stage is in: most draws where Track 2 E2 found headroom.
 final_weights: {s1_dilution: 0.05, s2_mixture: 0.05, s3_demand: 0.2, s4_targets: 0.35,

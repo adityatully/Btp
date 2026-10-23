@@ -75,6 +75,15 @@ class Regime:
         self.cfg = cfg
         self.design = design.first(cfg.num_stages)
         self.total_env_steps = total_env_steps
+        n = len(self.design.stages)
+        if cfg.name != "mixed" and n * cfg.max_stage_fraction > 1 + 1e-9:
+            # Forced promotions at every cap would start the last stage at (n - 1) x the
+            # fraction of the budget, leaving it less than one cap, or none (5 x 0.3).
+            raise ValueError(
+                f"regime '{cfg.name}': {n} stages x max_stage_fraction "
+                f"{cfg.max_stage_fraction} > 1, so forced promotions could leave the last "
+                f"stage(s) untrained; set max_stage_fraction <= {1 / n:.3g}"
+            )
         self.newest = 0  # index of the newest stage drawn from (sequential / expanding)
         self.finished = cfg.name == "mixed"  # every stage in, final shares
         self.stage_start = 0  # env step at which the newest stage came in

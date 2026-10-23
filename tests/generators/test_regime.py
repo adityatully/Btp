@@ -92,10 +92,19 @@ def test_mixed_uses_the_final_weights_and_never_promotes() -> None:
 
 def test_a_stuck_stage_is_promoted_after_its_share_of_steps_and_marked_forced() -> None:
     r = regime("expanding")
-    assert rounds(r, "s1_dilution", [NAN], success=0.0, step=299_999) == [False]
-    assert rounds(r, "s1_dilution", [NAN], success=0.0, step=300_000) == [True]
+    assert rounds(r, "s1_dilution", [NAN], success=0.0, step=199_999) == [False]
+    assert rounds(r, "s1_dilution", [NAN], success=0.0, step=200_000) == [True]
     assert r.events[-1]["forced"] and r.events[-1]["gap"] is None
-    assert r.stage_start == 300_000
+    assert r.stage_start == 200_000
+
+
+@pytest.mark.parametrize("kind", ["sequential", "expanding"])
+def test_a_cap_that_could_starve_the_last_stage_is_refused(kind: str) -> None:
+    """5 stages x 0.3 would force stage 5 in at 120% of the budget, i.e. never."""
+    with pytest.raises(ValueError, match="max_stage_fraction"):
+        regime(kind, max_stage_fraction=0.3)
+    assert regime(kind, max_stage_fraction=0.3, num_stages=3).names[-1] == "s3_demand"
+    assert regime("mixed", max_stage_fraction=0.3).names  # mixed never promotes
 
 
 def test_state_round_trips_and_a_mismatched_checkpoint_raises() -> None:

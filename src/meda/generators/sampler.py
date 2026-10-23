@@ -58,9 +58,16 @@ GENERATOR_VERSION = 1
 # - "depth": multiple x a bound from the problem alone, sum over deliveries of (the fewest mix
 #   levels any plan needs for that target + 1 output), so the budget does not depend on how
 #   good a construction is;
+# - "depth_support": as "depth", but a delivery's mix count is at least (fluids its target must
+#   contain - 1), since each mix joins two droplets. "depth" ignores this and under-budgets
+#   mixtures: it was raised to the witness plan on 28% of stage-2 validation problems, 13 of
+#   40 with no spare step (2026-10-23). The fluid term alone left 10 of 40 so, since the
+#   witness (split tree) is far longer than any problem-only bound on deep mixtures, the
+#   budget is also floored at WITNESS_FLOOR x the witness length;
 # - "witness": multiple x the witness plan's length (the rule of generator version 1).
-STEP_LIMIT_RULES = ("depth", "witness")
-DEFAULT_STEP_LIMIT_MULTIPLE = {"depth": 4.0, "witness": 2.0}
+STEP_LIMIT_RULES = ("depth", "depth_support", "witness")
+DEFAULT_STEP_LIMIT_MULTIPLE = {"depth": 4.0, "depth_support": 4.0, "witness": 2.0}
+WITNESS_FLOOR = 2.0  # "depth_support": the step limit is at least this x the witness length
 
 
 @dataclass(frozen=True, slots=True)
@@ -345,22 +352,30 @@ def mix_depth_bound(den: int, m: int) -> int:
     return depth
 
 
-def step_limit_base(instance: Instance) -> int:
-    """The "depth" rule's base: per delivery, its target's mix-depth bound plus one output. A
-    tolerant target's bound uses the smallest denominator of any composition within its
-    tolerance, since a plan may deliver that one."""
+def required_fluids(target: Target) -> int:
+    """Fluids every droplet within the target's tolerance must contain: those whose share
+    exceeds the tolerance (an L-inf distance of at most the tolerance cannot drop them)."""
+    comp, tol = target.composition, target.tolerance
+    return sum(1 for n in comp.num if Rational.of(n, comp.den) > tol)
+
+
+def step_limit_base(instance: Instance, rule: str = "depth") -> int:
+    """The "depth" rules' base: per delivery, its target's mix-count bound plus one output. A
+    tolerant target's depth bound uses the smallest denominator of any composition within its
+    tolerance, since a plan may deliver that one. Under "depth_support" the mix count is also
+    at least `required_fluids - 1`."""
+    if rule not in ("depth", "depth_support"):
+        raise ValueError(f"step_limit_base has no base for rule {rule!r}")
     chip = instance.chip
     m = chip.max_mix_volume
-    return sum(
-        t.demand
-        * (
-            mix_depth_bound(
-                min_denominator_within(t.composition, t.tolerance, chip.max_denominator), m
-            )
-            + 1
+
+    def mixes(t: Target) -> int:
+        depth = mix_depth_bound(
+            min_denominator_within(t.composition, t.tolerance, chip.max_denominator), m
         )
-        for t in instance.targets
-    )
+        return max(depth, required_fluids(t) - 1) if rule == "depth_support" else depth
+
+    return sum(t.demand * (mixes(t) + 1) for t in instance.targets)
 
 
 def _optional_range(value: Any) -> tuple[int, int] | None:
@@ -706,15 +721,23 @@ def _sample_once(
         if cfg.step_limit_rule == "witness":
             step_limit = max(len(actions), round(multiple * len(actions)))
         else:
-            base = step_limit_base(probe)
+            base = step_limit_base(probe, cfg.step_limit_rule)
             sized = math.ceil(multiple * base)
-            step_limit = max(sized, len(actions))
+            # "depth" raises a budget below the known plan to fit it exactly; "depth_support"
+            # floors it at WITNESS_FLOOR x the known plan, so no problem leaves a learner zero
+            # spare steps.
+            floor = (
+                math.ceil(WITNESS_FLOOR * len(actions))
+                if cfg.step_limit_rule == "depth_support"
+                else len(actions)
+            )
+            step_limit = max(sized, floor)
             sizing = {
-                "step_limit_rule": "depth",
+                "step_limit_rule": cfg.step_limit_rule,
                 "step_limit_base": base,
                 "step_limit_multiple": multiple,
-                # Never silent (rule 9): a budget below the known plan is raised to fit it.
-                "step_limit_raised_to_witness": sized < len(actions),
+                # Never silent (rule 9): a budget below the floor is raised to it.
+                "step_limit_raised_to_witness": sized < floor,
             }
     if step_limit < len(actions):
         raise ValueError(

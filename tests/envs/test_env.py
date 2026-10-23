@@ -118,7 +118,7 @@ def test_success_episode_reward_cost_and_dag() -> None:
 
 def test_truncation_adds_penalty() -> None:
     inst = dilution([(3, 10)], step_limit=1)
-    env = make_env([inst], penalty=7)
+    env = make_env([inst], penalty=7, failure_penalty_factor=1)
     env.reset(seed=0)
     _, r, term, trunc, info = env.step(np.int64(0))
     assert trunc and not term
@@ -133,13 +133,38 @@ def test_dead_end_adds_penalty() -> None:
     # No mix is legal (max_denominator 1). Target 0 is pure S (served from the reservoir);
     # target 1 (1/2) can never be made, so after the output nothing is legal.
     base = dilution([(1, 1), (1, 2)], chip_limits=chip(max_denominator=1))
-    env = make_env([base], penalty=5)
+    env = make_env([base], penalty=5, failure_penalty_factor=1)
     env.reset(seed=0)
     assert env.legal == (Output(S, 0),)
     _, r, term, trunc, info = env.step(np.int64(0))
     assert term and not trunc
     assert info["dead_end"] and info["status"] is TerminalStatus.DEAD_END
     assert r == pytest.approx(-10 - 5)  # one unit of sample (weight 10) + penalty
+
+
+@pytest.mark.parametrize("factor", [1, 2, 3])
+def test_failure_penalty_is_scaled_by_the_factor(factor: int) -> None:
+    """SPEC 5.8: the penalty is `failure_penalty_factor` x cost_to_finish, on truncation and on
+    a dead end alike."""
+    trunc_env = make_env(
+        [dilution([(3, 10)], step_limit=1)], penalty=7, failure_penalty_factor=factor
+    )
+    trunc_env.reset(seed=0)
+    *_, info = trunc_env.step(np.int64(0))
+    assert info["status"] is TerminalStatus.TRUNCATED
+    assert info["penalty"] == Rational.of(7 * factor)
+
+    base = dilution([(1, 1), (1, 2)], chip_limits=chip(max_denominator=1))
+    dead_env = make_env([base], penalty=5, failure_penalty_factor=factor)
+    dead_env.reset(seed=0)
+    _, r, *_, info = dead_env.step(np.int64(0))
+    assert info["dead_end"] and info["penalty"] == Rational.of(5 * factor)
+    assert r == pytest.approx(-10 - 5 * factor)
+
+
+def test_failure_penalty_factor_below_one_is_refused() -> None:
+    with pytest.raises(ValueError, match="failure_penalty_factor"):
+        make_env(tiny_grid(), failure_penalty_factor=0)
 
 
 def test_reset_rejects_instances_that_do_not_fit() -> None:

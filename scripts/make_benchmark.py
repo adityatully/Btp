@@ -3,8 +3,8 @@
     uv run python scripts/make_benchmark.py tiny_exact_v1
     uv run python scripts/make_benchmark.py val_stage1_v1
     uv run python scripts/make_benchmark.py val_stage1_v2
-    uv run python scripts/make_benchmark.py val_s1_v1      # one per stage of track2_v1 (8.3)
-    uv run python scripts/make_benchmark.py heldout_combo_v1
+    uv run python scripts/make_benchmark.py val_s1_v2      # one per stage of track2_v1 (8.3)
+    uv run python scripts/make_benchmark.py heldout_combo_v2
     uv run python scripts/make_benchmark.py --list
 
 A published version is frozen: the script refuses to overwrite one unless `--overwrite` is
@@ -298,9 +298,10 @@ def build_design_set(design_name: str, which: int | None) -> BenchmarkSet:
     each a fresh draw (unwitnessed draws are redrawn), no two the same problem.
 
     Answer key per instance: [lower bound, best known], where best known is the cheaper of the
-    naive and split-tree plans and the lower bound is exact search's fluid-conservation bound
-    at the root (`max_nodes=0`). Measured on the design's ranges, exact search proved none of
-    24 stage 1-3 draws within 1,000 nodes (1-100 s each), so a node budget buys nothing here;
+    naive and split-tree plans and the lower bound is exact search's conservation bound at the
+    root (`max_nodes=0`; fluid, waste and mix terms since SPEC 0.21, hence the `_v2` sets).
+    Measured on the design's ranges, exact search proved none of 24 stage 1-3 draws within
+    1,000 nodes (1-100 s each), so a node budget buys nothing here;
     when the two ends meet the construction is proved optimal and stored as `optimal`.
     """
     design = load_design(design_name)
@@ -343,7 +344,7 @@ def build_design_set(design_name: str, which: int | None) -> BenchmarkSet:
             "optimal" if proved else "feasible",
             "cheapest_construction",
             {
-                "lower_bound_producer": "exact_search fluid_bound at the root",
+                "lower_bound_producer": "exact_search fluid_bound at the root (SPEC 0.21)",
                 "mix_ops": result.totals.mix_ops if result.totals else None,
             },
             lower_bound=None if proved else result.lower_bound,
@@ -360,7 +361,7 @@ def build_design_set(design_name: str, which: int | None) -> BenchmarkSet:
             "cells": {c.name: c.config.config_hash() for c in cells},
             "chip": design.chip,
             "costs": design.costs,
-            "answer_key": "[root fluid bound, cheaper of naive and tree]",
+            "answer_key": "[root conservation bound (SPEC 0.21), cheaper of naive and tree]",
         },
         seeds=seeds,
         description=(

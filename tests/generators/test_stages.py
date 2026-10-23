@@ -104,7 +104,7 @@ def test_cell_weights_split_each_stage_evenly() -> None:
 
 def test_mixture_source_draws_only_weighted_cells_and_never_a_held_out_problem() -> None:
     d = design()
-    held = frozenset({problem_hash(i) for i in BenchmarkSet.read("val_s1_v1").instances})
+    held = frozenset({problem_hash(i) for i in BenchmarkSet.read("val_s1_v2").instances})
     source = d.source({"s1_dilution": 0.25, "s2_mixture": 0.75}, chip(), GEOMETRIC, held)
     assert source.weights == {
         "dilution-one-single-loose": 0.25,
@@ -209,7 +209,7 @@ def test_frozen_design_sets_rebuild_identically_and_cover_their_cells() -> None:
     d = design()
     expected = {s.val: s for s in d.stages}
     assert set(builders) == {*expected, d.held_out_val}
-    for name in ("val_s1_v1", "val_s4_v1", d.held_out_val):
+    for name in ("val_s1_v2", "val_s4_v2", d.held_out_val):
         stored = BenchmarkSet.read(name)
         rebuilt = builders[name]()
         assert [i.to_json() for i in rebuilt.instances] == [i.to_json() for i in stored.instances]
@@ -231,3 +231,28 @@ def test_design_sets_are_disjoint() -> None:
             assert h not in seen, (name, seen.get(h))
             seen[h] = name
     assert (CONFIGS / "stages" / "track2_v1.yaml").exists()
+
+
+def test_mixture_step_limits_leave_room_beyond_the_known_plan() -> None:
+    """SPEC 8.1 `depth_support`: the base counts at least (required fluids - 1) mixes per
+    delivery, and the limit is floored at WITNESS_FLOOR x the witness. Under plain `depth`, 13
+    of 40 stage-2 validation problems allowed exactly the witness plan and nothing more."""
+    from meda.generators.sampler import WITNESS_FLOOR, required_fluids, step_limit_base
+
+    d = design()
+    assert all(c.config.step_limit_rule == "depth_support" for c in d.cells)
+    (cell,) = d.stage("s2_mixture").cells
+    rng = np.random.default_rng(5)
+    for _ in range(15):
+        inst = sample_instance(cell.config, chip(d.chip), rng, GEOMETRIC)
+        meta = inst.metadata
+        assert meta["step_limit_rule"] == "depth_support"
+        assert step_limit_base(inst, "depth_support") >= sum(
+            t.demand * required_fluids(t) for t in inst.targets
+        )
+        assert step_limit_base(inst, "depth_support") >= step_limit_base(inst, "depth")
+        assert inst.step_limit >= math.ceil(WITNESS_FLOOR * meta["witness_actions"])
+        assert inst.step_limit == max(
+            math.ceil(4 * meta["step_limit_base"]),
+            math.ceil(WITNESS_FLOOR * meta["witness_actions"]),
+        )

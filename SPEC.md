@@ -1,6 +1,27 @@
 # MEDA Design Automation — Codebase Specification
 
-Version 0.20 · 2026-10-22
+Version 0.22 · 2026-10-23
+
+Changes in 0.22 (training signal; found by the 2026-10-22 pilot, which learned to give up): (1)
+the truncation / dead-end penalty is `failure_penalty_factor` (env config, default 2) times the
+construction's cost to finish (5.8). At 1, a deliberately failed episode cost only 1.03–1.33×
+the best known plan on the stage validation sets, so any finished plan worse than that earned
+less than failing; a slow test now requires failing to cost at least 1.8× the best known plan.
+(2) Step-limit rule `depth_support` (8.1), used by `track2_v1`: the depth base also counts
+(required fluids − 1) mixes per delivery, and the limit is floored at 2× the witness length.
+Under `depth`, 13 of 40 stage-2 validation problems allowed exactly the witness plan. The
+`_v2` sets are rebuilt with these limits (same problems and best known). (3) A regime whose
+stage count × `max_stage_fraction` exceeds 1 is refused, since forced promotions could leave the
+last stages untrained (5 × 0.3); the default is now 0.2 (8.3).
+
+Changes in 0.21 (grading): the exact-search bound (10.2) was not admissible on tolerant targets
+(it counted each target's exact shares, though a droplet within tolerance may hold up to ε less
+of a fluid; a 51% ± 2% target bounded at 66.26 against an optimum of 66). The bound now uses
+`share - tolerance`, rounds each fluid's draws up to whole units, and adds waste and mix terms;
+it is consistent. The answer keys of the `track2_v1` sets change, so they are rebuilt as
+`val_s1_v2` … `val_s5_v2` and `heldout_combo_v2` (same instances, same best known; 8.4); the
+design points at them. The `_v1` files stay frozen (the 2026-10-22 pilot ran on them; promotion
+uses the gap to best known, which is unchanged).
 
 Changes in 0.20 (training speed): the workers collector, `train.collector=workers` (11.4): each
 worker process owns one env and a frozen copy of the policy for a whole rollout (synchronous
@@ -623,8 +644,14 @@ violated rule.
 - **Success:** all `remaining_demand` are 0. Droplets still on chip become waste (charged in the
   final step's cost).
 - **Truncation:** `step == step_limit` without success. The final cost adds a truncation penalty
-  = `fallback.cost_to_finish(state, instance)` (section 10.3), so an unfinished plan is never
-  cheaper than a finished one.
+  = `failure_penalty_factor × fallback.cost_to_finish(state, instance)` (section 10.3;
+  `failure_penalty_factor` in `configs/env`, an integer ≥ 1, default 2). With factor 1 an
+  unfinished plan is never cheaper than finishing *by the construction*, but it can be cheaper
+  than finishing with a worse plan: on the stage validation sets a deliberately failed episode
+  cost only 1.03–1.33× the best known plan, and the 2026-10-22 pilot learned to finish only
+  problems where it beat the construction. With factor 2, failing costs at least 1.8× the best
+  known plan on every stage-1–3 validation problem (`tests/envs/test_failure_penalty.py`), so a
+  finished plan is preferred unless it is roughly twice the construction's cost.
 - **Dead end:** no legal action and not success. Treat as truncation (same penalty). Track the
   rate in evaluation; a high rate means masking or generation needs work.
 - `rules.terminal_status(state, instance) -> TerminalStatus | None` returns `SUCCESS`,
@@ -805,6 +832,13 @@ are an error. Fields:
     base (median 1.6–1.9) across the five stages and ranged and mixture settings, so 4 gives
     about the old budget. A limit below the witness length is raised to it and flagged
     (`step_limit_raised_to_witness`); `step_limit_base` and the multiple used are recorded too.
+  - `depth_support` (`track2_v1`, 0.22): as `depth`, but each delivery counts at least
+    (required fluids − 1) mixes, a fluid being required when its share exceeds the tolerance
+    (each mix joins two droplets), and the limit is floored at `WITNESS_FLOOR` (2) × the witness
+    length, flagged as above. `depth` under-budgets mixtures: deep mixture witnesses are far
+    longer than any problem-only bound, and 13 of 40 stage-2 validation problems allowed exactly
+    the witness plan (10 with the fluid term alone). With the floor, every problem allows at
+    least twice its known plan.
   - `witness`: `step_limit_multiple` (default 2) times the witness plan length, the rule of
     generator version 1. The five existing stages set it explicitly, so their draws, hashes and
     frozen sets are unchanged.
@@ -892,9 +926,9 @@ storage is 32 (env `N_pad`, standing in for unbounded). Dilution cells with many
 linear gradient for half their instances (`target_structure`, 8.1).
 
 **Held out:** dilution · many · multi · limited, tested on its own tier-4 set
-(`heldout_combo_v1`): can the agent combine skills it learned in separate cells? The headline
-cell (mixture · many · multi · limited) is deliberately *not* held out, so the main agent
-trains on the problem the claim is about.
+(`heldout_combo_v2`; `_v1` before 0.21): can the agent combine skills it learned in separate
+cells? The headline cell (mixture · many · multi · limited) is deliberately *not* held out, so
+the main agent trains on the problem the claim is about.
 
 `final_weights` are the stage shares once every stage is in: 0.05, 0.05, 0.2, 0.35, 0.35 (most
 draws where E2 found headroom). A stage's share is split evenly over its cells.
@@ -925,8 +959,10 @@ A stage **passes** at a validation round when its greedy success rate on its val
 at least `min_success` (0.95) and its mean `gap_to_best_known` has plateaued: the best gap of
 the last `patience` (3) rounds is not `min_improvement` (0.01) below the best gap before them.
 Promotion reads only validation results, never training episodes. A stage that has not passed
-after `max_stage_fraction` (0.3) of the run's env steps is promoted anyway, and the event is
-marked `forced`. `num_stages` cuts the design to its first k stages for a pilot (final weights
+after `max_stage_fraction` (0.2) of the run's env steps is promoted anyway, and the event is
+marked `forced`. A sequential or expanding regime with stage count × `max_stage_fraction` > 1
+is refused at construction: forced promotions at every cap would bring the last stage in after
+the budget (5 × 0.3 = 1.5), so it would never train. `num_stages` cuts the design to its first k stages for a pilot (final weights
 renormalised). `state_dict` / `load_state_dict` carry the regime across checkpoints (13).
 
 **Comparison experiment** (user-approved, 2026-10-22). Arms `expanding` (candidate), `mixed`
@@ -989,7 +1025,7 @@ the job of tiers 3–6.
 | 1 In-distribution | Does the agent learn its training stage? | `val_s<k>_v1`, k = 1..5 (`track2_v1`); `val_stage1_v2` (v1 ladder) | `optimal`, else [bound, best known] | 0.18 |
 | 2 Engine check (DMFB) | Does our core reproduce published 1:1 results? | `dmfb_sweep_v1` | exact search, bitscan, published DMFB numbers | M9 |
 | 3 Literature | Do we reproduce, then beat, MEDA methods on their own problems? | `literature_<paper>_v1` | the paper's reported numbers + our reproduction | M9 |
-| 4 Generalisation | Does the policy transfer to unseen and larger problems, and to an unseen combination of constraints? | `heldout_combo_v1` (0.18), `unseen_ratios_v1`, `larger_v1` | [bound, best known] | held-out cell: 0.18; others after training |
+| 4 Generalisation | Does the policy transfer to unseen and larger problems, and to an unseen combination of constraints? | `heldout_combo_v2` (0.21; `_v1` 0.18), `unseen_ratios_v1`, `larger_v1` | [bound, best known] | held-out cell: 0.18; others after training |
 | 5 Frontier | How does the agent do where no published method applies? | `frontier_v1` | [bound, best known] (see Grading references) | with the stage design (the mixture fallback exists since 0.12) |
 | 6 Assays | Does it work on ratios from real protocols? | `assays_v1` | [bound, best known] | M9 |
 
@@ -1063,8 +1099,8 @@ the construction's excess, not the bound's (inferred from small problems), and
 2. **Faster exact search** (no re-check of generated legal moves, cached heuristic, dedupe of
    equivalent children). It enlarges the provable region for tier 0/1. No new dependency.
 3. **A forced-waste term in the lower bound**, for deliveries a mix cannot produce without
-   leftovers, and whole-unit rounding of each fluid's shortfall (reservoir draws are integer
-   units). It stays admissible. Cheap.
+   leftovers. It stays admissible. Cheap. (Whole-unit rounding, a waste term from volume
+   conservation and a mix-count term are done in 0.21, 10.2.)
 4. **An LP relaxation over fluid flows**, behind the same `lower_bound` field. It needs an LP
    solver (a new dependency, section 3).
 5. **An exact ILP/SMT formulation** for small and medium problems. It needs a solver (a new
@@ -1127,8 +1163,17 @@ Sets per tier:
   256 and so admits more plans, so 53/2 is a best known there, not a proved optimum (an
   earlier note in this spec had it as proved). The loose intervals (25/32, 15/16) are loose at
   the upper end: nothing beat naive there.
+- `val_s1_v2` … `val_s5_v2` and `heldout_combo_v2` (0.21, 0.22): the same problems and best
+  known plans as the `_v1` sets below, with the 0.21 bound (10.2) as the lower end and the
+  0.22 `depth_support` step limits (8.1; at least 2× the witness, 112 of 242 limits raised). Median bound /
+  best known per set, v1 → v2: s1 0.38 → 0.66, s2 0.19 → 0.33, s3 0.35 → 0.43,
+  s4 0.32 → 0.33, s5 0.33 → 0.39, held-out 0.50 → 0.51; 3 stage-1 instances are now proved
+  optimal (bound = construction). Many-target sets barely move: rounding matters little when
+  each fluid's total need is large, so their width is the construction's excess or the bound's
+  missing terms (forced waste per mix, grading option 3). The design points at these sets.
 - `val_s1_v1` … `val_s5_v1` (0.18) — tier 1 for the stages of `track2_v1` (8.3), and
-  `heldout_combo_v1` — tier 4, the held-out cell. Built by
+  `heldout_combo_v1` — tier 4, the held-out cell (kept frozen; the first pilot ran on them).
+  Built by
   `make_benchmark.py:build_design_set`: `val_size` (40) instances per set split evenly over its
   cells (stage 5 has 7 cells, so 42), seed `val_seed` + stage index, every draw a distinct
   problem; the sets are disjoint from each other and training excludes them all. Graded under
@@ -1136,10 +1181,10 @@ Sets per tier:
   Answer key: [lower bound, best known], best known the cheaper of the naive and split-tree
   plans, lower bound the fluid-conservation bound at the root. Exact search proved none of 24
   stage 1–3 draws within 1,000 nodes (1–100 s each), so a node budget buys nothing at these
-  sizes. The root bound is loose here: the best known plan is 2.0–5.4 × the bound (median per
+  sizes. The root bound was loose here: the best known plan is 2.0–5.4 × the bound (median per
   set). Much of that is integer draws: a target holding 1/195 of sample still needs one whole
-  unit drawn. Rounding each fluid's shortfall up to whole units keeps the bound admissible
-  (grading option 3). Promotion (8.3) uses `gap_to_best_known`, which this does not affect.
+  unit drawn, which the 0.21 bound counts (`_v2` sets). Promotion (8.3) uses
+  `gap_to_best_known`, which the bound does not affect.
 - `dmfb_sweep_v1` — tier 2, see above.
 - `literature_<paper>_v1` — tier 3, one set per paper, filled manually from the PDF.
 - `unseen_ratios_v1` — compositions excluded from training.
@@ -1358,12 +1403,26 @@ Uniform-cost search (Dijkstra) over `PrepState.canonical_key(include_step)`, edg
 step cost (non-negative, exact `Rational`), goal = success. Budget: max nodes, max wall time.
 This is the answer key for `tiny_exact_v1`.
 
-`heuristic` selects A*: `fluid_bound` (default) or `zero` (plain Dijkstra). The bound comes from
-conservation of each fluid — every droplet still to be delivered holds exactly
-`droplet_volume * composition[f]` units of fluid f, which can only come from what is on chip or
-from new draws — so remaining cost is at least the weighted shortfall. Mix and waste costs are
-ignored, keeping it admissible. Re-opening is allowed (a pop whose `g` is stale is skipped), so
-optimality holds even if the heuristic is not consistent.
+`heuristic` selects A*: `fluid_bound` (default) or `zero` (plain Dijkstra). The bound (0.21) is
+a sum of three conservation terms, each a lower bound on its own part of the remaining cost:
+1. **Fluid draws.** A droplet delivered to target t holds at least
+   `droplet_volume * max(0, composition[f] - tolerance)` units of fluid f (L-inf tolerance), and
+   fluid f comes only from what is on chip or from reservoir draws, which are whole units. So
+   future draws of f are at least `D[f] = max(0, ceil(needed[f] - on_chip[f]))`, weighted by
+   the fluid's cost.
+2. **Waste.** Every unit on chip or drawn later is delivered or wasted (leftovers go to waste
+   at the end): waste ≥ `on_chip_volume + sum(D) - volume still to deliver`.
+3. **Mixes.** A unit delivered to a target no pure reservoir fluid satisfies comes from a droplet
+   on chip now or from a future mix product, which holds at most M units: mixes ≥
+   `ceil((that volume - on_chip_volume) / M)`.
+
+The bound is consistent (each action lowers it by at most its own cost; checked along random
+rollouts on every `track2_v1` cell and in the tests), and admissible (never above an optimum
+proved by plain Dijkstra on small problems, nor above any construction; the wide check is
+`scripts/check_bound.py`, 300 random small problems, run on a many-core machine). Before 0.21 it used
+the exact target shares with fractional draws and no waste or mix terms: on tolerant targets it
+could exceed the optimum (51% ± 2% at volume 2: 66.26 against 66). Re-opening is allowed (a pop
+whose `g` is stale is skipped), so optimality would hold even for an inconsistent heuristic.
 
 **Branch and bound.** The search starts from an incumbent plan (the cheaper of the naive and
 split-tree constructions, 10.3) and prunes
@@ -1533,8 +1592,8 @@ Three settings decide whether it reaches the optimum at all, each measured:
   visits where the truth is −15.0, and the agent keeps the worse 1-mix plan.
 - **`prior` (default `naive`).** The value of an entry with no data. `naive` is
   `-cost_to_finish` (10.3): pessimistic but realistic, so greedy trusts what it learned and ε
-  does the exploring. `fluid_bound` and `zero` are optimistic; the bound is loose (≈8.8 against
-  a true 36.5 on 7/8), so every unvisited action outranks everything learned and the agent
+  does the exploring. `fluid_bound` and `zero` are optimistic; the bound was loose (≈8.8 against
+  a true 36.5 on 7/8, measured before 0.21), so every unvisited action outranks everything learned and the agent
   chases optimism instead of settling. With an optimistic prior the greedy policy also prefers
   visited actions, since the prior is then a guess rather than a value.
 
@@ -1985,7 +2044,7 @@ and network v2 (v1 removed):
   logits and value are unchanged when fluids, droplets and targets are reordered.
 
 Remaining, in order:
-1. (b) after the stage design (8.3): measured on `val_s1_v1` (stage 1 of `track2_v1`), with
+1. (b) after the stage design (8.3): measured on `val_s1_v2` (stage 1 of `track2_v1`), with
    `val_stage1_v2` kept as the M = 2 sanity check: success > 95% and mean `gap_to_best_known`
    < 5%, read from a regime run's `eval/s1_dilution` rounds. (The promotion rule asks for the
    same success but only a gap plateau, so promotion alone does not show (b).)

@@ -66,6 +66,16 @@ class FixedInstances:
 class EnvConfig:
     sizes: EnvSizes
     preference_conditioning: bool = False
+    # Truncation / dead-end penalty = this x `cost_to_finish` (SPEC 5.8). At 1, giving up costs
+    # little more than the construction, so a finished plan worse than that earns less than
+    # failing on purpose; 2 keeps finishing preferred up to about twice the construction.
+    failure_penalty_factor: int = 1
+
+    def __post_init__(self) -> None:
+        if self.failure_penalty_factor < 1:
+            raise ValueError(
+                f"failure_penalty_factor must be >= 1, got {self.failure_penalty_factor}"
+            )
 
     @staticmethod
     def from_dict(data: Mapping[str, Any]) -> EnvConfig:
@@ -78,6 +88,7 @@ class EnvConfig:
             "volume_ref",
             "count_ref",
             "preference_conditioning",
+            "failure_penalty_factor",
         }
         if set(data) != expected:
             raise ValueError(f"env config keys must be {sorted(expected)}, got {sorted(data)}")
@@ -91,6 +102,7 @@ class EnvConfig:
                 count_ref=int(data["count_ref"]),
             ),
             preference_conditioning=bool(data["preference_conditioning"]),
+            failure_penalty_factor=int(data["failure_penalty_factor"]),
         )
 
 
@@ -282,7 +294,7 @@ class SamplePrepEnv(gym.Env[Obs, np.int64]):
             status = TerminalStatus.DEAD_END
         penalty = ZERO
         if status in (TerminalStatus.TRUNCATED, TerminalStatus.DEAD_END):
-            penalty = self.cost_to_finish(nxt, inst)
+            penalty = self.cost_to_finish(nxt, inst) * self.config.failure_penalty_factor
         reward = -float(step_cost + penalty)
 
         info: dict[str, Any] = {
