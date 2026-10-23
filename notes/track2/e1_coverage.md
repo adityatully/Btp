@@ -27,13 +27,16 @@ method's own setting.
 |---|---|---|---|---|---|
 | **WSPM** | dilution, ST | BFS over (concentration, size); size limit Sc | operations, sample | δ grid with rounding (δ = 1/256) | Li et al., ISVLSI 2017; TBioCAS 11(6) 2017 (droplet-size-aware, error-correcting) |
 | **FacDA** (DFM is its tree phase) | dilution, ST | factorisation of the ratio sum; **any number of inputs**; w(i,j) units shared to any ancestor; SMT | steps, then sample, waste | ε = 0.001 / 0.005, real ratios | Kundu et al., ASP-DAC 2019; TCAD 41(3) 2021 |
-| **TVODA** | dilution, ST, **given output volume** (can exceed M) | same line as FacDA, SMT | volume-aware | as FacDA | same paper as FacDA |
+| **TVODA** | dilution, ST, **given output volume** Vt (can exceed M) | forest of skeleton trees whose root mixer sizes sum to Vt (sizes ≤ M, not fixed); SMT | volume-aware | as FacDA | same paper as FacDA: Kundu et al., TCAD 41(3) 2022, §IV "Demand Driven Sample Preparation on MEDA", Alg. 3 (checked 2026-10-23) |
 | **MRCM** | mixture, ST | multi-input; multi-unit sharing parent→child | weighted reactant cost | exact | Liang et al., ASP-DAC 2019 |
-| **e-MRCM** | mixture, **MT** | MRCM plus lists and queues for sharing across targets; multi-input | weighted reactant cost (geometric 1→64, after CoDOS) | exact, P = 1/512 | Liang et al., TCAD 39(10) 2020 |
+| **e-MRCM** | mixture, **MT** | MRCM plus lists and queues for sharing across targets; multi-input; a heuristic (exhaustive common-node search, then greedy; MTWM §7), **not RL** | weighted reactant cost (geometric 1→64, after CoDOS) | exact, P = 1/512 | Liang et al., TCAD 39(10) 2020 (PDF not on disk) |
 | **DFMM / STWM** | mixture, ST | skeleton tree + SMT; 1-unit sharing | waste | exact | Kundu & Roy, DSD 2022 |
-| **MTWM** | mixture, **MT** | intra- and inter-skeleton sharing, SMT | waste, reagent | exact | Kundu, ACM TODAES 2023 |
+| **MTWM** | mixture, **MT**, one root per target, no demand; storage only estimated afterwards (§"Issues with storage requirement") | intra- and inter-skeleton sharing, SMT | waste, reagent | exact | Kundu & Roy, ACM TODAES 28(6), Art. 101, 2023 (the local "2023_debraj kundu_multitarget…" PDF) |
+| **WSPM incremental** | dilution, **MT** (k = 2–4), one droplet per target, prepared in sequence reusing leftovers | as WSPM | operations, sample | as WSPM | Li et al., TBioCAS 11(6) 2017, §IV-E, Table IV |
+| Fukui & Yamashita | mixture, MT, pairwise reuse of an earlier target's intermediate or waste droplet | — | reagent | ratio sums 12, 16 | ISOCC 2024 (2 pages) |
+| RASS (hRASS, cRASS, vRASS) | dilution, ST, from several stock solutions with volume limits; no demand | — | cost | — | APCCAS 2023, "Efficient Dilution of a Fluid from its Related Arbitrary Stock Solutions" (not TVODA) |
 | **Dong splitting trees (SDSA)** | dilution, **MT**, exponential gradients | channel-dispensing splits; multi-input (1:1:1:1) | sample, waste droplets | dyadic only (TargetSize = 2^r, precision h) | Dong, Chen, Chen, JETTA 40(1) 2024 |
-| **Robust aliquot ILP** | dilution, **MT** | no splits; differently sized aliquots; no intermediate sharing | waste (zero), robustness to split error | 1/2^p | Poddar, Banerjee, Wille, Bhattacharya, ACM TODAES 26(1) 2020 |
+| **Robust aliquot ILP** | dilution, **MT** | no splits; differently sized aliquots; no intermediate sharing | waste (zero), robustness to split error | 1/2^p | Poddar, Banerjee, Wille, Bhattacharya, ACM TODAES 26(1) 2020 (PDF not on disk: demand and storage unverified) |
 | Saha prime factorisation | dilution, ST and MT | prime-factor mixing tree | operations, reactant | not given in the abstract | Saha, Das, Majumder, Springer 2026 |
 
 ### DMFB methods (1:1 mixing; each plan is also a legal MEDA plan)
@@ -61,10 +64,10 @@ methods that produce a valid plan for the cell but were designed for a smaller c
 | # | Cell | Direct (MEDA) | Adapted | Status |
 |---|---|---|---|---|
 | 1 | dil · ST · SD · ∞ | WSPM, FacDA, Saha; MRCM (dilution is its N = 2 case) | DMFB single-target set (M = 2) | **covered, crowded** |
-| 2 | dil · MT · SD · ∞ | Dong (dyadic gradients only), robust aliquot ILP, Saha; e-MRCM and MTWM as their N = 2 case | per-target FacDA/WSPM, merged | **covered** |
+| 2 | dil · MT · SD · ∞ | Dong (dyadic gradients only), robust aliquot ILP, Saha, WSPM incremental; e-MRCM and MTWM as their N = 2 case | per-target FacDA/WSPM, merged | **covered** |
 | 3 | mix · ST · SD · ∞ | MRCM, DFMM/STWM | e-MRCM at T = 1 | **covered** |
-| 4 | mix · MT · SD · ∞ | **e-MRCM**, MTWM | per-target MRCM | **covered** (closest competitor) |
-| 5 | dil · ST · MD · ∞ | TVODA (as a total volume, **verify**) | FacDA repeated per droplet; the 1:1 demand methods | **partly covered** |
+| 4 | mix · MT · SD · ∞ | **e-MRCM**, MTWM, Fukui 2024 | per-target MRCM | **covered** (closest competitor) |
+| 5 | dil · ST · MD · ∞ | TVODA (as a total volume; checked 2026-10-23) | FacDA repeated per droplet; the 1:1 demand methods | **partly covered** |
 | 6 | dil · MT · MD · ∞ | none on MEDA (robust aliquot may produce copies, **verify**) | DDMT and NFSP (1:1, valid on MEDA); per-target methods streamed | **frontier** |
 | 7 | mix · ST · MD · ∞ | none | MTMD at T = 1 (1:1); MRCM repeated | **frontier** |
 | 8 | mix · MT · MD · ∞ | none | MTMD (1:1); e-MRCM repeated per demand | **frontier** |
@@ -74,8 +77,19 @@ So the frontier is precisely:
 - **demand > 1 with more than one target, or with a mixture** (cells 6–8);
 - **any storage limit** (cells 9–16).
 
-Cell 5 is ambiguous until TVODA is read. It takes an output **volume** rather than a droplet
-count, which is our "total-volume target" extension.
+Cell 5 (checked 2026-10-23): TVODA takes an output **volume** Vt and returns root droplets whose
+sizes sum to Vt, each at most M but not of a fixed size. So it is demand by volume for one
+dilution target, our "total-volume target" extension, not "d droplets of volume v".
+
+**Paper checks (2026-10-23), the claim as it now stands.** To our knowledge, no MEDA
+sample-preparation method accepts a per-target droplet demand vector over multiple targets or for
+multi-reagent mixtures, and none enforces an on-chip storage limit. The closest are TVODA (a total
+output volume for one dilution target) and the multi-target methods (e-MRCM, MTWM, incremental
+WSPM, Fukui 2024), which produce one droplet per target. Demand-driven, storage-aware planning
+(DDMT) exists only for 1:1 DMFBs. Open until their PDFs are read: the robust aliquot ILP
+(TODAES 26(1) 2020) and Dong 2024 (JETTA 40(1)), the only remaining candidates for MEDA
+multi-target copies. The "RL-based" description of e-MRCM is not in the 2026 Das review and is
+contradicted by MTWM's account; it probably comes from the Mondal 2026 review (not on disk).
 
 ### "We won't have any method for the frontier, right?"
 **No direct method, but there are two kinds of adapted reference, and both are legitimate:**

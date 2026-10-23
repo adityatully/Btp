@@ -13,6 +13,7 @@ import pytest
 
 from meda.core.actions import Mix, Output, Source
 from meda.core.composition import Rational
+from meda.core.costs import CostWeights
 from meda.core.dag import validate
 from meda.core.problem import Instance
 from meda.core.rules import apply, replay
@@ -29,7 +30,15 @@ from meda.solvers.fallback import (
     UnsupportedFallbackError,
     cheapest_construction,
 )
-from tests.core.helpers import chip, default_weights, dilution, mixture
+from tests.core.helpers import (
+    ROLLOUT_INSTANCES,
+    chip,
+    default_weights,
+    dilution,
+    load_yaml,
+    mixture,
+    random_rollout,
+)
 
 WEIGHTS = default_weights()
 S, B = Source.reservoir(0), Source.reservoir(1)
@@ -382,3 +391,85 @@ def test_bound_before_any_expansion_is_the_root_heuristic() -> None:
     root = PrepState.initial(inst)
     assert result.status == "timeout" and result.dag is None
     assert result.lower_bound == fluid_bound_heuristic(WEIGHTS)(root, inst)
+
+
+# --------------------------------------------------------------------------- conservation bound
+
+GEOMETRIC = CostWeights.from_dict(load_yaml("costs/geometric.yaml"))  # 64 / 8 / 1, mix 1, waste 1
+
+
+def test_bound_hand_case_counts_whole_units_waste_and_one_mix() -> None:
+    """One 1/7-sample droplet of volume 1 at M = 8: at least 1 unit of S and 1 of B are drawn
+    (whole units), so at least 1 unit is wasted, and at least one mix is made: 64 + 1 + 1 + 1."""
+    inst = dilution([(1, 7)])
+    root = PrepState.initial(inst)
+    assert fluid_bound_heuristic(GEOMETRIC)(root, inst) == Rational.of(67)
+
+
+def test_bound_respects_tolerance() -> None:
+    """A 51% target with tolerance 2% at volume 2 is met by mixing 1 S + 1 B (a 50% droplet):
+    optimum 64 + 1 + one mix = 66. Counting the exact 51% share (the bound before 0.21) gives
+    66.26, above the optimum; the bound now meets it."""
+    inst = dilution([(51, 100)], tolerance=Rational.of(1, 50), droplet_volume=2, step_limit=8)
+    result = ExactSearch(GEOMETRIC, heuristic="zero", use_incumbent=False).solve(inst, BUDGET)
+    assert result.status == "optimal" and result.cost == Rational.of(66)
+    assert fluid_bound_heuristic(GEOMETRIC)(PrepState.initial(inst), inst) == Rational.of(66)
+
+
+# Small enough for plain Dijkstra in about a second (accuracy level of the targets, short limits).
+SMALL_BOUND_CASES = {
+    "tolerant_dilution": at_accuracy(
+        dilution(
+            [(2, 5), (3, 5)],
+            chip_limits=chip(max_mix_volume=4),
+            tolerance=Rational.of(1, 10),
+            step_limit=12,
+        )
+    ),
+    "demand": at_accuracy(
+        dilution(
+            [(1, 3)], chip_limits=chip(max_mix_volume=4), demand=2, droplet_volume=2, step_limit=12
+        )
+    ),
+    "tolerant_mixture": at_accuracy(
+        mixture(
+            [(2, 1, 1)],
+            chip_limits=chip(max_mix_volume=3),
+            tolerance=Rational.of(1, 8),
+            step_limit=6,
+        )
+    ),
+    "tight_storage": at_accuracy(
+        dilution(
+            [(1, 4), (3, 4)], chip_limits=chip(max_mix_volume=4, storage_capacity=2), step_limit=12
+        )
+    ),
+}
+
+
+@pytest.mark.parametrize("name", sorted(SMALL_BOUND_CASES))
+def test_bound_is_admissible_and_search_with_it_is_still_optimal(name: str) -> None:
+    """Root bound <= the optimum proved without any heuristic (Dijkstra), at every state along
+    that optimal plan too, and A* with the bound finds the same optimum."""
+    inst = SMALL_BOUND_CASES[name]
+    h = fluid_bound_heuristic(GEOMETRIC)
+    plain = ExactSearch(GEOMETRIC, heuristic="zero", use_incumbent=False)
+    plan, total, _ = plain.search(inst, BUDGET)
+    assert plan is not None and total is not None
+    state, spent = PrepState.initial(inst), Rational.of(0)
+    for action in plan:
+        assert h(state, inst) <= total - spent
+        state, step_cost, _ = apply(state, action, inst)
+        spent = spent + GEOMETRIC.scalar(step_cost, inst.fluids)
+    assert ExactSearch(GEOMETRIC).solve(inst, BUDGET).cost == total
+
+
+@pytest.mark.parametrize("name", sorted(ROLLOUT_INSTANCES))
+@pytest.mark.parametrize("weights", [GEOMETRIC, WEIGHTS], ids=["geometric", "default"])
+def test_bound_is_consistent_along_random_rollouts(name: str, weights: CostWeights) -> None:
+    """h(s) <= cost(s, a) + h(s') for every move: the closed-set search stays optimal."""
+    inst = ROLLOUT_INSTANCES[name]
+    h = fluid_bound_heuristic(weights)
+    for seed in range(3):
+        for state, _, nxt, cost, _ in random_rollout(inst, seed):
+            assert h(state, inst) <= weights.scalar(cost, inst.fluids) + h(nxt, inst)

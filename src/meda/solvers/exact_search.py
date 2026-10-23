@@ -39,7 +39,7 @@ from dataclasses import dataclass
 from typing import Literal
 
 from meda.core.actions import Action
-from meda.core.composition import ZERO, Rational
+from meda.core.composition import ZERO, Composition, Rational, linf_distance
 from meda.core.costs import CostWeights
 from meda.core.dag import MixingDAG
 from meda.core.problem import Instance
@@ -58,37 +58,67 @@ def zero_heuristic(state: PrepState, instance: Instance) -> Rational:
 
 
 def fluid_bound_heuristic(weights: CostWeights) -> Heuristic:
-    """Admissible lower bound from conservation of each fluid.
+    """Admissible and consistent lower bound on the cost to finish, from conservation laws
+    (SPEC 10.2). Three terms, each a lower bound on its own part of the cost:
 
-    Every droplet still to be delivered for target t holds exactly
-    `droplet_volume * composition[f]` units of fluid f, and that fluid can only come from what is
-    already on chip or from new reservoir draws. So future draws of fluid f are at least
-    `needed[f] - on_chip[f]`, and the remaining cost is at least the weighted sum of those.
-    Mix and waste costs are ignored, which only makes the bound smaller (so it stays admissible).
-    """
+    1. **Fluid draws.** A droplet delivered to target t holds at least
+       `droplet_volume * max(0, composition[f] - tolerance)` units of fluid f (the L-inf
+       tolerance lets each share fall that far), and fluid f comes only from what is on chip or
+       from new reservoir draws, which are whole units. So future draws of f are at least
+       `D[f] = ceil(needed[f] - on_chip[f])` (and at least 0).
+    2. **Waste.** Every unit on chip or drawn later is delivered or wasted (leftovers go to
+       waste at the end), so future waste is at least `on_chip_volume + sum(D) - to_deliver`.
+    3. **Mixes.** A unit delivered to a target that no pure reservoir fluid satisfies comes from
+       a droplet already on chip or from the product of a future mix, which holds at most M units.
+       So future mixes are at least `ceil((that volume - on_chip_volume) / M)`.
+
+    Every action changes the bound by at most its own cost, so the bound is consistent: a
+    reservoir draw of k units lowers term 1 by exactly its fluid cost (whole-unit shifts commute
+    with the ceiling) and leaves term 2 unchanged or raises it; one mix lowers term 3 by at most
+    one mix; an output or a discard never lowers terms 1 and 3, and a discard lowers term 2 by at
+    most its waste. Before 0.21 the bound used the exact target shares and fractional draws,
+    which overstates the need of tolerant targets (it could exceed the optimum)."""
 
     def heuristic(state: PrepState, instance: Instance) -> Rational:
         num_fluids = instance.num_fluids
         needed = [ZERO] * num_fluids
+        to_deliver = 0
+        to_mix = 0  # volume to deliver to targets no pure fluid satisfies
+        pure = [Composition.pure(f, num_fluids) for f in range(num_fluids)]
         for target, remaining in zip(instance.targets, state.remaining_demand, strict=True):
             if not remaining:
                 continue
             units = remaining * target.droplet_volume
+            to_deliver += units
+            if all(linf_distance(p, target.composition) > target.tolerance for p in pure):
+                to_mix += units
+            tol = target.tolerance
             for f in range(num_fluids):
-                if target.composition.num[f]:
-                    needed[f] = needed[f] + Rational.of(
-                        units * target.composition.num[f], target.composition.den
-                    )
+                share = Rational.of(target.composition.num[f], target.composition.den) - tol
+                if share > 0:
+                    needed[f] = needed[f] + share * units
+        on_chip = 0
         for droplet in state.droplets:
+            on_chip += droplet.volume
             for f in range(num_fluids):
                 if droplet.composition.num[f]:
                     needed[f] = needed[f] - Rational.of(
                         droplet.volume * droplet.composition.num[f], droplet.composition.den
                     )
         total = ZERO
+        drawn = 0
         for fluid, short in zip(instance.fluids, needed, strict=True):
             if short > 0:
-                total = total + weights.fluid_weight(fluid.kind) * short
+                units_drawn = -(-short.num // short.den)  # whole reservoir units
+                drawn += units_drawn
+                total = total + weights.fluid_weight(fluid.kind) * units_drawn
+        waste = on_chip + drawn - to_deliver
+        if waste > 0:
+            total = total + weights.w_waste * waste
+        mix_volume = to_mix - on_chip
+        if mix_volume > 0:
+            m = instance.chip.max_mix_volume
+            total = total + weights.w_mix * (-(-mix_volume // m))
         return total
 
     return heuristic
