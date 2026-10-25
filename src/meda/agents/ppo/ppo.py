@@ -309,7 +309,7 @@ class PPOTrainer:
                 self.optimizer.zero_grad()
                 totals = dict.fromkeys(sums, 0.0)
                 clip_count = 0.0
-                for chunk in _chunks(mb, widths, cfg.max_chunk_rows):
+                for chunk in chunk_by_width(mb, widths, cfg.max_chunk_rows):
                     share = len(chunk) / len(mb)
                     t = batch_obs(buf.minibatch_obs(chunk), self.device)
                     logits, new_values = self.net(t)
@@ -382,7 +382,7 @@ class PPOTrainer:
         }
 
 
-def _chunks(
+def chunk_by_width(
     mb: npt.NDArray[np.int64], widths: npt.NDArray[np.int64], max_rows: int
 ) -> list[npt.NDArray[np.int64]]:
     """`mb` split into chunks, sorted by candidate width, each holding at most `max_rows`

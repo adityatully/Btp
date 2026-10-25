@@ -1784,13 +1784,14 @@ iteration's time went: `seconds_env` (waiting for the env workers; with `workers
 rollouts including their policy passes), `seconds_policy` (the rest of collection: policy
 forward, copies) and `seconds_update` (the PPO update).
 
-**Imitation warm start (planned, 0.23; paper log D-30, D-31).** *Status: copy test being
-built; not part of training yet.* Random play almost never finishes a stage 1–2 problem
+**Imitation warm start (planned, 0.23; paper log D-30, D-31).** *Status: copy test built
+(`ppo/imitation.py`, `scripts/imitation_check.py`); not part of training yet.* Random play almost never finishes a stage 1–2 problem
 (E-11), so PPO has no successes to learn from. The teacher is `cheapest_construction` (10.3),
 which solves every generated problem. It is used only where it is near-optimal: single targets
 with loose storage (stages 1–2; median headroom 0% on proved optima). On many targets and
 tight storage it is 50–135% above the optimum (no sharing), so stages 3–5 are not imitated by
-default. Steps: (1) copy test: train the network alone by cross-entropy on the teacher's
+default. Demonstrations match the teacher's actions to candidates up to the operand order of a
+mix (5.5). Steps: (1) copy test: train the network alone by cross-entropy on the teacher's
 candidate index at every step of its plan, on fresh generator problems (validation problems
 excluded); report move agreement on held-out states and greedy success and gap on `val_s1_v2`
 and `val_s2_v2`; (2) PPO from those weights, with the imitation term's weight decayed to 0, so

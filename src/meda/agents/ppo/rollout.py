@@ -64,6 +64,27 @@ def split_obs(obs: Mapping[str, npt.NDArray[Any]]) -> list[dict[str, npt.NDArray
     ]
 
 
+def pad_obs(chosen: list[dict[str, npt.NDArray[Any]]]) -> dict[str, npt.NDArray[Any]]:
+    """Trimmed observations ([1, ...] each) as one batch [len(chosen), ...], each token axis
+    padded to the widest of them."""
+    # Stored observations are trimmed to their own widths, so a width is an array shape.
+    widths = {axis: max(o[mask].shape[1] for o in chosen) for axis, mask in AXIS_MASKS.items()}
+    out: dict[str, npt.NDArray[Any]] = {}
+    for key, first in chosen[0].items():
+        shape = [len(chosen), *first.shape[1:]]
+        for dim, axis in KEY_AXES[key]:
+            shape[dim] = widths[axis]
+        # One preallocated array per key and a slice copy per observation (np.pad per
+        # observation and key was most of an update's time).
+        batch = np.full(shape, PAD_FILL.get(key, 0), dtype=first.dtype)
+        for row, o in enumerate(chosen):
+            a = o[key]
+            where: tuple[int | slice, ...] = (row, *(slice(0, n) for n in a.shape[1:]))
+            batch[where] = a[0]
+        out[key] = batch
+    return out
+
+
 class RolloutBuffer:
     """One rollout of `num_envs` envs: per-step observations and the PPO quantities."""
 
@@ -104,23 +125,7 @@ class RolloutBuffer:
         each token axis padded to the widest of them."""
         if self.steps_added != self.num_steps:
             raise ValueError(f"rollout has {self.steps_added} of {self.num_steps} steps")
-        chosen = [self.obs[int(i)] for i in index]
-        # Stored observations are trimmed to their own widths, so a width is an array shape.
-        widths = {axis: max(o[mask].shape[1] for o in chosen) for axis, mask in AXIS_MASKS.items()}
-        out: dict[str, npt.NDArray[Any]] = {}
-        for key, first in chosen[0].items():
-            shape = [len(chosen), *first.shape[1:]]
-            for dim, axis in KEY_AXES[key]:
-                shape[dim] = widths[axis]
-            # One preallocated array per key and a slice copy per observation (np.pad per
-            # observation and key was most of an update's time).
-            batch = np.full(shape, PAD_FILL.get(key, 0), dtype=first.dtype)
-            for row, o in enumerate(chosen):
-                a = o[key]
-                where: tuple[int | slice, ...] = (row, *(slice(0, n) for n in a.shape[1:]))
-                batch[where] = a[0]
-            out[key] = batch
-        return out
+        return pad_obs([self.obs[int(i)] for i in index])
 
     def candidate_widths(self) -> npt.NDArray[np.int64]:
         """Each stored observation's candidate row count (its trimmed width)."""
