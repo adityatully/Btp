@@ -132,6 +132,7 @@ pointless"). The case for learning:
 | 2026-10-25 | Teacher study: sharing pass reaches the proved optimum on 51 of 65 (construction 34), never dearer; much closer to the bound on stages 3–5. | E-17, SPEC 0.24 |
 | 2026-10-25 | Sharing pass from mid-episode states: always finishes, 4–9 ms (s4 1.8 s); the current penalty charges 2–25× the real cost to finish (no credit for intermediates). | E-18 |
 | 2026-10-26 | Finish-from-here planner as penalty, hint columns and teacher (SPEC 0.25). Cheap moves + finish beat the teacher on 7/40 s1 problems (168 vs 475). | D-32, E-19 |
+| 2026-10-26 | Copy test with hints + sharing teacher: s1 greedy 95% (70% before the last epoch), s2 72.5% (was 0%), 12 / 6 plans cheaper than best known. Step 1 passes. | E-20 |
 
 ---
 
@@ -675,6 +676,30 @@ sharing pass, the construction and the best known.
   known plan (247 = 89 + 2 × 79 here), so the D-26 test bar no longer applies; replaced per
   D-32. (3) A better best-known for `val_s1_v2` is cheap to get (greedy start + finish); the
   answer keys are unchanged for now.
+
+### E-20 (2026-10-26) Copy test with hints and the sharing teacher: passes the bar
+Commits `333de6b`, `b2bb9ea` (SPEC 0.25), `scripts/imitation_check.py problems=1000 epochs=20
+eval_every=5`, seed 0, Mac one core, 17 min. Same setup as E-15 run 2 except: hint columns
+(D_cand 27), teacher = sharing pass (mean gap to best known −13.3% on val_s1, −2.9% on val_s2),
+`share` penalty in the eval env. "Mix agreement" = agreement on the teacher's Mix steps only.
+
+| | E-15 run 2 (no hints, construction teacher) | E-20 |
+|---|---|---|
+| train agreement | 0.64 (30 epochs) | **0.93** |
+| s1 mix agreement (unseen) | ~0.20–0.23 first mix (E-16) | 0.63–0.74 (all mixes) |
+| s2 mix agreement (unseen) | ~0.06–0.10 first mix | **0.87–0.92** |
+| s1 greedy success | 22–35% | 70% / 70% / 67.5% / **95%** (epochs 5/10/15/20) |
+| s2 greedy success | 0–2.5% | 37.5% / 67.5% / 67.5% / **72.5%** |
+| plans cheaper than best known (s1 / s2, epoch 20) | 0 / 0–1 | **12 / 6** |
+
+Mean gap on successes at epoch 20: s1 +4.6%, s2 −3.4% (to the old best known).
+- **Reading.** The hints were the missing information: on mixtures, agreement went from
+  about 1 in 10 to 9 in 10 and greedy success from 0 to 72.5%. The D-31 pass bar (s1 ≥ 90%, s2
+  well above 0) is met at epoch 20. **Caveat:** s1 success sat at 67.5–70% for epochs 5–15 and
+  jumped to 95% only at the last grading, with s1 mix agreement flat at ~0.70; on 40 problems
+  one grading is noisy, so s1 is borderline, not settled. The s1 misses are likely where the
+  teacher itself is not unique or not best (E-19). Next: warm start + PPO (step 2), which can
+  also fix what imitation leaves.
 
 ---
 
