@@ -127,6 +127,7 @@ pointless"). The case for learning:
 | 2026-10-25 | Greedy "get closer" policy solves 20% of s1, 0% of s2: the agent sees the distance but lacks the algorithm. | E-14 |
 | 2026-10-25 | Teacher used only where near-optimal (stages 1–2); imitation fades so RL can override; copy test first. | D-31, SPEC 0.23 |
 | 2026-10-25 | Imitation copy test: agreement plateaus at 64% (train), s1 greedy 22–35%, s2 ~0%; misses are mix ratios (number theory the network cannot see). | E-15, `903802c` |
+| 2026-10-25 | Pilot 2 final (9.83M): expanding best (s1 38–42%), s2 0% in every run; no regime chosen. | E-10 |
 
 ---
 
@@ -384,6 +385,15 @@ Same 6 runs with D-26–D-28 and `_v2` sets; launched 2026-10-24 ~22:47 IST.
 - Reading: s3 ≈ 40–50% on its dilution half + 0% on its mixture half. Regime order does not
   matter yet; both walls are about learnability.
 - **To do:** final 10M numbers and per-instance `results.parquet` not yet inspected.
+- **Final (added 2026-10-25), last common validation round 9,830,400 steps** (`regime_report.py
+  outputs/pilot`; all runs ended, tmux gone). Success s1 / s2 / s3 per seed (s0, s1):
+  expanding 38/0/18 and 42/0/25; mixed 0/0/0 and 18/0/8; sequential 15/0/2 and 32/0/18.
+  Mean gap on solved problems −0.07 to −0.24 (cheaper than the construction where it
+  finishes). Max forgetting: expanding 8.75%, mixed 3.75%, sequential 5%. Decision rule: no
+  regime reaches 95% on every stage, none chosen. Expanding is the best of the three on both
+  seeds, but no stage-2 problem was ever solved by any run; mixed seed 0 learnt nothing in 10M
+  steps. The regime question stays open until stages 1–2 are learnable (E-11, E-14, E-15).
+  Per-instance `results.parquet` still not inspected.
 
 ### E-11 (2026-10-25) Random-play diagnosis
 30 random episodes × 40 validation problems per stage, one core.
