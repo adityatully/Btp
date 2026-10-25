@@ -1,12 +1,14 @@
 """Imitation-only copy test (SPEC 11.4, *Imitation warm start*; paper log D-31). No RL.
 
-Can the PPO network copy the teacher (`cheapest_construction`) on problems it has not seen?
+Can the PPO network copy the teacher (`teacher=share`, the sharing pass, or
+`teacher=construction`) on problems it has not seen?
 Demonstrations come from fresh stage 1-2 problems of the stage design (never a validation or
 held-out problem); the network is trained by cross-entropy on the teacher's candidate index.
 Each round reports, per stage: move agreement and loss on the validation problems' teacher
 steps (unseen states), and the greedy policy's success and gap to best known on `val_s1_v2` and
-`val_s2_v2`. Best known there is the teacher's own cost, so a perfect copy scores 100% success
-at gap 0.
+`val_s2_v2`. Best known there is `cheapest_construction`'s cost; the sharing pass is often
+cheaper, so a perfect copy of it scores 100% success at a gap at or below 0 (the teacher's own
+gap is printed for reference).
 
 Usage:
     uv run python scripts/imitation_check.py problems=2000 epochs=20 out=outputs/imitation/s12
@@ -27,14 +29,15 @@ import numpy as np
 import torch
 from omegaconf import OmegaConf
 
-from meda.agents.ppo.imitation import Demonstrations, imitation_loss
+from meda.agents.ppo.imitation import TEACHERS, Demonstrations, imitation_loss
 from meda.agents.ppo.networks import SetEncoderNet
-from meda.agents.ppo.policy import PPOAgent, batch_obs
+from meda.agents.ppo.policy import PPOAgent, batch_obs, masked_distribution
 from meda.agents.ppo.ppo import PPOConfig, chunk_by_width
 from meda.analysis.dag_metrics import ScheduleConfig
 from meda.analysis.evaluate import AgentProducer, build_env, evaluate
 from meda.core.chip import ChipLimits
 from meda.core.costs import CostWeights
+from meda.envs.encoding import OP_MIX
 from meda.generators.benchmark_io import BenchmarkSet
 from meda.generators.stages import StageDesign
 from meda.utils.seeding import seed_everything
@@ -52,6 +55,7 @@ DEFAULTS: dict[str, Any] = {
     "device": "cpu",
     "threads": 1,
     "out": "outputs/imitation/run",
+    "teacher": "share",
 }
 
 
@@ -92,13 +96,18 @@ def main(argv: list[str]) -> None:
     started = time.perf_counter()
     rng = np.random.default_rng(args["seed"])
     env = build_env(cfg, [], source)
+    teacher = TEACHERS[args["teacher"]]
     train = Demonstrations()
     for _ in range(args["problems"]):
-        train.add_episode(env, source(rng), weights)
+        train.add_episode(env, source(rng), weights, teacher)
     val = {name: Demonstrations() for name in val_sets}
     for name, bench in val_sets.items():
+        gaps = []
         for inst in bench.instances:
-            val[name].add_episode(env, inst, weights)
+            cost = val[name].add_episode(env, inst, weights, teacher)
+            best = bench.reference[inst.instance_id].cost
+            gaps.append(float(cost) / float(best) - 1)
+        print(f"teacher '{args['teacher']}' on {name}: mean gap to best known {np.mean(gaps):+.3f}")
     widths = train.candidate_widths()
     print(
         f"{len(train)} teacher steps from {train.episodes} problems "
@@ -115,17 +124,31 @@ def main(argv: list[str]) -> None:
     order = np.arange(len(train))
 
     def score(demos: Demonstrations) -> dict[str, float]:
+        """Loss and agreement on all teacher steps, and agreement on the Mix steps alone
+        (Output and Discard steps are nearly always right and flatter the total, E-16)."""
         net.eval()
-        loss = agree = 0.0
+        loss = agree = mix_agree = 0.0
+        mixes = 0
         index = np.arange(len(demos))
         with torch.no_grad():
             for chunk in chunk_by_width(index, demos.candidate_widths(), args["max_chunk_rows"]):
                 obs, actions = demos.minibatch(chunk)
                 t = batch_obs(obs, device)
-                lo, ag = imitation_loss(net, t, torch.as_tensor(actions, device=device))
+                a = torch.as_tensor(actions, device=device)
+                lo, ag = imitation_loss(net, t, a)
                 loss += lo.item() * len(chunk)
                 agree += ag.item() * len(chunk)
-        return {"loss": loss / len(demos), "agree": agree / len(demos)}
+                logits, _ = net(t)
+                top = masked_distribution(logits, t["action_mask"]).probs.argmax(-1)
+                rows = torch.arange(len(chunk), device=device)
+                is_mix = t["candidates"][rows, a, OP_MIX] == 1
+                mixes += int(is_mix.sum())
+                mix_agree += float(((top == a) & is_mix).sum())
+        return {
+            "loss": loss / len(demos),
+            "agree": agree / len(demos),
+            "mix_agree": mix_agree / max(mixes, 1),
+        }
 
     with (out / "metrics.jsonl").open("w") as log:
         for epoch in range(1, args["epochs"] + 1):

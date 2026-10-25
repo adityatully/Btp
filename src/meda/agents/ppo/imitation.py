@@ -1,11 +1,13 @@
 """Imitation of a constructive teacher: demonstrations and the cross-entropy loss (SPEC 11.4,
 *Imitation warm start*; paper log D-30, D-31).
 
-The teacher is `cheapest_construction` (SPEC 10.3). A demonstration is its plan played through
-the env: at every step the observation and the index of the teacher's action in the env's
-candidate list. The network learns to put its probability on that index (behaviour cloning);
-nothing here changes the env, its reward or the action space, so the same network continues
-under PPO afterwards.
+The teacher is a plan producer: the sharing pass (`share_plan`, SPEC 10.4; never dearer than
+`cheapest_construction`, at the proved optimum on 51 of 65 small problems, E-17) by default, or
+`cheapest_construction` (SPEC 10.3). A demonstration is its plan played through the env: at
+every step the observation and the index of the teacher's action in the env's candidate list.
+The network learns to put its probability on that index (behaviour cloning); nothing here
+changes the env, its reward or the action space, so the same network continues under PPO
+afterwards.
 
 The candidate list lists each mix once, with its operands in the env's order, while a
 construction may write the same mix the other way round (`Mix(a, k, b, l)` is
@@ -15,7 +17,7 @@ trimmed, as in the rollout buffer, and padded per minibatch.
 
 from __future__ import annotations
 
-from collections.abc import Sequence
+from collections.abc import Callable, Sequence
 from dataclasses import dataclass, field
 from typing import Any
 
@@ -27,10 +29,22 @@ from meda.agents.ppo.networks import SetEncoderNet, TensorObs
 from meda.agents.ppo.policy import masked_distribution
 from meda.agents.ppo.rollout import pad_obs, split_obs
 from meda.core.actions import Action, Mix
+from meda.core.composition import Rational
 from meda.core.costs import CostWeights
 from meda.core.problem import Instance
 from meda.envs.sample_prep_env import SamplePrepEnv
+from meda.solvers.baselines.share import share_plan
 from meda.solvers.fallback import cheapest_construction
+
+Teacher = Callable[[Instance, CostWeights], tuple[Action, ...] | None]
+
+
+def construction_teacher(instance: Instance, weights: CostWeights) -> tuple[Action, ...] | None:
+    found = cheapest_construction(instance, weights)
+    return None if found is None else found[0]
+
+
+TEACHERS: dict[str, Teacher] = {"share": share_plan, "construction": construction_teacher}
 
 
 def teacher_index(legal: Sequence[Action], action: Action, instance_id: str) -> int:
@@ -53,14 +67,21 @@ class Demonstrations:
     def __len__(self) -> int:
         return len(self.actions)
 
-    def add_episode(self, env: SamplePrepEnv, instance: Instance, weights: CostWeights) -> None:
-        """Play the teacher's plan for `instance` through `env`, recording every step."""
-        found = cheapest_construction(instance, weights)
-        if found is None:
-            raise ValueError(f"instance '{instance.instance_id}': no construction builds it")
+    def add_episode(
+        self,
+        env: SamplePrepEnv,
+        instance: Instance,
+        weights: CostWeights,
+        teacher: Teacher = share_plan,
+    ) -> Rational:
+        """Play the teacher's plan for `instance` through `env`, recording every step; returns
+        the plan's exact cost."""
+        plan = teacher(instance, weights)
+        if plan is None:
+            raise ValueError(f"instance '{instance.instance_id}': the teacher found no plan")
         obs, _ = env.reset(options={"instance": instance})
         info: dict[str, Any] = {}
-        for action in found[0]:
+        for action in plan:
             index = teacher_index(env.legal, action, instance.instance_id)
             self.obs.extend(split_obs({k: v[None] for k, v in obs.items()}))
             self.actions.append(index)
@@ -71,6 +92,8 @@ class Demonstrations:
                 f"{info.get('status')} in the env (step limit {instance.step_limit})"
             )
         self.episodes += 1
+        cost: Rational = info["plan_cost"]
+        return cost
 
     def minibatch(self, index: npt.NDArray[np.int64]) -> tuple[dict[str, Any], npt.NDArray[Any]]:
         """Padded observations and teacher indices at `index`."""
