@@ -1,6 +1,14 @@
 # MEDA Design Automation — Codebase Specification
 
-Version 0.23 · 2026-10-25
+Version 0.24 · 2026-10-25
+
+Changes in 0.24 (teacher study, paper log E-15): a new baseline, the **sharing pass**
+(`baselines/share.py`, 10.4), builds the targets on one chip, keeps leftovers in a pool and
+reuses them across targets; it is never dearer than `cheapest_construction` and reaches the
+proved optimum on 51 of 65 small problems (the construction: 34). `PlanBuilder` gains
+`reuse(composition, need)` (10.1), which returns None, so the constructions are unchanged; the
+split tree asks it before building each piece. `cheapest_construction`, the failure penalty
+and the stored answer keys are unchanged.
 
 Changes in 0.23 (training approach; from the pilot 2 diagnosis, paper log E-11, E-14, D-30,
 D-31): an imitation warm start is planned (11.4, *Imitation warm start*): the network first
@@ -441,6 +449,8 @@ meda-da/
 │   │   ├── fallback.py        # cheap cost-to-finish estimate (truncation penalty)
 │   │   └── baselines/
 │   │       ├── naive.py       # each target built independently
+│   │       ├── tree.py        # split tree: every reachable target, any number of fluids
+│   │       ├── share.py       # sharing pass: the constructions plus reuse across targets
 │   │       ├── bitscan.py     # 1:1 binary dilution (DMFB classic)
 │   │       └── facda.py       # factorisation-based MEDA dilution (from the paper)
 │   ├── agents/
@@ -1397,6 +1407,7 @@ class Solver(Protocol):
 
 class PlanBuilder:   # shared by the solvers and by the generators' feasibility witnesses
     """Emits a plan through `core.rules.apply`, so every plan is legal by construction."""
+    def reuse(self, composition, need) -> Source | None: ...  # None; the sharing pass overrides
 # SolveResult: instance_id, producer, status, dag: MixingDAG | None, totals: StepCost | None,
 #   cost: Rational | None (exact plan cost, no penalty), wall_time, nodes_expanded,
 #   lower_bound: Rational | None (a proved bound on the optimum when exact search times out; 10.2)
@@ -1553,8 +1564,27 @@ serves as tabular Q's value prior (11.3).
   (Kundu et al. vs Bhattacharjee et al.), and the paper's reported results must be transcribed
   into `literature_v1` so the reproduction test has something to compare against. A
   plausible-looking approximation would produce numbers nobody has checked.
+- `share.py` (0.24): the **sharing pass**. The targets are built one delivery group at a time
+  on one chip; every leftover stays in a pool of idle droplets instead of going to waste. Per
+  group it prices, on a copy of the plan, (1) a pool droplet within tolerance, (2) one mix of
+  a pool droplet with a reservoir or another pool droplet, (3) the cheapest **chain** of up to
+  `CHAIN_DEPTH` = 3 mixes worked back from the target with `dilute_up_input`, each step adding
+  a fluid or one of the `BLEND_PARTNERS` = 4 idle droplets nearest the target, down to a pure
+  fluid or a pool droplet, and (4) the split tree from scratch, taking any piece already in the
+  pool (`PlanBuilder.reuse`); it keeps the least marginal cost per delivery. When a mix needs
+  room, the idle droplet furthest from every open target goes to waste first, so a recipe that
+  fits an empty chip still fits. Four target orders (given, dearest first, cheapest first,
+  nearest neighbour) are run and the cheapest plan is kept, never one dearer than
+  `cheapest_construction`. `lookahead = k` rolls each group's k cheapest candidates out to the
+  end (pilot method; about k × groups slower, a workstation option). The chain also finds
+  cheaper single-target recipes under tight storage (3/4 at volume 2 on M = 6 through 1/2: 132
+  against the tree's 196). Measured in paper log E-15: at the proved optimum on 51 of 65 small
+  problems, within 1.02 (median) of the lower bound on the medium multi-target dilutions;
+  median 0.04 s, at most 34 s per problem on one core.
 - Further published methods (multi-target MEDA mixing, demand-driven mixture preparation) are
-  added later behind the same interface, each with a reproduction test.
+  added later behind the same interface, each with a reproduction test. The sharing pass is
+  not one of them: "WSPM incremental" (one droplet per target, leftovers reused in sequence)
+  is its nearest relative, but no published method is claimed for it.
 
 ---
 
