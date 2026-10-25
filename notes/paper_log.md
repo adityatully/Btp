@@ -131,6 +131,7 @@ pointless"). The case for learning:
 | 2026-10-25 | Network gets the first mix right 24% (s1) / 6% (s2) even on trained problems; an exact 'mixes left' feature lifts s1 greedy 25% → 67.5%. | E-16 |
 | 2026-10-25 | Teacher study: sharing pass reaches the proved optimum on 51 of 65 (construction 34), never dearer; much closer to the bound on stages 3–5. | E-17, SPEC 0.24 |
 | 2026-10-25 | Sharing pass from mid-episode states: always finishes, 4–9 ms (s4 1.8 s); the current penalty charges 2–25× the real cost to finish (no credit for intermediates). | E-18 |
+| 2026-10-26 | Finish-from-here planner as penalty, hint columns and teacher (SPEC 0.25). Cheap moves + finish beat the teacher on 7/40 s1 problems (168 vs 475). | D-32, E-19 |
 
 ---
 
@@ -273,6 +274,22 @@ Format: date · decision · alternatives considered · why · evidence.
   construction on every stage (rejected: teaches the no-sharing habit the agent must later
   unlearn); exact optima as demonstrations (only small problems are provable, E-5). SPEC 0.23
   §11.4.
+
+- **D-32 (2026-10-26) Finish from here: one planner for the penalty, the hints and the
+  teacher** (user, after E-16–E-18; SPEC 0.25). The missing fact in E-15/E-16 and in the
+  penalty is the same: from this state, using the droplets on chip, what does finishing cost?
+  (1) **Penalty** `cost_to_finish: share` = the cheaper of the sharing pass started from the
+  state (`finish_from`) and the rebuild; factor 2 kept. (2) **Hint columns** (10 of D_cand
+  27): fewest mixes from each Mix result to an open target along the tree's and the sharing
+  pass's recipe, and along a depth-2 pure-fluid chain. Not the whole planner per candidate:
+  4 ms × hundreds of candidates per step is too slow (E-18). (3) **Teacher** = the sharing pass
+  (never dearer than the construction, E-17). Alts: MCTS straight away (needs the same
+  leaf value and a prior that the network does not have yet, so it comes after); more data or
+  a bigger network (E-15: 3.3× data, +9 points). **Changed guarantee:** the D-26 test bar
+  ("failing costs ≥ 1.8× best known") assumed a penalty that ignores progress; it is kept for
+  `construction` and replaced for `share` by a per-state one (the charge is the factor times a
+  completion that replays from the final state), because an accurate penalty rightly charges
+  little for a failed episode whose moves were good (E-19).
 
 ---
 
@@ -640,6 +657,24 @@ along the teacher's plan, first 15 problems of each val set. Mac, one core, `nic
   tolerable on s4 (1.8 s median, many targets). Once per candidate (200–800 per step) is not:
   even 4 ms × 200 is 0.8 s per step against ~200 steps/s in training. A per-candidate feature
   must use the pass's cheap parts (direct, one mix, chain), not the whole pass.
+
+### E-19 (2026-10-26) Cheap moves plus a finish beat the teacher on some stage 1 problems
+Scratch probes `penalty_factor.py`, `penalty_debug.py` (session scratchpad), SPEC 0.25 code. The
+"cheapest failure" of `tests/envs/test_failure_penalty.py` (every step the cheapest legal move
+that does not finish, until truncation), then the planner's finish from the final state
+(`finish_from`), is a real plan. Its cost against the sharing pass's plan: **val_s1_v2 cheaper on
+7/40** (ratio min 0.35, median 1.07); val_s2_v2 0/40 (min 1.04); val_s3_v2 3/40 (min 0.59).
+Example `val_s1-008` (101/240 S, M = 6, step limit 22): 89 for the cheap moves (ending with 1/4
+S ×2, 23/96 ×1, 25/96 ×1 on chip) + 79 for a 4-move finish = **168**, against 475 for the
+sharing pass, the construction and the best known.
+- **Reading.** (1) The teacher is not an expert on every stage 1 problem: on large
+  denominators it spends sample units a cheap, buffer-heavy start avoids (sample costs 64 vs
+  buffer 1). E-5's "~0% headroom on stage 1" holds on small provable problems, not on all of
+  `val_s1_v2` (bound ratio median 1.52, E-17). Imitation must stay a warm start that RL can
+  leave (D-31 (2)). (2) Under the `share` penalty a failed episode can cost less than the best
+  known plan (247 = 89 + 2 × 79 here), so the D-26 test bar no longer applies; replaced per
+  D-32. (3) A better best-known for `val_s1_v2` is cheap to get (greedy start + finish); the
+  answer keys are unchanged for now.
 
 ---
 
