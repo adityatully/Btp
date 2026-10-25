@@ -9,7 +9,7 @@ from dataclasses import dataclass
 from typing import Literal, Protocol
 
 from meda.core.actions import Action, Discard, Mix, Source
-from meda.core.composition import Rational
+from meda.core.composition import Composition, Rational
 from meda.core.costs import StepCost
 from meda.core.dag import MixingDAG
 from meda.core.problem import Instance
@@ -85,6 +85,12 @@ class PlanBuilder:
         """Send the droplet to waste if any of it is still on chip."""
         if self.state.has_droplet(uid):
             self.do(Discard(uid))
+
+    def reuse(self, composition: Composition, need: int) -> Source | None:
+        """A droplet already on chip to use instead of building `need` units of `composition`.
+        None here: the constructions build everything from the reservoirs. The sharing pass
+        (`baselines.share`) overrides it."""
+        return None
 
     def plan(self) -> tuple[Action, ...]:
         return tuple(self.actions)

@@ -293,9 +293,12 @@ def build(b: PlanBuilder, comp: Composition, need: int) -> Source | None:
 
 def _emit(b: PlanBuilder, search: _Search, key: _Key) -> Source:
     """Emit the recipe the search found for `key` (every sub-recipe it used is in the memo)."""
-    comp, _need, cap, extra, blend = key
+    comp, need, cap, extra, blend = key
     if comp.den == 1:
         return Source.reservoir(comp.num.index(1))
+    reused = b.reuse(comp, need)
+    if reused is not None:
+        return reused
     found = search.memo[key]
     assert found is not None and found.step is not None
     kind, x, y, z = found.step
