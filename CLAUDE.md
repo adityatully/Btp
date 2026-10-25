@@ -12,6 +12,9 @@ sample-preparation agent. **`SPEC.md` is the source of truth. Read sections 1–
   update `SPEC.md` in the same change and say so.
 - Ask before adding a dependency not listed in SPEC section 3.
 - Do not add features, options or files the current milestone does not need.
+- Keep `notes/paper_log.md` current: the same day a decision is made, an experiment or run
+  reports numbers, or a bug changes behaviour or results, add a dated entry there with its
+  evidence (commit, SPEC version, file, run folder) and the numbers. Read its rules at the top.
 
 ## Non-negotiable rules (SPEC section 2)
 1. The environment computes all arithmetic exactly; networks only score candidates.
