@@ -128,6 +128,7 @@ pointless"). The case for learning:
 | 2026-10-25 | Teacher used only where near-optimal (stages 1–2); imitation fades so RL can override; copy test first. | D-31, SPEC 0.23 |
 | 2026-10-25 | Imitation copy test: agreement plateaus at 64% (train), s1 greedy 22–35%, s2 ~0%; misses are mix ratios (number theory the network cannot see). | E-15, `903802c` |
 | 2026-10-25 | Pilot 2 final (9.83M): expanding best (s1 38–42%), s2 0% in every run; no regime chosen. | E-10 |
+| 2026-10-25 | Network gets the first mix right 24% (s1) / 6% (s2) even on trained problems; an exact 'mixes left' feature lifts s1 greedy 25% → 67.5%. | E-16 |
 
 ---
 
@@ -495,6 +496,41 @@ same sets; best known there = the teacher's cost, so gap < 0 means cheaper than 
   features the env computes (rule 1), such as whether the result's denominator divides each
   target's, or the construction's remaining mix count from the result to each target; a
   larger network or longer training (unlikely to suffice given the plateau).
+
+### E-16 (2026-10-25) Why the copy test fails: checks A and B (stage 1–2, Mac, one core)
+Scratch probes (not product code): `check_a.py`, `mixes_left.py`, `check_b_measure.py`,
+`check_b_train.py` in the session scratchpad; network of E-15 run 2 for check A.
+- **Check A, agreement by move kind** (top-1; unseen val / trained-on problems): s1 first mix
+  **0.23 / 0.24**, later mixes 0.57 / 0.53; s2 first mix **0.10 / 0.06**, later mixes 0.37 /
+  0.43; Output and Discard 0.99–1.00. The 64% of E-15 is flattered by trivial moves, and
+  trained-on problems score no better than unseen ones: the network cannot learn the first
+  intermediate even from examples it has seen. Top-3 first mix: s1 0.40, s2 0.23.
+- **Check A, greedy episodes vs the teacher:** s1: copied exactly 6, diverged and failed 31,
+  diverged and finished dearer 3, ties 0, cheaper 0; s2: diverged and failed 40. The first
+  divergence is at step 0 in 31/40 (s1) and 36/40 (s2). Disagreements are mistakes, not ties.
+- **Check B, the feature.** "Mixes left" = the fewest further mixes, each adding one pure
+  fluid (k + l ≤ M), from a candidate's result to the teacher's aim for an open target
+  (`tree.aim`), exact rationals, depth ≤ 5, volumes ignored. On the val teacher steps: s1, the
+  teacher's mix has the smallest mixes-left in 96/119 states (unique in 40; median 2 tied);
+  the network's wrong picks are mostly 2–4 mixes left. s2: the teacher's mix is not a chain
+  (> 5 or a blend of pieces) in 176/325 states, so this feature cannot describe mixtures.
+- **Check B, stage 1 copy test with vs without the feature** (same 1,000 problems, 5,900
+  steps, seed, net and schedule; 20 epochs; feature as a 7-column one-hot appended to the
+  candidate row):
+
+  | | train agree | first mix | later mix | greedy s1 success | cheaper / same cost as teacher |
+  |---|---|---|---|---|---|
+  | without | 0.68 | 0.20 | 0.51 | **25%** | 0 / 5 |
+  | with | 0.74 | 0.45 | 0.63 | **67.5%** | 7 / 13 |
+
+  Success with the feature is 65% already at epoch 5. 7–10 of its plans are cheaper than the
+  teacher's (it is not just copying).
+- **Reading.** Missing exact information is the main cause: one crude, chain-only,
+  volume-blind number takes s1 greedy success from 25% to 67.5%, more than PPO ever reached
+  (42%, E-10). It is not the whole fix: first-mix agreement is still 45% and success is below
+  the 90% bar; the feature ignores volumes and blends, and many candidates tie. Next: a
+  feature that is volume-aware and covers blends (mixtures), e.g. the construction's own
+  remaining mixes or cost from each candidate's result.
 
 ---
 
