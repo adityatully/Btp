@@ -1,6 +1,12 @@
 # MEDA Design Automation — Codebase Specification
 
-Version 0.22 · 2026-10-23
+Version 0.23 · 2026-10-25
+
+Changes in 0.23 (training approach; from the pilot 2 diagnosis, paper log E-11, E-14, D-30,
+D-31): an imitation warm start is planned (11.4, *Imitation warm start*): the network first
+copies `cheapest_construction` on stages 1–2 only, where it is near-optimal, and the imitation
+term then fades to 0 under PPO so RL can override the teacher. An imitation-only copy test
+comes first. No interface changes yet.
 
 Changes in 0.22 (training signal; found by the 2026-10-22 pilot, which learned to give up): (1)
 the truncation / dead-end penalty is `failure_penalty_factor` (env config, default 2) times the
@@ -1777,6 +1783,19 @@ collected values (`collected_logprob_max_diff`, `collected_value_max_diff`), and
 iteration's time went: `seconds_env` (waiting for the env workers; with `workers`, their whole
 rollouts including their policy passes), `seconds_policy` (the rest of collection: policy
 forward, copies) and `seconds_update` (the PPO update).
+
+**Imitation warm start (planned, 0.23; paper log D-30, D-31).** *Status: copy test being
+built; not part of training yet.* Random play almost never finishes a stage 1–2 problem
+(E-11), so PPO has no successes to learn from. The teacher is `cheapest_construction` (10.3),
+which solves every generated problem. It is used only where it is near-optimal: single targets
+with loose storage (stages 1–2; median headroom 0% on proved optima). On many targets and
+tight storage it is 50–135% above the optimum (no sharing), so stages 3–5 are not imitated by
+default. Steps: (1) copy test: train the network alone by cross-entropy on the teacher's
+candidate index at every step of its plan, on fresh generator problems (validation problems
+excluded); report move agreement on held-out states and greedy success and gap on `val_s1_v2`
+and `val_s2_v2`; (2) PPO from those weights, with the imitation term's weight decayed to 0, so
+RL may leave the teacher; pass bar: s1 ≥ 90% success, s2 well above 0%, and some plans cheaper
+than the teacher's.
 
 ### 11.5 Reserved: search (`mcts/`, milestone 9)
 AlphaZero-style MCTS (PUCT) using the PPO network's policy and value, on `core.apply` (pure,

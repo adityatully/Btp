@@ -124,6 +124,8 @@ pointless"). The case for learning:
 | 2026-10-23 | Pilot 1 fails (agent learned to give up); bound inadmissible on tolerant targets; both fixed. | F-11–F-13, `2593e3b`, `0680c62`, SPEC 0.21–0.22 |
 | 2026-10-24 | Workstation checks pass (619 tests, bound check PASS); pilot 2 launched. | E-8 |
 | 2026-10-25 | Pilot 2 plateaus; random-play diagnosis → exploration, not reward. User chooses imitation warm start. | E-10, E-11, D-30 |
+| 2026-10-25 | Greedy "get closer" policy solves 20% of s1, 0% of s2: the agent sees the distance but lacks the algorithm. | E-14 |
+| 2026-10-25 | Teacher used only where near-optimal (stages 1–2); imitation fades so RL can override; copy test first. | D-31, SPEC 0.23 |
 
 ---
 
@@ -244,7 +246,28 @@ Format: date · decision · alternatives considered · why · evidence.
   can generate unlimited demonstrations. Analogy: AlphaGo (supervised on expert games, then RL).
   Difference: our teacher is not optimal, so the RL phase must improve on it. Plan: short test
   on stages 1–2, one seed, ~2M steps; pass bar = stage 2 above 0% and stage 1 past 40%; only
-  then re-run the regime pilot.
+  then re-run the regime pilot. *Plan and pass bar amended by D-31.*
+- **D-31 (2026-10-25) Imitate the teacher only where it is near-optimal; RL must be able to
+  override it.** The user: AlphaGo learnt from experts, not average players, so the teacher
+  must be good on the problems it teaches; and the agent should not start with habits it does
+  not need. Evidence on teacher quality (`cheapest_construction`): single target with loose
+  storage, median headroom 0% (≤ 1.4% on dilution, E-5), so it is an expert on stages 1–2;
+  tight storage, medians 1–82% per cell (up to 149%); multi-target, 50–135% above the proved
+  optimum, because it never shares droplets (E-5); medium problems unprovable, interval 28–60%
+  wide (E-6). So on stages 3–5 it is an average player. Decisions: (1) demonstrations come
+  from stages 1–2 only; (2) the imitation term fades to 0 during PPO, so RL can move away from
+  the teacher; (3) before any PPO run, an **imitation-only copy test**: can the network copy the
+  teacher's moves on unseen stage 1–2 problems (move agreement and greedy success on
+  `val_s1_v2`, `val_s2_v2`)? If it cannot, the warm start is pointless and the problem is the
+  network, not exploration; (4) PPO test pass bar: s1 ≥ 90% success, s2 well above 0%, and
+  some plans cheaper than the teacher's; (5) a separate teacher study measures a sharing pass
+  and published sharing methods (e-MRCM, MTWM, WSPM) against the proved optima, the medium
+  sets and the large `val_s4`/`val_s5` problems; (6) stages 3–5 are then run two ways, pure RL
+  from the stage 1–2 skills and imitation of the best teacher found; if both stall near the
+  teacher's cost, try self-imitation (Oh et al. 2018), then MCTS (M9). Alts: imitate the
+  construction on every stage (rejected: teaches the no-sharing habit the agent must later
+  unlearn); exact optima as demonstrations (only small problems are provable, E-5). SPEC 0.23
+  §11.4.
 
 ---
 
@@ -391,6 +414,36 @@ legal-action enumeration ~65%, encoding ~30%, resets ~5%.
 - 882,787 parameters (measured 2026-10-25). d = 128, 3 layers, 4 heads; untuned starting points.
 - One network reads F 2–4, T 1–3, M 2/4/8, storage 3/10 and is invariant to reordering fluids,
   droplets and targets (acceptance (d)). Env ~15% slower from the pair matrices.
+
+### E-14 (2026-10-25) Diagnosis, part 2: random-play detail and a greedy "get closer" policy
+Adds detail to E-11; same sets (`val_s1_v2`, `val_s2_v2`, 40 problems each), one core, scripts
+in a scratch folder (method below is enough to redo it).
+- **Random play (E-11), full numbers.** Uniform choice over the legal candidates, 30 episodes
+  per problem: s1 2 / 1,200 successes (on `val_s1-011`, D = 59 with tolerance 1/200, and
+  `val_s1-019`, D = 2), s2 0 / 1,200. All 2,398 failures are step-limit truncations, no dead
+  ends. Step limit / construction length: median 2.58, min 2.00 (s1); median and min 2.00
+  (s2). Construction length median 5.5 moves (s1), 12 (s2). Legal candidates per step: median
+  197, max 510 (s1); median 801, max 3,389 (s2). Failing costs median 6.02× (min 3.69×) the
+  best known plan in s1 and 5.09× (min 3.68×) in s2. The "random finished plan costs 3.4×"
+  figure rests on only the **2** random successes, so it is weak evidence; the penalty
+  argument itself (failing ≥ 2× the construction, D-26) does not depend on it.
+- **s2 composition.** F = 3 (13 problems), 4 (11), 5 (5), 6 (11); 20 exact, 20 tolerant; D from
+  5 to 243. Random play solved none, **including the 13 three-fluid problems**.
+- **Greedy "get closer" policy.** Each step: deliver if an Output is legal, else take the
+  candidate whose result is nearest an open target (the observation's own candidate feature
+  "distance to nearest open target", SPEC 9.3), ties broken by step cost. s1: **8 / 40** solved,
+  all at gap 0 (they equal the construction); on the rest it gets very close (median nearest
+  distance 0.0044) but never exact. s2: **0 / 40**, median nearest distance 0.071.
+- **Reading.** The observation already tells the agent how close it is, and following that cue
+  alone solves 20% of dilutions, about half of what PPO reached (~40%, E-10). Closer is not
+  enough: an exact (or 1/200) ratio needs a planned sequence of mix ratios (number theory), and
+  a near miss earns nothing. This supports reasons (3) and (4) of E-11 over (8): the agent can
+  see the distance; what it lacks is the algorithm. It strengthens the case for D-30: the
+  construction *is* that algorithm, and imitation hands it over.
+- **Still open** (need the workstation runs): entropy and value explained-variance traces
+  against success (reason 7, critic quality); per-instance s1 results (which D, M, tolerance it
+  solves); a single-problem overfit test on an s1/s2 problem (reason 5: can it learn one
+  mixture when it doesn't have to generalise?).
 
 ---
 
