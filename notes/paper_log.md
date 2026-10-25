@@ -126,6 +126,7 @@ pointless"). The case for learning:
 | 2026-10-25 | Pilot 2 plateaus; random-play diagnosis → exploration, not reward. User chooses imitation warm start. | E-10, E-11, D-30 |
 | 2026-10-25 | Greedy "get closer" policy solves 20% of s1, 0% of s2: the agent sees the distance but lacks the algorithm. | E-14 |
 | 2026-10-25 | Teacher used only where near-optimal (stages 1–2); imitation fades so RL can override; copy test first. | D-31, SPEC 0.23 |
+| 2026-10-25 | Imitation copy test: agreement plateaus at 64% (train), s1 greedy 22–35%, s2 ~0%; misses are mix ratios (number theory the network cannot see). | E-15, `903802c` |
 
 ---
 
@@ -444,6 +445,46 @@ in a scratch folder (method below is enough to redo it).
   against success (reason 7, critic quality); per-instance s1 results (which D, M, tolerance it
   solves); a single-problem overfit test on an s1/s2 problem (reason 5: can it learn one
   mixture when it doesn't have to generalise?).
+
+### E-15 (2026-10-25) Imitation copy test, first runs (stages 1–2, Mac, one core)
+Commit `903802c`, SPEC 0.23 §11.4, `scripts/imitation_check.py`. Behaviour cloning of
+`cheapest_construction` on fresh stage 1–2 problems (half s1, half s2; validation and held-out
+problems excluded); default network (d 128, 3 layers, 4 heads), Adam 3e-4, batch 64, grad
+clip 0.5, seed 0. "Agreement" = the network's top candidate is the teacher's, on the teacher
+steps of `val_s1_v2` / `val_s2_v2` (states never trained on). Greedy success and gap on the
+same sets; best known there = the teacher's cost, so gap < 0 means cheaper than the teacher.
+- **Setup check.** All 80 validation plans replay through the env to success at exactly the
+  teacher's cost, once a mix is matched up to operand order (without that, 27 of 40 s1 and
+  37 of 40 s2 plans hit a "missing" move: the env lists `Mix(droplet, reservoir)`, the
+  constructions write `Mix(reservoir, droplet)`).
+- **Overfit check** (`tests/agents/test_imitation.py`, 3 s1 problems, 18 steps, small net):
+  100% agreement and the teacher's plan, at lr 1e-3 with clipping. At lr 3e-3 without
+  clipping the loss oscillated (agreement 78–94%).
+- **Run 1: 300 problems (2,969 steps), 12 epochs, 190 s.** Train agreement 0.32 → 0.55; val
+  agreement s1 0.49 → 0.66, s2 0.38 → 0.50; still rising. Greedy success s1 0.15 (epoch 3) →
+  0.30 (epoch 12), with 3 plans cheaper than the teacher (mean gap −1.1% on successes); s2 0.
+  Reading: the network is learning the teacher and does not yet copy it (underfit: train
+  agreement 55%). A 12-step plan needs per-step agreement near 0.99 to finish, which is why s2
+  stays at 0 while agreement is 50%.
+- **Run 2: 1,000 problems (9,916 steps), 30 epochs, 23 min.** Agreement plateaus: train 0.40 →
+  0.64 (+0.02 over the last 10 epochs), val s1 0.61 → 0.70, s2 0.42 → 0.62. Greedy success s1
+  0.275 / 0.35 / 0.325 / 0.30 / 0.25 / 0.225 at epochs 5–30 (no better than PPO's ~40%, E-10;
+  mean gap on successes +10% to +31%, 0–2 plans cheaper than the teacher); s2 0 except one
+  success at epoch 20 (gap −43%). 3.3× the data of run 1 moved train agreement only from 0.55 to
+  0.64, so more data alone is not the fix.
+- **Where it disagrees** (run 2 network, teacher steps of the val sets): 65 of 65 s1 and 214 of
+  215 s2 disagreements are Mix vs Mix, almost always the **ratio** k:l, most often on the first
+  mix, with the probability spread thin (0.02–0.05 on both the teacher's and the network's
+  choice is common). Example `val_s1-001`: target 33/40 at M = 9; the teacher starts 1:7 (1/8),
+  because 40 = 8 × 5 (a mixed-radix digit); the network prefers 3:1. Order ambiguity is not the
+  main cause: the misses are about which ratio, not which part first.
+- **Reading.** The network cannot infer the construction's number theory (denominator
+  factorisation, digit expansion) from compositions given as embedded floats; this is the
+  "lacks the algorithm" wall of E-14, now seen under supervision. Imitation of moves alone
+  does not hand the algorithm over. Candidate remedies (not decided): exact per-candidate
+  features the env computes (rule 1), such as whether the result's denominator divides each
+  target's, or the construction's remaining mix count from the result to each target; a
+  larger network or longer training (unlikely to suffice given the plateau).
 
 ---
 
