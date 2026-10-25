@@ -19,7 +19,7 @@ forgotten the details.
   happened*, which SPEC does not keep.
 
 *Started 2026-10-25 from every project chat (2026-09-06 to 2026-10-25), SPEC 0.22, `notes/`
-and git history. Last updated 2026-10-25.*
+and git history. Last updated 2026-10-25 (E-15, SPEC 0.24).*
 
 ---
 
@@ -445,6 +445,88 @@ in a scratch folder (method below is enough to redo it).
   solves); a single-problem overfit test on an s1/s2 problem (reason 5: can it learn one
   mixture when it doesn't have to generalise?).
 
+### E-15 (2026-10-25) Teacher study: the construction vs a sharing pass, stages 1–5
+Branch `claude/teacher-study-aa8c19`, SPEC 0.24, `scripts/teacher_study.py`,
+`src/meda/solvers/baselines/share.py`, records `notes/teacher_study/records_share.jsonl`. Mac,
+one core, `nice -n 19`, 4 min 50 s for all 352 problems. Costs 64/8/1 (geometric). Every plan
+replayed through the engine and its DAG validated. Ratio = plan cost ÷ reference.
+- **Evidence and references.** `e2`: the 65 E-5 problems with a proved optimum, regenerated
+  from their seeds (all 65 match the record; the construction's costs equal the recorded ones).
+  `e3`: the 45 E-6 medium problems, against max(bound exact search proved there, today's 0.21
+  root bound). `val`: `val_s1_v2` … `val_s5_v2`, `heldout_combo_v2`, against their stored
+  root bound. E2 cells map to stages as in SPEC 8.3 (tight storage → s5; dilution many-target
+  multi-demand tight, and dilution gradients with tight storage → held-out cell).
+- **Teacher = `cheapest_construction`; share = the sharing pass (no lookahead).** Median / p90
+  / max of the ratio:
+
+  | Set | Stage | n | Reference | teacher | share |
+  |---|---|---|---|---|---|
+  | e2 | s1 | 10 | optimum | 1.00 / 1.00 / 1.01 | 1.00 / 1.00 / 1.00 |
+  | e2 | s2 | 2 | optimum | 1.00 / 1.00 / 1.00 | 1.00 / 1.00 / 1.00 |
+  | e2 | s3 | 7 | optimum | 1.00 / 1.20 / 1.38 | 1.00 / 1.00 / 1.01 |
+  | e2 | s4 | 6 | optimum | 1.34 / 1.52 / 1.52 | 1.00 / 1.00 / 1.00 |
+  | e2 | s5 | 33 | optimum | 1.00 / 1.88 / 2.49 | 1.00 / 1.01 / 1.89 |
+  | e2 | held-out | 7 | optimum | 1.34 / 2.11 / 2.35 | 1.01 / 1.33 / 1.34 |
+  | e3 | s4 | 24 | bound | 1.80 / 2.47 / 3.12 | 1.02 / 1.18 / 1.25 |
+  | e3 | s5 | 5 | bound | 2.27 / 3.33 / 3.62 | 1.82 / 2.01 / 2.03 |
+  | e3 | held-out | 16 | bound | 1.44 / 2.04 / 2.26 | 1.05 / 1.17 / 1.21 |
+  | val_s1_v2 | s1 | 40 | bound | 1.52 / 3.45 / 7.96 | 1.17 / 3.12 / 7.09 |
+  | val_s2_v2 | s2 | 40 | bound | 3.06 / 6.00 / 8.61 | 2.94 / 6.00 / 8.61 |
+  | val_s3_v2 | s3 | 40 | bound | 2.32 / 6.24 / 9.17 | 1.25 / 2.99 / 8.90 |
+  | val_s4_v2 | s4 | 40 | bound | 3.05 / 6.41 / 9.25 | 1.46 / 3.46 / 5.96 |
+  | val_s5_v2 | s5 | 42 | bound | 2.60 / 4.60 / 7.48 | 1.78 / 3.58 / 7.48 |
+  | heldout_combo_v2 | held-out | 40 | bound | 1.97 / 3.01 / 3.99 | 1.09 / 1.35 / 2.19 |
+
+  Per cell (median / p90 / max; teacher → share): e3 dil-many-dN-loose 2.03/2.53/2.61 →
+  1.04/1.12/1.20; dil-many-dN-tight 1.54/1.99/2.26 → 1.10/1.19/1.21; dilgrad-many-dN-loose
+  1.42/1.93/2.29 → 1.01/1.02/1.02; dilgrad-many-dN-tight 1.33/2.04/2.04 → 1.01/1.08/1.09;
+  mix-many-dN-loose 1.89/2.62/3.12 → 1.12/1.21/1.25; mix-many-dN-tight (5) 2.27/3.33/3.62 →
+  1.82/2.01/2.03. val_s3 dilution-one-multi 1.83/4.96/8.88 → 1.02/1.74/3.12; mixture-one-multi
+  2.62/6.47/9.17 → 1.64/3.41/8.90. val_s4 dilution-many-multi 1.85/2.43/2.50 → 1.04/1.12/1.18;
+  dilution-many-single 2.60/4.74/9.25 → 1.31/2.04/2.69; mixture-many-multi 3.91/6.72/7.12 →
+  1.65/2.93/3.51; mixture-many-single 4.57/5.81/7.51 → 3.26/5.66/5.96. val_s5 (6 each)
+  dilution-many-single 2.53 → 1.45; dilution-one-multi 1.37 → 1.05; dilution-one-single
+  1.87 → 1.56; mixture-many-multi 2.94 → 1.94; mixture-many-single 3.81 → 3.58;
+  mixture-one-multi 2.40 → 1.73; mixture-one-single 2.40 → 2.40 (medians).
+- **At the proved optimum (e2):** teacher 34 of 65, share 51 of 65 (s1 9→10, s3 4→6, s4 2→6,
+  s5 16→24, held-out 1→3). Share is cheaper than the teacher on 237 of 352 problems and
+  dearer on none (it falls back to the construction). Sample units drawn, teacher → share:
+  `val_s3` 423 → 256, `val_s4` 1,826 → 1,008, `val_s5` 839 → 565, held-out 2,533 → 1,455,
+  e3 1,692 → 1,114.
+- **How to read the bound ratios.** On stage 1, where the teacher is at the optimum on 9 of
+  10 small problems, its ratio to the `val_s1_v2` bound is still 1.52 (median), and on stage 2
+  3.06. So a val-set ratio is mostly the bound's looseness on single targets and mixtures, not
+  plan excess; it certifies the plan only where it is near 1 (the e3 dilution cells, `val_s4`
+  dilution-many-multi, held-out). Mixture many-target cells stay uncertified: share at 1.65–3.6
+  × the bound there could be near-optimal or not.
+- **Share also beats the teacher on stage 1:** cheaper on 21 of 40 `val_s1_v2` problems
+  (median ratio 1.52 → 1.17), mostly by the dilute-up chain (a cheaper single-target recipe the
+  tree misses). Stage 2: 5 of 40.
+- **Remaining misses (e2, worked by hand):** the optimum builds two intermediates ahead and
+  blends them (1/4 at volume 3 on M = 3 via 3/8 = blend of 1/2 and 1/4: 72 vs 136); the
+  greedy prices one delivery group at a time and does not find these. Rollout lookahead (k = 3)
+  improved 4 of the 14 misses on e2 by 1–2 cost units (2 of them to the optimum), and costs ~15× the time (up to 48 s
+  per medium problem), so it was not run on the full sets here (workstation command below).
+- **Speed.** Share: median 0.04 s, p90 2.6 s, max 34 s per problem (one core); teacher: ms.
+- **Task 3 (published sharing methods) not done.** The repo holds only one-line summaries
+  (`notes/track2/e1_coverage.md`): MTWM needs an SMT solver (a new dependency) and its local
+  PDF; e-MRCM's PDF is not on disk; WSPM incremental (sequence, leftovers reused) is close to
+  what the sharing pass does. Writing them from memory would be the unchecked approximation
+  SPEC 10.4 forbids, so none is claimed.
+- **Recommendation (for the user to decide, D-31 (5)–(6)).** The sharing pass is
+  expert-quality where it can be checked: at the proved optimum on every s3/s4 small problem
+  but one, s5 median 1.00 (p90 1.01), held-out 1.01, and within 1–10% (median) of the bound on the
+  medium dilution and held-out problems. Use it as the teacher on stages 3–5 for **dilution**
+  cells and the held-out cell's skills; on **mixture many-target** cells it halves the
+  teacher's excess but its quality is not certified (bound too loose), so either imitate it
+  there with the imitation term fading as planned, or leave those cells to RL. It is also a
+  better stage-1 teacher than the construction (cheaper on 21/40); the copy test on stages
+  1–2 could switch to it at no cost in coverage. The construction should not be imitated on
+  stages 3–5 (median 1.8–3.1× the bound on the medium/val many-target sets).
+- **Workstation follow-up (not run):**
+  `OMP_NUM_THREADS=1 uv run python scripts/teacher_study.py which=e2,e3,val
+  producers=teacher,share,share_look3 workers=16 out=notes/teacher_study/records_look3.jsonl`
+
 ---
 
 ## 5. Failures, bugs and lessons
@@ -553,7 +635,8 @@ independent reference (oracle, optimum, bound, validator) catches it.**
 
 - Two unread papers could narrow the claim (L-4).
 - Frontier "best known" is still our own construction, which never shares; a sharing search
-  baseline would make the gaps more convincing (D-18 options).
+  baseline would make the gaps more convincing (D-18 options). *Partly addressed by E-15: the sharing pass tightens
+  best known on many-target problems (not yet written into the answer keys).*
 - The bound is still loose on stages 4–5 (median 0.33–0.39 of best known); a forced-waste term
   is the noted next step.
 - Limited storage may rarely bind (E-7); measure on trained agents before claiming the storage
