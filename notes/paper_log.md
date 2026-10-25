@@ -130,6 +130,7 @@ pointless"). The case for learning:
 | 2026-10-25 | Pilot 2 final (9.83M): expanding best (s1 38–42%), s2 0% in every run; no regime chosen. | E-10 |
 | 2026-10-25 | Network gets the first mix right 24% (s1) / 6% (s2) even on trained problems; an exact 'mixes left' feature lifts s1 greedy 25% → 67.5%. | E-16 |
 | 2026-10-25 | Teacher study: sharing pass reaches the proved optimum on 51 of 65 (construction 34), never dearer; much closer to the bound on stages 3–5. | E-17, SPEC 0.24 |
+| 2026-10-25 | Sharing pass from mid-episode states: always finishes, 4–9 ms (s4 1.8 s); the current penalty charges 2–25× the real cost to finish (no credit for intermediates). | E-18 |
 
 ---
 
@@ -614,6 +615,31 @@ replayed through the engine and its DAG validated. Ratio = plan cost ÷ referenc
 - **Workstation follow-up (not run):**
   `OMP_NUM_THREADS=1 uv run python scripts/teacher_study.py which=e2,e3,val
   producers=teacher,share,share_look3 workers=16 out=notes/teacher_study/records_look3.jsonl`
+
+### E-18 (2026-10-25) "Finish from here": the sharing pass started mid-episode (probe)
+Scratch probe `finish_probe.py` (session scratchpad), commit `b650384` code. The sharing pass
+(`share._run`, no lookahead, all 4 target orders) started from a mid-episode state with every
+droplet on chip in its pool, on a relaxed step limit. States: every state with droplets on chip
+along the teacher's plan, first 15 problems of each val set. Mac, one core, `nice -n 19`.
+
+| Set | states | ms per call median / p90 / max | no plan | finish-from-here ÷ current penalty, median |
+|---|---|---|---|---|
+| val_s1_v2 | 68 | 3.5 / 61 / 550 | 0 | 0.04 |
+| val_s2_v2 | 185 | 5.0 / 119 / 443 | 0 | 0.13 |
+| val_s3_v2 | 229 | 3.8 / 227 / 1,828 | 0 | 0.29 |
+| val_s4_v2 | 743 | 1,833 / 5,211 / 12,019 | 0 | 0.54 |
+| val_s5_v2 | 237 | 8.8 / 424 / 6,704 | 0 | 0.42 |
+
+- **The current penalty ignores progress.** Along the teacher's own plan, the cost the pass
+  needs to finish is a median 4% (s1) to 54% (s4) of `ConstructiveCostToFinish` (before the
+  ×2 factor of D-26), which wastes every droplet on chip and rebuilds. So an episode truncated
+  one mix short of the target is charged as if nothing had been built: building an
+  intermediate earns no credit at truncation. This is a likely contributor to E-10/E-11 and
+  is fixable: the pass always found a plan (0 failures in 1,462 states).
+- **Speed.** Once per failed episode is affordable on s1–s3 and s5 (median 4–9 ms) and
+  tolerable on s4 (1.8 s median, many targets). Once per candidate (200–800 per step) is not:
+  even 4 ms × 200 is 0.8 s per step against ~200 steps/s in training. A per-candidate feature
+  must use the pass's cheap parts (direct, one mix, chain), not the whole pass.
 
 ---
 
