@@ -548,3 +548,8 @@ def test_vector_env_resume_is_exact(vector: str) -> None:
     finally:
         a.close()
         b.close()
+
+
+def test_unknown_cost_to_finish_is_refused() -> None:
+    with pytest.raises(ValueError, match="cost_to_finish"):
+        make_env(tiny_grid(), cost_to_finish="optimal")

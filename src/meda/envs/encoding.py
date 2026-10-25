@@ -23,7 +23,7 @@ from __future__ import annotations
 
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
-from typing import Any
+from typing import Any, Protocol
 
 import numpy as np
 import numpy.typing as npt
@@ -43,8 +43,14 @@ TYPE_FLUID, TYPE_DROPLET, TYPE_TARGET = 0, 1, 2
 D_FLUID = 3  # kind one-hot
 D_DROP = 6  # vol/M, vol/volume_ref, denominator, age, nearest open distance, satisfies any
 D_TGT = 7  # dvol/M, dvol/volume_ref, tolerance, rem/demand, rem/count_ref, met, denominator
-D_CAND = 17  # op (3), k, l, k+l on both scales (6), den, nearest, satisfies, reagent (3),
-#              waste, droplets after / storage capacity
+D_CAND = 27  # op (3), k, l, k+l on both scales (6), den, nearest, satisfies, reagent (3),
+#              waste, droplets after / storage capacity, recipe hint (6), chain hint (4)
+# Hint one-hots (SPEC 9.3): fewest mixes from a Mix result to an open target along the tree's
+# recipe (0..RECIPE_MAX, the last meaning "that many or more", then "none") and along a
+# pure-fluid chain (0..CHAIN_MAX, then "none"). Zero for Output and Discard rows.
+RECIPE_MAX, CHAIN_MAX = 4, 2
+HINT_COL = 17
+D_HINT = (RECIPE_MAX + 2) + (CHAIN_MAX + 2)
 D_GLOB = 7  # step/limit, steps left, on chip/capacity, rem/total, rem/count_ref, M, capacity
 D_PAIR = 2  # L-inf distance, satisfies flag
 
@@ -69,14 +75,27 @@ class EnvSizes:
                 raise ValueError(f"env: {name} must be >= 1, got {getattr(self, name)}")
 
 
+class HintTable(Protocol):
+    def recipe_left(self, key: tuple[int, ...]) -> int | None: ...
+    def chain_left(self, key: tuple[int, ...], volume: int) -> int | None: ...
+
+
+class HintSource(Protocol):
+    """Exact per-target tables for the hint columns (`solvers.hints.CandidateHints`)."""
+
+    def tables(self, instance: Instance, target_id: int) -> HintTable: ...
+
+
 def den_feature(den: npt.NDArray[np.int64]) -> npt.NDArray[np.float64]:
     """1 - 1/den: 0 for pure fluids, rising toward 1 for finer compositions."""
     return 1.0 - 1.0 / den.astype(np.float64)
 
 
 class Encoder:
-    def __init__(self, sizes: EnvSizes) -> None:
+    def __init__(self, sizes: EnvSizes, hints: HintSource | None = None) -> None:
+        """`hints` fills the hint columns; without it they stay 0 (tests, profiling)."""
         self.sizes = sizes
+        self.hints = hints
 
     def observation_space(self) -> spaces.Dict:
         z = self.sizes
@@ -303,6 +322,8 @@ class Encoder:
         cand[:nl, 12:15] = reagent / vref
         cand[:nl, 15] = np.where(op == OP_DISCARD, kk, 0) / vref
         cand[:nl, 16] = storage_after / chip.storage_capacity
+        if self.hints is not None:
+            self._hint_columns(cand, inst, state, is_mix, rnum, rden, total)
         cand_comp = np.zeros((z.l_pad, z.f_pad), dtype=np.float32)
         cand_comp[:nl, :nf] = rnum / rden[:, None]
         cand_target = np.zeros((z.l_pad, z.t_pad, D_PAIR), dtype=np.float32)
@@ -352,6 +373,33 @@ class Encoder:
             "action_mask": _mask(nl, z.l_pad),
             "globals": glob,
         }
+
+    def _hint_columns(
+        self,
+        cand: npt.NDArray[np.float32],
+        inst: Instance,
+        state: PrepState,
+        is_mix: npt.NDArray[np.bool_],
+        rnum: npt.NDArray[np.int64],
+        rden: npt.NDArray[np.int64],
+        volume: npt.NDArray[np.int64],
+    ) -> None:
+        """One-hots of the fewest mixes from each Mix result to any open target (recipe,
+        chain), looked up by the result's exact reduced composition."""
+        assert self.hints is not None
+        tables = [
+            self.hints.tables(inst, t.id) for t in inst.targets if state.remaining_demand[t.id]
+        ]
+        chain_col = HINT_COL + RECIPE_MAX + 2
+        for i in np.flatnonzero(is_mix):
+            key = (*(int(v) for v in rnum[i]), int(rden[i]))
+            vol = int(volume[i])
+            recipe = [d for tb in tables if (d := tb.recipe_left(key)) is not None]
+            chain = [d for tb in tables if (d := tb.chain_left(key, vol)) is not None]
+            r = min(min(recipe), RECIPE_MAX) if recipe else RECIPE_MAX + 1
+            c = min(chain) if chain else CHAIN_MAX + 1
+            cand[i, HINT_COL + r] = 1.0
+            cand[i, chain_col + min(c, CHAIN_MAX + 1)] = 1.0
 
 
 def _mask(n: int, size: int) -> npt.NDArray[np.int8]:

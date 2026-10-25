@@ -1,6 +1,18 @@
 # MEDA Design Automation — Codebase Specification
 
-Version 0.24 · 2026-10-25
+Version 0.25 · 2026-10-26
+
+Changes in 0.25 (finish from here; paper log E-16, E-18, E-19, D-32): (1) the truncation /
+dead-end penalty is computed by `cost_to_finish` chosen in `configs/env` (5.8, 10.3): `share`
+(new default) = the cheaper of the sharing pass started from the current state, reusing every
+droplet on chip (`share.finish_from`, `SharingCostToFinish`), and the constructions' rebuild;
+`construction` = the old rebuild only. The rebuild charged 2–25× the real cost to finish along
+the teacher's own plans (E-18), so building an intermediate earned no credit at truncation.
+(2) Ten **hint columns** on the candidate row (9.3, D_cand 17 → 27): one-hots of the fewest mixes
+from a Mix result to an open target along the tree's and the sharing pass's recipe, and along
+a pure-fluid chain (`solvers.hints`, injected into the env like `cost_to_finish`). (3) The
+imitation teacher is the sharing pass by default (11.4). Old checkpoints do not load into the
+new network (input width changed).
 
 Changes in 0.24 (teacher study, paper log E-17): a new baseline, the **sharing pass**
 (`baselines/share.py`, 10.4), builds the targets on one chip, keeps leftovers in a pool and
@@ -660,8 +672,16 @@ violated rule.
 - **Success:** all `remaining_demand` are 0. Droplets still on chip become waste (charged in the
   final step's cost).
 - **Truncation:** `step == step_limit` without success. The final cost adds a truncation penalty
-  = `failure_penalty_factor × fallback.cost_to_finish(state, instance)` (section 10.3;
-  `failure_penalty_factor` in `configs/env`, an integer ≥ 1, default 2). With factor 1 an
+  = `failure_penalty_factor × cost_to_finish(state, instance)` (section 10.3;
+  `failure_penalty_factor` and the `cost_to_finish` kind in `configs/env`; factor an integer ≥ 1,
+  default 2; kind `share`, default, or `construction`). **Since 0.25 (`share`)** the cost to
+  finish is the cheaper of a completion from the current state that reuses the droplets on chip
+  and the rebuild, so a half-built intermediate lowers the charge. The guarantee is then per
+  state: being cut off costs the factor times a completion that really exists from there, so
+  finishing yourself pays whenever your own finish is under factor × the planner's
+  (`tests/envs/test_failure_penalty.py`). A whole failed episode can now cost less than the best
+  known plan, when its moves were good (E-19: 247 against 475 on val_s1-008). **Under
+  `construction`** (0.22–0.24) the rest of this item holds. With factor 1 an
   unfinished plan is never cheaper than finishing *by the construction*, but it can be cheaper
   than finishing with a worse plan: on the stage validation sets a deliberately failed episode
   cost only 1.03–1.33× the best known plan, and the 2026-10-22 pilot learned to finish only
@@ -1224,9 +1244,10 @@ frozen files, so this changed no set.
 
 ### 9.1 API (Gymnasium)
 ```python
-env = SamplePrepEnv(env_config, instance_source, cost_weights, cost_to_finish)
+env = SamplePrepEnv(env_config, instance_source, cost_weights, cost_to_finish, hints=None)
 # instance_source(rng) -> Instance: sampler, curriculum stage, or FixedInstances(list)
 # cost_to_finish(state, instance) -> Rational: truncation penalty (solvers.fallback, M5)
+# hints: tables(instance, target_id) for the candidate hint columns (solvers.hints, 0.25)
 obs, info = env.reset(seed=None, options=None) # options may pass a specific Instance
 obs, reward, terminated, truncated, info = env.step(action_index)
 mask = env.action_masks()                      # bool[L_pad]; same as obs["action_mask"]
@@ -1334,7 +1355,7 @@ satisfies-any-open-target flag. The per-target detail is in `droplet_target`.
 remaining demand / demand; remaining demand / `count_ref`; met flag; denominator feature of the
 target composition. The composition itself is in `target_comp`.
 
-**Candidate row (D_cand = 17), the afterstate features:** op one-hot (3); k, l, k + l on both
+**Candidate row (D_cand = 27), the afterstate features:** op one-hot (3); k, l, k + l on both
 scales (6: k/M, l/M, (k + l)/M, then the same over `volume_ref`; for Output k is the delivered
 volume, for Discard the droplet volume, l = 0); the
 result's denominator feature; distance from the result to the nearest open target; whether the
@@ -1343,6 +1364,19 @@ waste it creates / `volume_ref`; droplets on chip after the action / storage cap
 result composition is in `cand_comp` and its per-target detail in `cand_target`. Providing the
 result of each candidate is the afterstate idea (TD-Gammon): the network judges outcomes instead
 of predicting them.
+
+**Hint columns (since 0.25; 10 of the 27).** For a Mix candidate, with the result's exact
+reduced composition and volume, the fewest mixes to any open target: (a) **recipe**: along the
+recipe for one droplet of the target by the split tree (for `tree.aim(target)`) or by the
+sharing pass, one-hot 0, 1, 2, 3, ≥ 4, none; (b) **chain**: along a chain of mixes each adding
+one pure fluid (k + l ≤ M), worked back from the aim with enough volume, one-hot 0, 1, 2, none
+(depth 2). Output and Discard rows are 0. Why: the network cannot infer from compositions as
+floats which intermediate leads to a target (33/40 S at M = 9 is one mix from 1/8 S, far by
+distance); on stage 1, a crude version lifted greedy copy success from 25% to 67.5% (E-16).
+They are information, not instructions: legality and costs are unchanged. Tables come from
+`solvers.hints.CandidateHints(weights)`, injected into the env (`SamplePrepEnv(..., hints)`),
+cached per (target, chip, fluid kinds); without it the columns are 0. Cost: about 1–2 ms per
+step; 5–17 ms per reset median on stages 1, 2, 4 (largest 0.6 s, stage 4).
 
 **Globals (D_glob = 7):** step / step limit; steps left / `count_ref`; droplets on chip /
 storage capacity; remaining demand / total demand; remaining demand / `count_ref`;
@@ -1477,7 +1511,16 @@ exhausted with no plan; `timeout` if a budget stopped it. The distinction matter
 unreachable under `dmfb_m2` needs exhaustion, which only happens on a tightly bounded instance
 — at the chip's default 10 droplets and 30 steps the same search can only report `timeout`.
 
-### 10.3 Fallback cost-to-finish (`fallback.py`)
+### 10.3 Fallback cost-to-finish (`fallback.py`; `share.py` since 0.25)
+**`share` (default since 0.25).** `SharingCostToFinish(weights)(state, instance)` = the cheaper
+of `share.finish_from(state, instance, weights)` and the rebuild below. `finish_from` runs the
+sharing pass (10.4) from `state` with every droplet on chip in its pool, over its target orders,
+on a relaxed step limit, and returns the completion and its exact cost (final leftovers not
+charged, as for a finished plan). Both are completions that really exist, so the minimum is one
+too. Measured from states along the teacher's plans (E-18): always found; 4–9 ms median on
+stages 1–3 and 5, 1.8 s on stage 4. Called once per failed episode, never per candidate.
+
+**`construction`.**
 `ConstructiveCostToFinish(weights)(state, instance)`: waste everything on chip, then build each
 remaining target's droplets from the reservoirs, per target with the cheaper of the naive and
 split-tree constructions (10.4; `cheapest_construction`). Because it is the cost of a completion
@@ -1814,7 +1857,9 @@ iteration's time went: `seconds_env` (waiting for the env workers; with `workers
 rollouts including their policy passes), `seconds_policy` (the rest of collection: policy
 forward, copies) and `seconds_update` (the PPO update).
 
-**Imitation warm start (planned, 0.23; paper log D-30, D-31).** *Status: copy test built
+**Imitation warm start (planned, 0.23; teacher changed in 0.25; paper log D-30, D-31, D-32).**
+*Since 0.25 the teacher is the sharing pass (`share_plan`, `imitation.TEACHERS["share"]`; never
+dearer than the construction); `teacher=construction` keeps the old one.* *Status: copy test built
 (`ppo/imitation.py`, `scripts/imitation_check.py`); not part of training yet.* Random play almost never finishes a stage 1–2 problem
 (E-11), so PPO has no successes to learn from. The teacher is `cheapest_construction` (10.3),
 which solves every generated problem. It is used only where it is near-optimal: single targets

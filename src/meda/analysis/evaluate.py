@@ -35,10 +35,18 @@ from meda.core.composition import Rational
 from meda.core.costs import CostWeights
 from meda.core.dag import validate
 from meda.core.problem import Instance
-from meda.envs.sample_prep_env import EnvConfig, FixedInstances, InstanceSource, SamplePrepEnv
+from meda.envs.sample_prep_env import (
+    CostToFinish,
+    EnvConfig,
+    FixedInstances,
+    InstanceSource,
+    SamplePrepEnv,
+)
 from meda.generators.benchmark_io import BenchmarkSet
 from meda.solvers.base import SolveBudget, Solver, SolveResult
+from meda.solvers.baselines.share import SharingCostToFinish
 from meda.solvers.fallback import ConstructiveCostToFinish
+from meda.solvers.hints import CandidateHints
 
 
 class Producer(Protocol):
@@ -113,11 +121,18 @@ def build_env(
     """The env agents are evaluated (and trained) in, from the `env` and `costs` configs. It
     draws from `instances`, or from `source` (e.g. a generator) when one is given."""
     weights = CostWeights.from_dict(cfg["costs"])
+    config = EnvConfig.from_dict(cfg["env"])
+    penalty: CostToFinish = (
+        SharingCostToFinish(weights)
+        if config.cost_to_finish == "share"
+        else ConstructiveCostToFinish(weights)
+    )
     return SamplePrepEnv(
-        EnvConfig.from_dict(cfg["env"]),
+        config,
         FixedInstances(instances) if source is None else source,
         weights,
-        ConstructiveCostToFinish(weights),
+        penalty,
+        CandidateHints(weights),
     )
 
 

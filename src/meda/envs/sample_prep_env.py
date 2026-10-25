@@ -39,7 +39,7 @@ from meda.core.dag import DagDelta, MixingDAG, NodeType
 from meda.core.problem import Instance
 from meda.core.rules import IllegalActionError, TerminalStatus, apply, legal_actions
 from meda.core.state import PrepState
-from meda.envs.encoding import Encoder, EnvSizes, Obs
+from meda.envs.encoding import Encoder, EnvSizes, HintSource, Obs
 
 CostToFinish = Callable[[PrepState, Instance], Rational]
 
@@ -62,6 +62,9 @@ class FixedInstances:
         return self.instances[int(rng.integers(len(self.instances)))]
 
 
+COST_TO_FINISH = ("share", "construction")
+
+
 @dataclass(frozen=True, slots=True)
 class EnvConfig:
     sizes: EnvSizes
@@ -70,11 +73,20 @@ class EnvConfig:
     # little more than the construction, so a finished plan worse than that earns less than
     # failing on purpose; 2 keeps finishing preferred up to about twice the construction.
     failure_penalty_factor: int = 1
+    # Which completion prices an unfinished plan (SPEC 5.8, 10.3): "share" finishes from the
+    # current state reusing the droplets on chip; "construction" wastes them and rebuilds.
+    # The env takes the function itself as `cost_to_finish`; this records the choice for
+    # whoever builds it (`analysis.evaluate.build_env`).
+    cost_to_finish: str = "construction"
 
     def __post_init__(self) -> None:
         if self.failure_penalty_factor < 1:
             raise ValueError(
                 f"failure_penalty_factor must be >= 1, got {self.failure_penalty_factor}"
+            )
+        if self.cost_to_finish not in COST_TO_FINISH:
+            raise ValueError(
+                f"cost_to_finish must be one of {COST_TO_FINISH}, got {self.cost_to_finish!r}"
             )
 
     @staticmethod
@@ -89,6 +101,7 @@ class EnvConfig:
             "count_ref",
             "preference_conditioning",
             "failure_penalty_factor",
+            "cost_to_finish",
         }
         if set(data) != expected:
             raise ValueError(f"env config keys must be {sorted(expected)}, got {sorted(data)}")
@@ -103,6 +116,7 @@ class EnvConfig:
             ),
             preference_conditioning=bool(data["preference_conditioning"]),
             failure_penalty_factor=int(data["failure_penalty_factor"]),
+            cost_to_finish=str(data["cost_to_finish"]),
         )
 
 
@@ -133,11 +147,12 @@ class SamplePrepEnv(gym.Env[Obs, np.int64]):
         instance_source: InstanceSource,
         cost_weights: CostWeights,
         cost_to_finish: CostToFinish,
+        hints: HintSource | None = None,
     ) -> None:
         if config.preference_conditioning:
             raise NotImplementedError("preference conditioning is reserved for milestone 9")
         self.config = config
-        self.encoder = Encoder(config.sizes)
+        self.encoder = Encoder(config.sizes, hints)
         self.observation_space = cast("gym.spaces.Space[Obs]", self.encoder.observation_space())
         self.action_space = gym.spaces.Discrete(config.sizes.l_pad)
         self.cost_weights = cost_weights

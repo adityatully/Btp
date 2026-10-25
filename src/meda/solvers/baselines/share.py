@@ -23,13 +23,18 @@ dearest first, cheapest first, nearest neighbour) and returns the cheapest plan,
 dearer than `cheapest_construction`. `lookahead` = k adds a rollout over each group's k
 cheapest candidates (pilot method). Every plan goes through `rules.apply`, so it is legal by
 construction, step limit and storage included; a variant that breaks one is dropped.
+
+**Finish from here** (`finish_from`, `SharingCostToFinish`; SPEC 10.3). The same pass started
+from any state, with every droplet on chip in its pool: the cost of a real completion that
+uses what has been built. The env's failure penalty uses it, so a half-built intermediate
+lowers the penalty instead of being priced as waste (paper log E-18).
 """
 
 from __future__ import annotations
 
 import time
 from collections.abc import Callable, Iterator
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 
 from meda.core.actions import Action, Discard, Mix, Output, Source
 from meda.core.composition import ZERO, Composition, Rational, linf_distance, mix
@@ -40,7 +45,11 @@ from meda.core.rules import IllegalActionError, apply, replay
 from meda.core.state import PrepState
 from meda.solvers.base import PlanBuilder, SolveBudget, SolveResult
 from meda.solvers.baselines.tree import _deliveries_per_droplet, aim, build, dilute_up_input
-from meda.solvers.fallback import cheapest_construction
+from meda.solvers.fallback import (
+    RELAXED_STEP_LIMIT,
+    ConstructiveCostToFinish,
+    cheapest_construction,
+)
 
 
 @dataclass(slots=True)
@@ -461,6 +470,45 @@ def share_plan(
         if best is None or done.cost < best[0]:
             best = (done.cost, tuple(done.actions))
     return None if best is None else best[1]
+
+
+def finish_from(
+    state: PrepState, instance: Instance, weights: CostWeights
+) -> tuple[tuple[Action, ...], Rational] | None:
+    """The pass started from `state`, every droplet on chip in its pool: the cheapest
+    completion over the target orders, with its cost (final leftovers not charged, as for a
+    finished plan), or None if no order finishes. Run on a relaxed step limit: it answers
+    "what would finishing cost", like the constructions' cost to finish (10.3)."""
+    relaxed = replace(instance, step_limit=RELAXED_STEP_LIMIT)
+    pool = {d.uid for d in state.droplets}
+    best: tuple[tuple[Action, ...], Rational] | None = None
+    for order in orders(instance, weights):
+        open_order = [t for t in order if state.remaining_demand[t]]
+        try:
+            done = _run(_Builder(relaxed, state, [], weights, set(pool)), open_order, 0)
+        except IllegalActionError:
+            continue
+        if best is None or done.cost < best[1]:
+            best = (tuple(done.actions), done.cost)
+    return best
+
+
+class SharingCostToFinish:
+    """`cost_to_finish(state, instance)` for `SamplePrepEnv` (SPEC 5.8, 10.3): the cheaper of
+    `finish_from` and the constructions' cost to finish (waste everything, rebuild). Both
+    are costs of real completions, so the minimum is one too. Picklable."""
+
+    def __init__(self, weights: CostWeights) -> None:
+        self.weights = weights
+        self.construction = ConstructiveCostToFinish(weights)
+
+    def __call__(self, state: PrepState, instance: Instance) -> Rational:
+        rebuild = self.construction(state, instance)
+        found = finish_from(state, instance, self.weights)
+        return rebuild if found is None else min(rebuild, found[1])
+
+    def supports(self, instance: Instance) -> bool:
+        return self.construction.supports(instance)
 
 
 class ShareSolver:
