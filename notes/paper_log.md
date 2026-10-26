@@ -315,6 +315,33 @@ Format: date · decision · alternatives considered · why · evidence.
   droplet only if it is useful later" is a lookahead question, which points toward MCTS
   (plan 4.2).
 
+- **D-34 (2026-10-26) Measure the headroom above the sharing pass before any further agent
+  fix** (user, after E-27 and a discussion of what RL is for; plan step 2.0).
+  (1) The fair janitor test (E-27) rules out hoarding as the cause; the up-front waste charge
+  (D-33) is not adopted. (2) E-27's reading (3), "the agent avoids the costly moves that make
+  progress", is one of two readings. The other, **unverified**: the agent is blind once it
+  leaves the hint map. The hint tables are fixed per target (the tree's and the sharing pass's
+  recipes plus depth-2 pure-fluid chains, `solvers/hints.py`), the recipe hint caps at "4 or
+  more", and `val_s2-000`'s map holds 15 compositions, 9 of them "4 or more". Against reading
+  (3): with `gamma` = 1 the ×2 finish penalty pays for a real progress move even in a failing
+  episode; the agent is unsure (p 0.31–0.64), not confidently cheap; and the observation holds
+  the steps left, so a ×2 limit changes its behaviour, which muddies E-27's cost comparison. A
+  replay of hint coverage along the failures would separate the two; deferred.
+  (3) The user's concern: the recipe hint is drawn by our own planners, at inference too, so
+  the agent is "RL guided by heuristic features"; and the sharing pass already solves every
+  stage 3–5 problem, at the optimum on 51 of 65 proved problems and within 2–25% of the bound
+  on medium dilutions (E-17). Learning is only worth it where the sharing pass can be beaten,
+  and that has not been measured. Hint provenance for the paper: the recipe hint is
+  planner-derived; the chain hint is arithmetic on the problem alone (cf. AlphaGo's
+  hand-computed ladder features, removed in AlphaGo Zero, added back in KataGo for speed).
+  A copy test without the recipe hint is a candidate later step.
+  (4) Decision: run the headroom check (plan 2.0) first; the agent fixes (1.2), training on
+  stages 3–5 and any hint redesign wait for its result. Alternatives discussed and deferred:
+  progress shaping (reward += planner's finish cost before − after the move; one planner call
+  per step, ~5 ms on s2 and ~2 s on s4, E-18), a constant imitation weight, and MCTS at
+  decision time. MCTS is favoured if headroom exists, because lookahead targets the sharing
+  pass's known miss (building two intermediates ahead and blending them, E-17).
+
 ---
 
 ## 4. Experiments and results

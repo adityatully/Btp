@@ -15,7 +15,7 @@ evidence (IDs like E-22 point there). This file says **what we are doing and why
   -b nice -n 19`). Anything longer than ~10 minutes goes to the workstation (`~/code/Btp`,
   tmux; never reboot it during runs).
 
-*Last updated 2026-10-26 (E-27, SPEC 0.26).*
+*Last updated 2026-10-27 (D-34, SPEC 0.26).*
 
 ---
 
@@ -58,7 +58,7 @@ a requirement of the agent, not the headline.
 
 ## 4. The plan
 
-### Phase 1. Make stages 1–2 solid (now)
+### Phase 1. Make stages 1–2 solid (paused for 2.0, D-34)
 
 **1.1 Diagnose the s2 decay.** *Done (E-23, E-24).*
 - The failures are the 6 longest plans; ~11% of training s2 problems are that long (E-23).
@@ -101,7 +101,40 @@ noise (about ±6 points on 40 problems).
 the problems where the agent is dearer (14/40 on s1 in E-22), to see what RL learned and what
 it gave up.
 
-### Phase 2. Grading we can trust (parallel, mostly workstation)
+### Phase 2. Grading we can trust (mostly workstation)
+
+**2.0 Headroom: where can the sharing pass be beaten, and by how much?** (*now*, D-34; built
+2026-10-27 as `scripts/headroom_share.py`, workstation run pending. Mac smoke test only, not a
+result: seeded search proved 3 small problems in < 0.2 s that the unseeded 60 s search had
+not; lookahead was 18–24% cheaper than the sharing pass on the 2 held-out problems tried.) The
+sharing pass already solves every problem of every stage and is at the optimum wherever we
+have proofs (51/65). Learning or search is only worth building where it can be beaten, so this
+comes before any further agent work.
+- **H1. Proofs with a strong incumbent.** Exact search seeded with the cheaper of the sharing
+  pass and its lookahead as the incumbent (branch and bound then prunes far more than with the
+  constructions), 600 s per problem, on all 400 small E2 problems (65 proved so far;
+  many-target mixtures only 3 of 80) and the 45 medium E3 problems. Each new proof gives the
+  sharing pass's true gap; any cheaper plan the search finds is headroom outright.
+- **H2. Stronger producers, without proofs.** On `val_s1`…`val_s5`, held-out and E3: the
+  sharing pass with lookahead 3, with many target orders (its 4 plus 32 random ones), and the
+  agent's own plans (E-22 on s1/s2, E-26 on s3–s5). Headroom found = sharing pass ÷ best − 1,
+  also in sample units saved (D-25).
+- **H3. Where nothing proves or improves:** the sharing pass's excess over the bound split into
+  waste, mixes and fluid; reported as an interval, no claim.
+- **Output:** one table per cell: n, proved, sharing pass at the optimum, its gap on proved
+  problems (median, max), problems H2 improves (count, median, max, sample units), its ratio
+  to the bound.
+- **Reading, fixed in advance:** a cell has headroom if the sharing pass's gap on proved
+  problems averages ≥ 5% or exceeds 2% on a quarter of them, or if H2 lowers its median cost
+  by ≥ 5%. Learning and search are then aimed at those cells, starting with the small MCTS
+  test (4.2). If no cell we can check has headroom, the paper's story changes (*user's
+  decision*): the sharing pass with exact certificates becomes a main contribution, and the
+  agent must justify itself by speed or generalisation, or be dropped.
+- **Caveats:** proofs reach only small problems (selection bias); large many-target mixtures
+  may stay uncertified (2.3).
+- **Cost:** workstation, about 2–3 h on 30 cores; nothing heavy on the Mac. Script-side only:
+  a subclass of `ExactSearch` with the sharing pass as incumbent and extra producers in
+  `scripts/teacher_study.py`; no change to `meda.core` or solver interfaces.
 
 **2.1 Best known = the best of every producer.** Old construction, sharing pass, its lookahead,
 greedy start + finish (E-19), and the agent's own plans. Frozen as new answer-key versions
@@ -173,9 +206,10 @@ Written from `notes/paper_log.md`.
 
 ## 5. Waiting on the user
 
-- **How to make the agent commit on long mixtures (blocks 1.2 and Phase 3).** Options:
-  progress shaping (reward each move by how much it lowers the planner's cost to finish);
-  keeping a small imitation weight on; search at decision time (MCTS, plan 4.2).
+- **How to make the agent finish long mixtures (blocks 1.2 and Phase 3).** *Deferred until
+  the headroom check (2.0, D-34).* Options: progress shaping, a small constant imitation
+  weight, search at decision time (MCTS, 4.2). Two readings of the cause, not yet separated:
+  the agent will not pay for progress (E-27), or it is blind off the hint map (D-34).
 
 - PDFs (6.1, 6.3). **Added 2026-10-26:** robust aliquot (Poddar et al.), Dong et al. 2024,
   MRCM (Liang et al., ASP-DAC 2019), MTCS/MTMD (Kumar et al., TODAES 2018); the claim check is
