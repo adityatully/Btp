@@ -21,3 +21,7 @@ update_epochs: 4
 num_minibatches: 8
 total_env_steps: 5_000_000
 max_chunk_rows: 131072        # candidate rows per forward in an update (memory bound, not maths)
+imitation_coef: 0.0           # imitation term weight at the start (0 = off); falls linearly to 0
+imitation_steps: 1_000_000    # ... over this many env steps (SPEC 11.4, warm start)
+imitation_batch: 64           # demonstration steps per minibatch
+imitation_problems: 1000      # demonstration problems drawn from the training source first

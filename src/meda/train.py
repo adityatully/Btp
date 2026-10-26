@@ -31,10 +31,12 @@ from __future__ import annotations
 import functools
 import json
 import time
+from dataclasses import asdict
 from pathlib import Path
 from typing import Any
 
 import hydra
+import numpy as np
 import pandas as pd
 import torch
 from gymnasium.vector import AsyncVectorEnv, AutoresetMode, SyncVectorEnv
@@ -42,6 +44,7 @@ from hydra.core.hydra_config import HydraConfig
 from omegaconf import DictConfig, OmegaConf
 
 from meda.agents.ppo.collector import ActorPool
+from meda.agents.ppo.imitation import Demonstrations
 from meda.agents.ppo.ppo import PPOConfig, PPOTrainer, VecEnv
 from meda.agents.tabular_q import TabularQ, TabularQConfig
 from meda.analysis.compare import write_summary_md
@@ -156,6 +159,57 @@ def training_source(cfg: dict[str, Any], bench: BenchmarkSet) -> GeneratorSource
     )
 
 
+def load_initial_weights(trainer: PPOTrainer, path: str | Path) -> None:
+    """Start the network from saved weights (`train.init_from`, e.g. the imitation network of
+    `scripts/imitation_check.py`); the optimiser starts fresh. The network config must match."""
+    data = torch.load(Path(path), map_location=trainer.device, weights_only=True)
+    if data["net"] != asdict(trainer.cfg.net):
+        raise ValueError(
+            f"train.init_from {path}: network {data['net']} differs from this run's "
+            f"{asdict(trainer.cfg.net)}"
+        )
+    trainer.net.load_state_dict(data["state_dict"])
+
+
+def imitation_demos(
+    cfg: dict[str, Any], source: InstanceSource, count: int, seed: int
+) -> Demonstrations:
+    """`count` teacher episodes (the sharing pass) on fresh problems from the training source,
+    for the PPO imitation term; drawn with their own generator, so a resume rebuilds them."""
+    weights = CostWeights.from_dict(cfg["costs"])
+    rng = np.random.default_rng([seed, 1])
+    env = build_env(cfg, [], source)
+    demos = Demonstrations()
+    for _ in range(count):
+        demos.add_episode(env, source(rng), weights)
+    return demos
+
+
+def prepare_warm_start(
+    trainer: PPOTrainer, cfg: dict[str, Any], source: InstanceSource | None
+) -> None:
+    """`train.init_from` weights (a fresh run only) and the imitation term's demonstrations."""
+    train_cfg, ppo_cfg = cfg["train"], trainer.cfg
+    init_from = train_cfg.get("init_from")
+    if init_from and not train_cfg.get("resume"):
+        load_initial_weights(trainer, str(init_from))
+        print(f"network initialised from {init_from}")
+    if ppo_cfg.imitation_coef > 0:
+        if source is None:
+            raise ValueError(
+                "agent.imitation_coef > 0 needs problems to demonstrate on: use "
+                "train.source=generator or train.source=regime"
+            )
+        started = time.perf_counter()
+        demos = imitation_demos(cfg, source, ppo_cfg.imitation_problems, int(cfg["seed"]))
+        trainer.set_demonstrations(demos)
+        print(
+            f"imitation term: {len(demos)} teacher steps from {demos.episodes} problems "
+            f"({time.perf_counter() - started:.0f}s), weight {ppo_cfg.imitation_coef} -> 0 "
+            f"over {ppo_cfg.imitation_steps} env steps"
+        )
+
+
 def make_training_envs(
     cfg: dict[str, Any],
     instances: list[Instance],
@@ -215,6 +269,7 @@ def train_ppo(cfg: dict[str, Any], out_dir: Path) -> pd.DataFrame:
     interrupted = False
     try:
         trainer = PPOTrainer(ppo_cfg, sizes, envs, device, seed=int(cfg["seed"]))
+        prepare_warm_start(trainer, cfg, source)
         if train_cfg.get("resume"):
             load_checkpoint(train_cfg["resume"], trainer)
             print(f"resumed from {train_cfg['resume']} at update {trainer.update}")
@@ -307,6 +362,7 @@ def train_ppo_regime(cfg: dict[str, Any], out_dir: Path) -> pd.DataFrame:
     interrupted = False
     try:
         trainer = PPOTrainer(ppo_cfg, sizes, envs, device, seed=int(cfg["seed"]))
+        prepare_warm_start(trainer, cfg, source())
         if train_cfg.get("resume"):
             extra = load_checkpoint(train_cfg["resume"], trainer)
             regime.load_state_dict(extra["regime"])

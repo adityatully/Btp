@@ -21,6 +21,13 @@ weights have not changed yet): a mismatch beyond rounding stops training.
 per env) and the trainer's own numpy generator (minibatch order). They are saved by
 `utils.checkpoint`, together with every env's snapshot, so a resumed run repeats the
 uninterrupted one exactly (on CPU; GPU kernels are not bit-deterministic).
+
+**Imitation term (warm start, SPEC 11.4; paper log D-30, D-31).** With `imitation_coef` > 0 and
+demonstrations set (`set_demonstrations`), every minibatch also adds `w * cross-entropy` of the
+teacher's move on `imitation_batch` demonstration steps, where w falls linearly from
+`imitation_coef` to 0 over the first `imitation_steps` env steps. It keeps a network started
+from imitation weights near the teacher while the value head learns, then lets RL leave it.
+Demonstration steps are drawn with the trainer's own numpy generator, so resumes repeat.
 """
 
 from __future__ import annotations
@@ -37,6 +44,7 @@ from gymnasium.vector import AsyncVectorEnv, SyncVectorEnv
 from torch import nn
 
 from meda.agents.ppo.collector import EPISODE_KEYS, ActorPool, episode_record
+from meda.agents.ppo.imitation import Demonstrations, imitation_loss
 from meda.agents.ppo.networks import NetConfig, SetEncoderNet
 from meda.agents.ppo.policy import PPOAgent, batch_obs, masked_distribution
 from meda.agents.ppo.rollout import RolloutBuffer, compute_gae, split_obs
@@ -77,8 +85,24 @@ class PPOConfig:
     # minibatch is split into chunks under this budget, widths sorted so chunks pad little;
     # gradients are accumulated, so the update is the same, only peak memory is bounded.
     max_chunk_rows: int
+    # Imitation term: initial weight (0 = off), env steps over which it falls to 0,
+    # demonstration steps per minibatch, and demonstration problems drawn before training.
+    imitation_coef: float
+    imitation_steps: int
+    imitation_batch: int
+    imitation_problems: int
 
     def __post_init__(self) -> None:
+        if self.imitation_coef < 0:
+            raise ValueError(f"ppo: imitation_coef must be >= 0, got {self.imitation_coef}")
+        if (
+            self.imitation_coef > 0
+            and min(self.imitation_steps, self.imitation_batch, self.imitation_problems) < 1
+        ):
+            raise ValueError(
+                "ppo: imitation_coef > 0 needs imitation_steps, imitation_batch and "
+                "imitation_problems >= 1"
+            )
         if self.reward_scale <= 0:
             raise ValueError(f"ppo: reward_scale must be > 0, got {self.reward_scale}")
         if self.batch_size % self.num_minibatches:
@@ -146,6 +170,38 @@ class PPOTrainer:
         self.global_step = 0
         self.next_obs: dict[str, npt.NDArray[Any]] | None = None  # lockstep only
         self.started = False
+        self.demos: Demonstrations | None = None
+        self._demo_widths: npt.NDArray[np.int64] | None = None
+
+    def set_demonstrations(self, demos: Demonstrations) -> None:
+        """Teacher steps for the imitation term (needed when `imitation_coef` > 0)."""
+        if len(demos) == 0:
+            raise ValueError("no demonstration steps")
+        self.demos = demos
+        self._demo_widths = demos.candidate_widths()
+
+    def imitation_weight(self) -> float:
+        """The imitation term's weight now: linear from `imitation_coef` to 0."""
+        cfg = self.cfg
+        if cfg.imitation_coef == 0:
+            return 0.0
+        return cfg.imitation_coef * max(0.0, 1.0 - self.global_step / cfg.imitation_steps)
+
+    def _imitation_backward(self, weight: float) -> tuple[float, float]:
+        """Add `weight` x the cross-entropy on a sample of demonstration steps to the
+        gradients; return the loss and the agreement with the teacher."""
+        if self.demos is None or self._demo_widths is None:
+            raise RuntimeError("imitation_coef > 0 but no demonstrations were set")
+        index = self.rng.integers(len(self.demos), size=self.cfg.imitation_batch)
+        loss_sum = agree_sum = 0.0
+        for chunk in chunk_by_width(index, self._demo_widths, self.cfg.max_chunk_rows):
+            obs, actions = self.demos.minibatch(chunk)
+            t = batch_obs(obs, self.device)
+            loss, agree = imitation_loss(self.net, t, torch.as_tensor(actions, device=self.device))
+            (weight * len(chunk) / len(index) * loss).backward()
+            loss_sum += loss.item() * len(chunk)
+            agree_sum += agree.item() * len(chunk)
+        return loss_sum / len(index), agree_sum / len(index)
 
     @property
     def agent(self) -> PPOAgent:
@@ -297,6 +353,8 @@ class PPOTrainer:
         index = np.arange(cfg.batch_size)
         widths = buf.candidate_widths()
         sums = {"policy_loss": 0.0, "value_loss": 0.0, "entropy": 0.0, "approx_kl": 0.0}
+        imitation = self.imitation_weight()
+        imitation_sums = {"imitation_loss": 0.0, "imitation_agree": 0.0}
         clipped = 0.0
         n = 0
         worst = {"logprob": 0.0, "value": 0.0}  # first minibatch vs collected, before any step
@@ -363,6 +421,10 @@ class PPOTrainer:
                         f"value), above {CONSISTENCY_TOL}: the policy that collected the rollout "
                         f"is not the one being updated"
                     )
+                if imitation > 0:
+                    il, ia = self._imitation_backward(imitation)
+                    imitation_sums["imitation_loss"] += il
+                    imitation_sums["imitation_agree"] += ia
                 nn.utils.clip_grad_norm_(self.net.parameters(), cfg.max_grad_norm)
                 self.optimizer.step()
                 for k in sums:
@@ -379,6 +441,8 @@ class PPOTrainer:
             "collected_value_max_diff": worst["value"],
             "clip_fraction": clipped / n,
             "explained_variance": explained,
+            "imitation_coef": imitation,
+            **({k: v / n for k, v in imitation_sums.items()} if imitation > 0 else {}),
         }
 
 

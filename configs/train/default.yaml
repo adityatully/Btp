@@ -5,6 +5,8 @@ collector: lockstep           # PPO: lockstep (the vector env above; one policy 
                               # all envs) or workers (one process per env with a policy copy,
                               # playing its whole rollout; `vector` is then unused; SPEC 11.4)
 resume: null                  # PPO: path to a checkpoint (last.pt) to continue from
+init_from: null               # PPO: weights to start a fresh run from (an imitation network,
+                              # scripts/imitation_check.py); ignored when resuming
 log_dir: tensorboard
 use_wandb: false
 checkpoint_every_updates: 50

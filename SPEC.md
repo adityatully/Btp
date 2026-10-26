@@ -1,6 +1,11 @@
 # MEDA Design Automation — Codebase Specification
 
-Version 0.25 · 2026-10-26
+Version 0.26 · 2026-10-26
+
+Changes in 0.26 (warm start in PPO, 11.4): `train.init_from` starts a fresh PPO run from saved
+weights (the copy test's network), and the PPO config gains `imitation_coef`, `imitation_steps`,
+`imitation_batch`, `imitation_problems`: an imitation term on teacher demonstrations whose
+weight falls linearly to 0 (off by default). Old PPO checkpoints need the four new keys.
 
 Changes in 0.25 (finish from here; paper log E-16, E-18, E-19, D-32): (1) the truncation /
 dead-end penalty is computed by `cost_to_finish` chosen in `configs/env` (5.8, 10.3): `share`
@@ -1857,21 +1862,29 @@ iteration's time went: `seconds_env` (waiting for the env workers; with `workers
 rollouts including their policy passes), `seconds_policy` (the rest of collection: policy
 forward, copies) and `seconds_update` (the PPO update).
 
-**Imitation warm start (planned, 0.23; teacher changed in 0.25; paper log D-30, D-31, D-32).**
-*Since 0.25 the teacher is the sharing pass (`share_plan`, `imitation.TEACHERS["share"]`; never
-dearer than the construction); `teacher=construction` keeps the old one.* *Status: copy test built
-(`ppo/imitation.py`, `scripts/imitation_check.py`); not part of training yet.* Random play almost never finishes a stage 1–2 problem
-(E-11), so PPO has no successes to learn from. The teacher is `cheapest_construction` (10.3),
-which solves every generated problem. It is used only where it is near-optimal: single targets
-with loose storage (stages 1–2; median headroom 0% on proved optima). On many targets and
-tight storage it is 50–135% above the optimum (no sharing), so stages 3–5 are not imitated by
-default. Demonstrations match the teacher's actions to candidates up to the operand order of a
-mix (5.5). Steps: (1) copy test: train the network alone by cross-entropy on the teacher's
-candidate index at every step of its plan, on fresh generator problems (validation problems
-excluded); report move agreement on held-out states and greedy success and gap on `val_s1_v2`
-and `val_s2_v2`; (2) PPO from those weights, with the imitation term's weight decayed to 0, so
-RL may leave the teacher; pass bar: s1 ≥ 90% success, s2 well above 0%, and some plans cheaper
-than the teacher's.
+**Imitation warm start (0.23 planned; teacher and hints 0.25; built 0.26; paper log D-30–D-32,
+E-15–E-20).** Random play almost never finishes a stage 1–2 problem (E-11), so PPO alone has no
+successes to learn from. The teacher is the sharing pass (`share_plan`, 10.4; never dearer than
+the construction; `imitation.TEACHERS`, `teacher=construction` keeps the old one). Demonstrations
+play its plan through the env and record the teacher's candidate index per step, matching a
+mix up to operand order (5.5). By D-31 the teacher is imitated on stages 1–2 only, and RL must
+be able to leave it: it is not optimal everywhere, even on stage 1 (E-19).
+1. **Copy test** (`scripts/imitation_check.py`): cross-entropy on the teacher's index on fresh
+   generator problems (validation and held-out problems excluded); reports agreement (all
+   steps and Mix steps alone) on the validation sets' teacher steps and greedy success and gap
+   on `val_s1_v2`, `val_s2_v2`; saves the network (`imitation.pt`, a `PPOAgent` file). Passed
+   in 0.25 with the hint columns: s1 95%, s2 72.5% (E-20).
+2. **PPO from those weights** (0.26): `train.init_from=<imitation.pt>` loads the network into a
+   fresh run (config must match; optimiser fresh; ignored on resume). With
+   `agent.imitation_coef` w0 > 0, every minibatch adds `w × cross-entropy` on
+   `agent.imitation_batch` demonstration steps sampled with the trainer's generator, w falling
+   linearly from w0 to 0 over `agent.imitation_steps` env steps; demonstrations are
+   `agent.imitation_problems` teacher episodes drawn from the training source before training
+   (their own generator, so a resume rebuilds them). Logged: `imitation_coef`,
+   `imitation_loss`, `imitation_agree`. Needs `train.source` generator or regime. Pass bar:
+   s1 stable at ≥ 90%, s2 rising past the copy test, and more plans cheaper than the teacher's.
+   The value head starts untrained while the encoder is shared, so use a `reward_scale` that
+   keeps returns near unit (0.01 under `costs/geometric`).
 
 ### 11.5 Reserved: search (`mcts/`, milestone 9)
 AlphaZero-style MCTS (PUCT) using the PPO network's policy and value, on `core.apply` (pure,
