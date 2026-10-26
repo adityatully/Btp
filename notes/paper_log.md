@@ -19,7 +19,7 @@ forgotten the details.
   happened*, which SPEC does not keep.
 
 *Started 2026-10-25 from every project chat (2026-09-06 to 2026-10-25), SPEC 0.22, `notes/`
-and git history. Last updated 2026-10-26 (E-22, SPEC 0.26).*
+and git history. Last updated 2026-10-26 (E-23, SPEC 0.26).*
 
 ---
 
@@ -137,6 +137,7 @@ pointless"). The case for learning:
 | 2026-10-26 | Copy test with hints + sharing teacher: s1 greedy 95% (70% before the last epoch), s2 72.5% (was 0%), 12 / 6 plans cheaper than best known. Step 1 passes. | E-20 |
 | 2026-10-26 | Workstation rerun and ablation: hints are the cause (old teacher does as well); s1 copies at ~70–77% (E-20's 95% was noise), s2 ~65%. Step 2 launched from this network. | E-21 |
 | 2026-10-26 | Warm start + PPO, stages 1–2, 3M steps: s1 100% (cheaper than the teacher on average), s2 peaks 97.5% just after imitation ends, settles at 85%; held-out cell 50% zero-shot. | E-22 |
+| 2026-10-26 | s2 failures are exactly the 6 longest mixture plans (23–41 teacher steps); 11% of training s2 problems are that long. Plan rebuilt in `notes/plan.md`. | E-23 |
 
 ---
 
@@ -780,6 +781,28 @@ committed; checked on the Mac by grading the teacher against itself):
   imitation stops; cost-cutting moves learned on s1 that break long mixture plans near the step
   limit; ordinary PPO drift without a teacher anchor. Status of the 6 failures (truncated vs
   dead end) and their plans not yet inspected. One seed only.
+
+### E-23 (2026-10-26) Teacher against optima and bounds on s1/s2; what the s2 failures share
+Scratch probes `teacher_vs_bound.py`, `train_lengths.py` (session scratchpad), SPEC 0.26, Mac
+background priority. Teacher = the sharing pass.
+- **Stage 1 references.** `val_s1_v2` has 3 proved optima and 37 intervals [lower bound, best
+  known]. The teacher equals the optimum on all 3. Against the bound: teacher median 1.17, p90
+  3.12, max 7.09, within 1.10× on 16/40 (old best known: 1.52 / 3.45 / 7.96, 13/40). Since the
+  teacher is optimal on all 10 small proved s1 problems (E-17), most of the excess over the
+  bound is bound looseness; but E-19 and E-22 found plans 2–3× cheaper than the teacher on a
+  few large-denominator problems (`val_s1-024` 77 vs 213), so the teacher is far from optimal
+  there. Best known is our own construction; no published heuristic is implemented yet (tier
+  3).
+- **Stage 2 references.** No proved optima; teacher / bound median 2.94, within 1.10× on 3/40.
+- **The 6 s2 failures of E-22 are the 6 longest teacher plans:** 41, 38, 24, 24, 24, 23 steps
+  (step limits 82, 76, 48, 48, 48, 46); every other s2 problem's teacher plan is ≤ 21 steps
+  (median 10). They span F = 4–6 and M = 3–8, so length, not fluid count, is what they share.
+- **Training exposure:** of 300 freshly drawn s2 training problems, teacher plans have median
+  12 steps, p90 24, max 49; 10.7% are ≥ 23 steps (about 5% of all training episodes, since s2
+  is half the mix).
+- **Reading (not yet tested):** the decay after imitation ends hits long-horizon mixtures.
+  Whether they are truncated or reach dead ends, and where the agent leaves the teacher's
+  route, needs the final agent (`agent.pt`) replayed on them.
 
 ---
 
