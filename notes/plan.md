@@ -15,7 +15,7 @@ evidence (IDs like E-22 point there). This file says **what we are doing and why
   -b nice -n 19`). Anything longer than ~10 minutes goes to the workstation (`~/code/Btp`,
   tmux; never reboot it during runs).
 
-*Last updated 2026-10-26 (E-24, SPEC 0.26).*
+*Last updated 2026-10-26 (E-26, SPEC 0.26).*
 
 ---
 
@@ -69,7 +69,11 @@ a requirement of the agent, not the headline.
 
 **1.2 Fix the cause of the hoarding** (D-33). Goal: not a higher s2 score for its own sake, but
 removing a failure mode that will hit stages 3–5 harder.
-- **1.2a Evidence first** (*in progress*): experiments on the workstation with the trained agent:
+- **1.2a Evidence first** (*in progress; D1, D2, D4 done, E-25*): RL un-learned discarding
+  (the teacher's discards get probability 0.00–0.04 from the RL agent, 0.85–0.96 from the copy
+  network); the uncharged leftovers are 2–12% of the penalty; the first janitor test was
+  inconclusive, so a fair one (step limit ×2, janitor on/off) is next.
+  Original design: experiments on the workstation with the trained agent:
   D1 discard behaviour (teacher vs copy network vs RL agent); D2 the probability each network
   gives the teacher's discards on the teacher's own states (did RL learn to avoid discarding?);
   D3 a "janitor" that clears unused droplets above the teacher's peak (does clearing the chip
@@ -113,8 +117,11 @@ The same recipe that worked for stages 1–2, per stage:
 on that stage together with the stages already learned. Never train a stage whose copy test
 fails.
 
-**3.1 Zero-shot check.** *Next, in parallel with 1.2a.* Grade the stage 1–2 agent on `val_s3`, `val_s4`, `val_s5` and the
+**3.1 Zero-shot check.** *Partly done (E-26): s3 32/40 (dilution 19/20, mixture 13/20), failures
+pile up 15–17 droplets; s4, s5, held-out pending.* Grade the stage 1–2 agent on `val_s3`, `val_s4`, `val_s5` and the
 held-out cell (cost included). Cheap; shows how much already transfers (held-out: 50%).
+
+**3.0 Before any copy test on stages 3–5: fix F-16** (teacher moves matched by droplet uid).
 
 **3.2 Stage 3 (demand).** Teacher near-optimal on small s3 (E-17). Copy test on s3; if it
 passes, warm start on s1–s3.

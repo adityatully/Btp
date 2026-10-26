@@ -19,7 +19,7 @@ forgotten the details.
   happened*, which SPEC does not keep.
 
 *Started 2026-10-25 from every project chat (2026-09-06 to 2026-10-25), SPEC 0.22, `notes/`
-and git history. Last updated 2026-10-26 (E-25, SPEC 0.26).*
+and git history. Last updated 2026-10-26 (E-26, SPEC 0.26).*
 
 ---
 
@@ -893,6 +893,31 @@ Scratch probe `waste_diag.py` (session scratchpad; run on the workstation as
 - D3 (janitor) crashed on its first use: the env merges identical droplets into one Discard
   candidate, so a discard must be matched by droplet type, not uid. Fixed in the probe; D3 and
   D4 pending.
+- **D3 and D4 (added later the same day).** D3, janitor capped at the teacher's peak droplets
+  on chip, step limit unchanged: rescued 1 of the 6 s2 failures (`val_s2-004`, cost 583 vs the
+  teacher's 505); the other 5 stayed truncated with peaks of 4–6, at costs of 669–3,360. The
+  janitor's forced discards (10–33 per episode) used the same step budget as the agent's own
+  moves (`val_s2-000`: 21 forced + 27 agent = the 48-step limit), and it removes droplets the
+  agent may have meant to use, so **D3 is inconclusive**. A fair version (step limit ×1 or ×2,
+  janitor off or on) is written (`d3_fair.py`), not yet run. D4, leftover waste the `share`
+  penalty does not charge at truncation: 17–62 units, **2.0–12.1% of the penalty charged**
+  (median about 4%): a real inconsistency but too small to explain the behaviour on its own.
+
+### E-26 (2026-10-26) Zero-shot: the stage 1–2 agent on stage 3 (partial)
+Scratch probe `zero_shot.py` (workstation `outputs/zero_shot.py`), E-22 final weights, greedy.
+The run stopped after `val_s3_v2` (F-16); `val_s4_v2`, `val_s5_v2` and `heldout_combo_v2` are
+pending (the earlier E-22 final grading gave the held-out cell 50%).
+
+| `val_s3_v2` (demand > 1, never trained) | solved | agent / teacher on solved (median) |
+|---|---|---|
+| dilution, one target, several droplets | 19/20 | 1.03 |
+| mixture, one target, several droplets | 13/20 | 1.32 |
+| all | **32/40** (80%) | 1.10 (mean 1.32; cheaper 4, equal 6, dearer 22) |
+
+- Agent / bound median 1.45 (teacher 1.25). All 8 failures were truncated, with a mean of **15–17
+  droplets left on chip**: the same pile-up as on s2 (E-24, E-25).
+- **Reading.** Demand transfers well for dilutions without training; mixtures with demand break
+  in the same way as long s2 mixtures. The pile-up is not specific to s2.
 
 ---
 
@@ -947,6 +972,15 @@ independent reference (oracle, optimum, bound, validator) catches it.**
   could also be wrong. Fix in 0.21 (E-8).
 - **F-15 (2026-10-15/16) Overclaims caught:** exact search's docstring promised branch-and-bound
   the code did not do; 11/16 was "proved" only at a matched accuracy, not on the real instance.
+- **F-16 (2026-10-26) Teacher moves matched by droplet uid fail when identical droplets
+  exist.** The env offers one candidate per class of identical droplets (canonical keys,
+  `legal_actions`), but `imitation.teacher_index` matches the teacher's action exactly (a Mix
+  also up to operand order). When the teacher discards or uses a droplet that is the
+  non-representative twin, no candidate matches: `val_s4-033` (Discard of uid 56) crashed the
+  zero-shot probe, and the same pattern crashed the D3 janitor. It did not occur on the stage
+  1–2 demonstrations (E-15–E-21), but it will on stages 3–5. Fix needed before any copy test
+  there: match by canonical key and keep a uid map between the teacher's plan and the env.
+  The probes now cost the teacher's plan with `rules.replay` instead of through the env.
 - **Ops lessons (not for the paper):** Python stdout buffering hid a 10 h background check;
   pytest thrashed at 1,144% CPU without `OMP_NUM_THREADS=1`; parallel checks on the Mac
   overheated it (heavy jobs now run only on the workstation).
