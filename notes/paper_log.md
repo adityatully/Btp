@@ -133,6 +133,7 @@ pointless"). The case for learning:
 | 2026-10-25 | Sharing pass from mid-episode states: always finishes, 4–9 ms (s4 1.8 s); the current penalty charges 2–25× the real cost to finish (no credit for intermediates). | E-18 |
 | 2026-10-26 | Finish-from-here planner as penalty, hint columns and teacher (SPEC 0.25). Cheap moves + finish beat the teacher on 7/40 s1 problems (168 vs 475). | D-32, E-19 |
 | 2026-10-26 | Copy test with hints + sharing teacher: s1 greedy 95% (70% before the last epoch), s2 72.5% (was 0%), 12 / 6 plans cheaper than best known. Step 1 passes. | E-20 |
+| 2026-10-26 | Workstation rerun and ablation: hints are the cause (old teacher does as well); s1 copies at ~70–77% (E-20's 95% was noise), s2 ~65%. Step 2 launched from this network. | E-21 |
 
 ---
 
@@ -700,6 +701,30 @@ Mean gap on successes at epoch 20: s1 +4.6%, s2 −3.4% (to the old best known).
   one grading is noisy, so s1 is borderline, not settled. The s1 misses are likely where the
   teacher itself is not unique or not best (E-19). Next: warm start + PPO (step 2), which can
   also fix what imitation leaves.
+- *s1 result corrected by E-21: the 95% was noise; s1 copies at about 70–77%.*
+
+### E-21 (2026-10-26) Copy test repeated on the workstation, and the teacher ablation
+Same script and seed as E-20 (`scripts/imitation_check.py problems=1000 epochs=20 eval_every=5`),
+commit `bc93a7b`. (a) **Workstation rerun** (CPU, 8 threads, `outputs/imitation/s12`, the network
+step 2 starts from): identical demonstrations (teacher gaps −0.133 / −0.029, 9,297 steps). (b)
+**Ablation** on the Mac (background priority): hints on, **old teacher** (`teacher=construction`).
+
+| Greedy success, epochs 5 / 10 / 15 / 20 | s1 | s2 | cheaper than best known at 20 (s1 / s2) |
+|---|---|---|---|
+| E-20, Mac, sharing teacher | 70 / 70 / 67.5 / 95% | 37.5 / 67.5 / 67.5 / 72.5% | 12 / 6 |
+| (a) workstation, sharing teacher | 72.5 / 67.5 / 70 / 77.5% | 55 / 60 / 67.5 / 65% | 12 / 6 |
+| (b) Mac, construction teacher | 70 / 65 / 70 / 72.5% | 47.5 / 70 / 72.5 / 62.5% | 8 / 3 |
+| E-15, no hints, construction teacher | 22–35% | 0–2.5% | 0 / ≤1 |
+
+Mix agreement at epoch 20: (a) s1 0.71, s2 0.90; (b) s1 0.66, s2 0.90. Mean gap on successes at
+epoch 20 (to the old best known): (b) s1 −3.3%, s2 +1.9%.
+- **Reading.** (1) **The hint columns are the cause** of the jump from E-15: with the old
+  teacher they give the same success as with the sharing teacher, on both stages. The sharing
+  teacher's contribution is cost: more plans cheaper than best known (12 / 6 vs 8 / 3). (2)
+  **E-20's 95% on s1 was noise** in one 40-problem grading: imitation alone copies s1 at about
+  70–77% and s2 at about 60–70%. So the D-31 copy bar is met on s2 and missed on s1 (≥ 90%);
+  s1 still rose from 25–35%. Step 2 (PPO from the network of (a)) is where s1 must clear 90%;
+  the remaining s1 misses are likely where the teacher's move is not unique or not best (E-19).
 
 ---
 
