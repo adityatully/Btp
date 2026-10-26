@@ -12,6 +12,8 @@ sample-preparation agent. **`SPEC.md` is the source of truth. Read sections 1–
   update `SPEC.md` in the same change and say so.
 - Ask before adding a dependency not listed in SPEC section 3.
 - Do not add features, options or files the current milestone does not need.
+- Read `notes/plan.md` at the start of a session: it says where the project stands and which
+  step comes next. Update a step's status there the day it changes, with its paper log ID.
 - Keep `notes/paper_log.md` current: the same day a decision is made, an experiment or run
   reports numbers, or a bug changes behaviour or results, add a dated entry there with its
   evidence (commit, SPEC version, file, run folder) and the numbers. Read its rules at the top.
