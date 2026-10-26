@@ -19,7 +19,7 @@ forgotten the details.
   happened*, which SPEC does not keep.
 
 *Started 2026-10-25 from every project chat (2026-09-06 to 2026-10-25), SPEC 0.22, `notes/`
-and git history. Last updated 2026-10-26 (E-26, SPEC 0.26).*
+and git history. Last updated 2026-10-26 (E-27, SPEC 0.26).*
 
 ---
 
@@ -918,6 +918,56 @@ pending (the earlier E-22 final grading gave the held-out cell 50%).
   droplets left on chip**: the same pile-up as on s2 (E-24, E-25).
 - **Reading.** Demand transfers well for dilutions without training; mixtures with demand break
   in the same way as long s2 mixtures. The pile-up is not specific to s2.
+- **The other sets (added later the same day, after the probe costed the teacher with
+  `rules.replay`; the s3 numbers repeated exactly).** Every failure was truncated, none a dead
+  end.
+
+  | Set (never trained) | Solved | Agent / teacher on solved (median) | Droplets left in failures |
+  |---|---|---|---|
+  | `val_s4_v2` dilution, many targets, several / one droplet | 4/10, 7/10 | 1.88, 1.39 | 19.0, 23.0 |
+  | `val_s4_v2` mixture, many targets, several / one droplet | **0/10, 0/10** | — | 30.3, 20.5 |
+  | `val_s5_v2` dilution, one target (storage limited), several / one droplet | 5/6, 5/6 | 1.02, 1.01 | 0, 0 |
+  | `val_s5_v2` dilution, many targets, one droplet | 2/6 | 1.74 | 7.0 |
+  | `val_s5_v2` mixture, one target, several / one droplet | 1/6, 3/6 | 1.67, 1.00 | 8.2, 8.7 |
+  | `val_s5_v2` mixture, many targets, several / one droplet | **0/6, 0/6** | — | 9.3, 8.0 |
+  | `heldout_combo_v2` dilution, many targets, several droplets, storage limited | 20/40 | 1.40 | 7.0 |
+
+  Totals: s4 11/40, s5 16/42, held-out 20/40. Agent / bound medians: s4 2.07 (teacher 1.46), s5
+  1.49 (teacher 1.78), held-out 1.59 (teacher 1.09).
+- **Reading (whole set).** What transfers without training: single-target dilutions, with
+  demand or a storage limit, at the teacher's cost (1.01–1.03). What breaks: every mixture cell
+  with many targets (0/32) and most single-target mixtures under storage; many-target
+  dilutions half work but cost 1.4–1.9× the teacher (no sharing, which was never trained).
+  Failures always run out of steps with droplets piled up (7–30; fewer where storage caps
+  them).
+
+### E-27 (2026-10-26) D3, fair version: a clean chip or more steps do not rescue the s2 failures
+Scratch probe `d3_fair.py` (workstation `outputs/d3_fair.py`), E-22 final weights, the 6
+`val_s2_v2` failures. 2 × 2: step limit ×1 or ×2, janitor (discard droplets the planner's finish
+would not use whenever the chip holds more than the teacher's peak) off or on. Cost = plan cost
+when the episode ended.
+
+| Problem (teacher cost, peak) | ×1, no janitor | ×2, no janitor | ×1, janitor | ×2, janitor |
+|---|---|---|---|---|
+| val_s2-000 (481, 3) | trunc 754, peak 24 | trunc 541, peak 14 | trunc 1,642, forced 21 | trunc 4,471, forced 43 |
+| val_s2-004 (505, 3) | trunc 642, peak 13 | trunc 376, peak 15 | **success 583**, forced 10 | trunc 1,552, forced 44 |
+| val_s2-016 (524, 4) | trunc 385, peak 14 | trunc 405, peak 15 | trunc 817, forced 33 | trunc 1,608, forced 70 |
+| val_s2-019 (520, 3) | trunc 597, peak 19 | trunc 615, peak 19 | trunc 3,360, forced 21 | trunc 6,225, forced 44 |
+| val_s2-021 (564, 4) | trunc 240, peak 11 | trunc 377, peak 15 | trunc 669, forced 28 | trunc 1,788, forced 52 |
+| val_s2-037 (544, 3) | trunc 320, peak 13 | trunc 320, peak 10 | trunc 2,127, forced 21 | trunc 2,519, forced 40 |
+| Solved | 0/6 | 0/6 | 1/6 | 0/6 |
+
+- **Reading.** (1) **Clutter is not the cause:** with the chip kept at the teacher's size and twice
+  the steps, 0 of 6 finish. The janitor's discards grow with the budget (40–70) and costs
+  explode (up to 6,225): the agent re-makes the droplets the janitor removes. (2) **More time
+  is not the cause:** with twice the steps and no janitor, 0 of 6 finish. (3) **The agent does
+  not commit:** after a full budget, without the janitor, it has spent only 240–754, often less
+  than the teacher's whole plan (481–564), so it is not wasting money; it avoids the moves that
+  make progress. Hoarding is a symptom. With E-25 (RL removed discarding) and D4 (uncharged
+  leftovers only 2–12% of the penalty), the evidence does **not** support the up-front waste
+  charge as the fix for these failures. The open cause is long-horizon: on long mixtures the
+  agent does not take the costly steps that lead to the target. The same failure shows on
+  every untrained mixture cell of stages 3–5 (E-26).
 
 ---
 

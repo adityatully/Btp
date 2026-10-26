@@ -15,7 +15,7 @@ evidence (IDs like E-22 point there). This file says **what we are doing and why
   -b nice -n 19`). Anything longer than ~10 minutes goes to the workstation (`~/code/Btp`,
   tmux; never reboot it during runs).
 
-*Last updated 2026-10-26 (E-26, SPEC 0.26).*
+*Last updated 2026-10-26 (E-27, SPEC 0.26).*
 
 ---
 
@@ -69,7 +69,12 @@ a requirement of the agent, not the headline.
 
 **1.2 Fix the cause of the hoarding** (D-33). Goal: not a higher s2 score for its own sake, but
 removing a failure mode that will hit stages 3–5 harder.
-- **1.2a Evidence first** (*in progress; D1, D2, D4 done, E-25*): RL un-learned discarding
+- **1.2a Evidence first** (*done, E-25, E-27*). **Result: hoarding is a symptom.** A clean chip
+  and twice the steps rescue 0 of 6; the agent does not take the costly steps that make
+  progress on long mixtures (it ends having spent less than the teacher's whole plan). So 1.2b
+  is **not** adopted as the fix; the next decision is how to make the agent commit on long
+  horizons (see the open decision under §5).
+  Earlier notes: RL un-learned discarding
   (the teacher's discards get probability 0.00–0.04 from the RL agent, 0.85–0.96 from the copy
   network); the uncharged leftovers are 2–12% of the penalty; the first janitor test was
   inconclusive, so a fair one (step limit ×2, janitor on/off) is next.
@@ -117,8 +122,9 @@ The same recipe that worked for stages 1–2, per stage:
 on that stage together with the stages already learned. Never train a stage whose copy test
 fails.
 
-**3.1 Zero-shot check.** *Partly done (E-26): s3 32/40 (dilution 19/20, mixture 13/20), failures
-pile up 15–17 droplets; s4, s5, held-out pending.* Grade the stage 1–2 agent on `val_s3`, `val_s4`, `val_s5` and the
+**3.1 Zero-shot check.** *Done (E-26): s3 32/40, s4 11/40, s5 16/42, held-out 20/40.
+Single-target dilutions transfer at the teacher's cost; every many-target mixture cell is 0/32;
+many-target dilutions cost 1.4–1.9× the teacher (no sharing).* Grade the stage 1–2 agent on `val_s3`, `val_s4`, `val_s5` and the
 held-out cell (cost included). Cheap; shows how much already transfers (held-out: 50%).
 
 **3.0 Before any copy test on stages 3–5: fix F-16** (teacher moves matched by droplet uid).
@@ -166,6 +172,10 @@ AlphaZero-style training follows.
 Written from `notes/paper_log.md`.
 
 ## 5. Waiting on the user
+
+- **How to make the agent commit on long mixtures (blocks 1.2 and Phase 3).** Options:
+  progress shaping (reward each move by how much it lowers the planner's cost to finish);
+  keeping a small imitation weight on; search at decision time (MCTS, plan 4.2).
 
 - PDFs (6.1, 6.3). **Added 2026-10-26:** robust aliquot (Poddar et al.), Dong et al. 2024,
   MRCM (Liang et al., ASP-DAC 2019), MTCS/MTMD (Kumar et al., TODAES 2018); the claim check is
