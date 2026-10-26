@@ -15,7 +15,7 @@ evidence (IDs like E-22 point there). This file says **what we are doing and why
   -b nice -n 19`). Anything longer than ~10 minutes goes to the workstation (`~/code/Btp`,
   tmux; never reboot it during runs).
 
-*Last updated 2026-10-26 (E-23, SPEC 0.26).*
+*Last updated 2026-10-26 (E-24, SPEC 0.26).*
 
 ---
 
@@ -39,7 +39,7 @@ a requirement of the agent, not the headline.
 | 6 | The old failure penalty ignored droplets on the chip, so building good intermediates earned nothing. The penalty now finishes from the current state. | E-18, D-32 |
 | 7 | Teachers are not experts everywhere: cheap moves plus a planner finish beat the teacher on 7/40 s1 problems, and RL found plans 2–3× cheaper on some. Imitation must stay a warm start. | E-19, E-22, D-31 |
 | 8 | Warm start + PPO works: s1 100% and cheaper than the teacher on average; s2 82.5% from the first 100k steps. | E-22 |
-| 9 | Without the imitation anchor, s2 decays (97.5% → ~80%). The failures are exactly the 6 longest mixture plans (23–41 teacher steps; every other s2 problem ≤ 21). | E-22, E-23 |
+| 9 | Without the imitation anchor, s2 decays (97.5% → ~80%). The failures are exactly the 6 longest mixture plans; there the agent hoards droplets instead of discarding and dithers until the step limit. | E-22–E-24 |
 | 10 | Bound ratios on val sets mostly measure the bound's looseness (the teacher is at the optimum on every small proved s1 problem yet 1.17× the val_s1 bound). Only ratios near 1 certify a plan. | E-17, E-23 |
 
 ## 3. Where we stand
@@ -60,20 +60,20 @@ a requirement of the agent, not the headline.
 
 ### Phase 1. Make stages 1–2 solid (now)
 
-**1.1 Diagnose the s2 decay.** *In progress.*
-- Done: the failures are the 6 longest plans; ~11% of training s2 problems are that long
-  (E-23).
-- Next: copy `outputs/warm/mixed_s0/checkpoints/agent.pt` and `metrics.jsonl` to the Mac and
-  replay the final agent greedily on the 6 failures: truncated or dead end, steps used against
-  the limit, and the first move where it leaves the teacher's route.
-- Question it answers: is it horizon (long plans run out of steps or lose the route), forgetting
-  after the anchor goes, or s1 dominating the shared update?
+**1.1 Diagnose the s2 decay.** *Done (E-23, E-24).*
+- The failures are the 6 longest plans; ~11% of training s2 problems are that long (E-23).
+- Replay (E-24): all truncated with one droplet left, no loops; the agent hoards droplets
+  (10–25 on chip, 0–3 discards where the teacher discards 7–18 times) and dithers with low
+  confidence. The `share` failure penalty does not charge leftovers, so hoarding is free in
+  failed episodes.
 
-**1.2 Fix it.** Choose from 1.1's answer; candidates, cheapest first:
-- keep a small imitation weight instead of fading to 0 (config only);
-- self-imitation: train on the agent's own successful, cheaper episodes (saved idea, Oh 2018);
-- weight s2, or long plans, more in sampling;
-- a longer or step-aware limit if they are truncations.
+**1.2 Fix it.** Candidates, from E-24 (run separately so each effect is measured):
+- **B, anchor:** a constant small imitation weight (config only:
+  `imitation_coef=0.2 imitation_steps=1000000000`);
+- **A, penalty fix:** charge the completion's leftovers in the `share` failure penalty, as
+  success already does (SPEC 10.3 change, small code change);
+- then, if needed: self-imitation (saved idea, Oh 2018); more long s2 problems in sampling.
+- Not a fix: a longer step limit (the agent dithers; it is not cut off mid-plan).
 
 Pass bar: s2 ≥ 95% on each of the last 5 gradings, s1 stays at 100%, mean cost not above the
 teacher's. On fail: the next candidate. If none works: Phase 4 (search).

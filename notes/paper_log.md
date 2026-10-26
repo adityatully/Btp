@@ -19,7 +19,7 @@ forgotten the details.
   happened*, which SPEC does not keep.
 
 *Started 2026-10-25 from every project chat (2026-09-06 to 2026-10-25), SPEC 0.22, `notes/`
-and git history. Last updated 2026-10-26 (E-23, SPEC 0.26).*
+and git history. Last updated 2026-10-26 (E-24, SPEC 0.26).*
 
 ---
 
@@ -138,6 +138,7 @@ pointless"). The case for learning:
 | 2026-10-26 | Workstation rerun and ablation: hints are the cause (old teacher does as well); s1 copies at ~70–77% (E-20's 95% was noise), s2 ~65%. Step 2 launched from this network. | E-21 |
 | 2026-10-26 | Warm start + PPO, stages 1–2, 3M steps: s1 100% (cheaper than the teacher on average), s2 peaks 97.5% just after imitation ends, settles at 85%; held-out cell 50% zero-shot. | E-22 |
 | 2026-10-26 | s2 failures are exactly the 6 longest mixture plans (23–41 teacher steps); 11% of training s2 problems are that long. Plan rebuilt in `notes/plan.md`. | E-23 |
+| 2026-10-26 | s2 replay: the warm-start agent does not loop; it hoards droplets (10–25 on chip, 0–3 discards vs the teacher's 7–18) and dithers with low confidence until the step limit. | E-24 |
 
 ---
 
@@ -803,6 +804,49 @@ background priority. Teacher = the sharing pass.
 - **Reading (not yet tested):** the decay after imitation ends hits long-horizon mixtures.
   Whether they are truncated or reach dead ends, and where the agent leaves the teacher's
   route, needs the final agent (`agent.pt`) replayed on them.
+
+### E-24 (2026-10-26) Replaying the stage 2 failures: hoarding and dithering
+Scratch probe `s2_replay.py` (session scratchpad; run on the workstation as
+`outputs/s2_replay.py`, traces in `outputs/s2_replay.json`), SPEC 0.26. Greedy replay on
+`val_s2_v2`; at every step the agent's move and probability, the probability it gave the
+teacher's move while still on the teacher's route, and the projected total = cost so far + the
+sharing pass's finish from the state reached. Teacher move counts from `share_plan`.
+- **Warm-start agent (E-22, final weights): 34/40, the same 6 failures as E-22.** All 6 are
+  truncated at the step limit (48–82 steps, twice the teacher's plan), with one droplet of
+  demand left; none is a dead end.
+
+  | Problem | Teacher steps | Agent moves: res-res mix / mixes with a droplet / discards | Teacher: res-res / with a droplet / discards | Droplets on chip at the end | Mean p of chosen move | Projected start → end |
+  |---|---|---|---|---|---|---|
+  | val_s2-000 | 24 | 7 / 41 / 0 | 3 / 12 / 8 | 25 | 0.31 | 481 → 1010 |
+  | val_s2-004 | 24 | 7 / 39 / 2 | 3 / 10 / 10 | 14 | 0.46 | 505 → 842 |
+  | val_s2-016 | 38 | 8 / 67 / 1 | 3 / 16 / 18 | 11 | 0.61 | 524 → 682 |
+  | val_s2-019 | 23 | 8 / 38 / 0 | 5 / 10 / 7 | 19 | 0.32 | 520 → 1069 |
+  | val_s2-021 | 41 | 6 / 76 / 0 | 4 / 19 / 17 | 11 | 0.64 | 564 → 696 |
+  | val_s2-037 | 24 | 4 / 41 / 3 | 5 / 9 / 9 | 10 | 0.34 | 544 → 585 |
+
+  Solved problems, for comparison: steps / limit median 0.37 (max 0.75), repeated states 0,
+  mean p of the chosen move median 0.84. Both solved and failed episodes leave the teacher's
+  route early (solved: median step 2, max 9; failed: step 0–2), so leaving the route is not
+  the failure.
+- **Step by step:** after leaving the route the agent makes mix after mix with droplets on
+  chip, almost never discards, and the projected total rises by about 1 per step (one mix's
+  cost; the planner's finish from the state barely moves). Its moves neither build toward the
+  target nor destroy what is there; it never commits to finishing.
+- **Copy-test network (E-20 weights) on the same set, for comparison:** 29/40; all 11 failures
+  truncated with one droplet left, but by **looping** (mix, discard, the same state again; 7–35
+  repeated states, about half the moves discards). RL replaced looping with hoarding.
+- **A reward inconsistency found while reading this:** on success the engine charges every
+  droplet left on chip as waste (`rules.apply`), but the `share` failure penalty uses
+  `finish_from`, which does not charge the leftovers of its completion (SPEC 10.3). So in a
+  failed episode the droplets the agent hoarded are never charged, while discarding them costs
+  waste at once. Waste weighs only 1 per unit, so the size of the effect is unknown; it points
+  the same way as the behaviour seen.
+- **Reading (hypotheses, not tested):** (1) RL learned to avoid discards (they cost now);
+  on long mixtures droplets pile up, the candidate set grows with every droplet pair, and the
+  policy spreads its probability thin (mean p 0.31–0.64) and drifts; (2) the uncharged
+  leftovers in the failure penalty make hoarding free in episodes that fail; (3) without the
+  imitation anchor nothing pulls the policy back toward the teacher's discard-heavy plans, which
+  fits s2 holding up to update 325 and decaying after.
 
 ---
 
