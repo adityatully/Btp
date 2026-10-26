@@ -19,7 +19,7 @@ forgotten the details.
   happened*, which SPEC does not keep.
 
 *Started 2026-10-25 from every project chat (2026-09-06 to 2026-10-25), SPEC 0.22, `notes/`
-and git history. Last updated 2026-10-26 (E-24, SPEC 0.26).*
+and git history. Last updated 2026-10-26 (E-25, SPEC 0.26).*
 
 ---
 
@@ -139,6 +139,7 @@ pointless"). The case for learning:
 | 2026-10-26 | Warm start + PPO, stages 1–2, 3M steps: s1 100% (cheaper than the teacher on average), s2 peaks 97.5% just after imitation ends, settles at 85%; held-out cell 50% zero-shot. | E-22 |
 | 2026-10-26 | s2 failures are exactly the 6 longest mixture plans (23–41 teacher steps); 11% of training s2 problems are that long. Plan rebuilt in `notes/plan.md`. | E-23 |
 | 2026-10-26 | s2 replay: the warm-start agent does not loop; it hoards droplets (10–25 on chip, 0–3 discards vs the teacher's 7–18) and dithers with low confidence until the step limit. | E-24 |
+| 2026-10-26 | RL un-learned discarding: on the teacher's own states the RL agent gives the teacher's discards probability 0.000 (s1) / 0.041 (s2), the copy network 0.85 / 0.96. | E-25 |
 
 ---
 
@@ -863,6 +864,35 @@ sharing pass's finish from the state reached. Teacher move counts from `share_pl
   leftovers in the failure penalty make hoarding free in episodes that fail; (3) without the
   imitation anchor nothing pulls the policy back toward the teacher's discard-heavy plans, which
   fits s2 holding up to update 325 and decaying after.
+
+### E-25 (2026-10-26) Did RL learn to avoid discarding? (experiments D1–D4 of D-33)
+Scratch probe `waste_diag.py` (session scratchpad; run on the workstation as
+`outputs/waste_diag.py`), SPEC 0.26. RL agent = E-22 final weights
+(`outputs/warm/mixed_s0/checkpoints/agent.pt`); copy network = E-21 (a)
+(`outputs/imitation/s12/imitation.pt`), the weights the RL run started from. Greedy play.
+
+| D1: discards per move / mean peak droplets on chip / success | val_s1_v2 | val_s2_v2 |
+|---|---|---|
+| Teacher (sharing pass) | 0.175 / 2.3 / 100% | 0.341 / 2.7 / 100% |
+| Copy network | 0.295 / 2.2 / 78% | 0.393 / 2.8 / 65% |
+| RL agent | **0.000** / 2.8 / 100% | **0.026** / 6.8 / 85% |
+
+| D2: mean probability of the teacher's move, on the teacher's own states | where the teacher discards | mixes | delivers |
+|---|---|---|---|
+| s1, copy network (n = 34 / 120) | 0.851 | 0.676 | 0.966 |
+| s1, RL agent | **0.000** | 0.736 | 1.000 |
+| s2, copy network (n = 182 / 312) | 0.958 | 0.853 | 0.975 |
+| s2, RL agent | **0.041** | 0.606 | 1.000 |
+
+- **Reading.** RL training removed discarding almost entirely. On identical states, the
+  probability of the teacher's discard fell from 0.85–0.96 (the network RL started from) to
+  0.00–0.04, while mixes and deliveries kept or gained probability on s1. This is a learned
+  aversion, not an inherited habit. On s1 it costs nothing (100% solved, and leftovers are
+  charged at the end anyway); on s2 it coincides with the pile-up (peak 6.8 droplets vs the
+  teacher's 2.7) and the failures. Mix agreement on s2 also fell (0.853 → 0.606).
+- D3 (janitor) crashed on its first use: the env merges identical droplets into one Discard
+  candidate, so a discard must be matched by droplet type, not uid. Fixed in the probe; D3 and
+  D4 pending.
 
 ---
 
