@@ -167,10 +167,11 @@ Written from `notes/paper_log.md`.
 
 ## 5. Waiting on the user
 
-- PDFs for the paper checks and baselines (6.1, 6.3). Must have: robust aliquot (Poddar et
-  al., TODAES 26(1) 2020), Dong et al. (JETTA 40(1) 2024), e-MRCM (Liang et al., TCAD 39(10)
-  2020). For baselines: MRCM (Liang et al., ASP-DAC 2019), MTCS/MTMD (Kumar et al., TODAES 23(4)
-  2018), NFSP (Dinh et al., ASP-DAC 2014). Into `~/Downloads/sample prepration/`.
+- PDFs (6.1, 6.3). **Added 2026-10-26:** robust aliquot (Poddar et al.), Dong et al. 2024,
+  MRCM (Liang et al., ASP-DAC 2019), MTCS/MTMD (Kumar et al., TODAES 2018); the claim check is
+  running in session `paper-checks`. **Still missing:** e-MRCM (Liang et al., TCAD 39(10) 2020;
+  free author copy at par.nsf.gov/servlets/purl/10155987) and NFSP (Dinh et al., ASP-DAC
+  2014).
 - 3.5: is the pure-RL comparison on stages 3–5 still wanted?
 - 5.1: curriculum and regime design.
 
