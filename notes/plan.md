@@ -67,16 +67,23 @@ a requirement of the agent, not the headline.
   confidence. The `share` failure penalty does not charge leftovers, so hoarding is free in
   failed episodes.
 
-**1.2 Fix it.** Candidates, from E-24 (run separately so each effect is measured):
-- **B, anchor:** a constant small imitation weight (config only:
-  `imitation_coef=0.2 imitation_steps=1000000000`);
-- **A, penalty fix:** charge the completion's leftovers in the `share` failure penalty, as
-  success already does (SPEC 10.3 change, small code change);
-- then, if needed: self-imitation (saved idea, Oh 2018); more long s2 problems in sampling.
-- Not a fix: a longer step limit (the agent dithers; it is not cut off mid-plan).
-
-Pass bar: s2 ≥ 95% on each of the last 5 gradings, s1 stays at 100%, mean cost not above the
-teacher's. On fail: the next candidate. If none works: Phase 4 (search).
+**1.2 Fix the cause of the hoarding** (D-33). Goal: not a higher s2 score for its own sake, but
+removing a failure mode that will hit stages 3–5 harder.
+- **1.2a Evidence first** (*in progress*): experiments on the workstation with the trained agent:
+  D1 discard behaviour (teacher vs copy network vs RL agent); D2 the probability each network
+  gives the teacher's discards on the teacher's own states (did RL learn to avoid discarding?);
+  D3 a "janitor" that clears unused droplets above the teacher's peak (does clearing the chip
+  rescue the failures?); D4 how much leftover waste the failure penalty leaves uncharged.
+  - If D2 shows RL learned to avoid discards and D3 rescues the failures: build 1.2b.
+  - If D4 is large: try the smaller fix first (charge leftovers in the failure penalty only).
+  - If D3 does not rescue them: hoarding is a symptom, not the cause; look at long-horizon
+    credit and search (Phase 4).
+- **1.2b Waste charged up front** (SPEC change, needs the user's OK after 1.2a): every unit is
+  charged as waste when it lands on the chip and refunded when delivered (potential-based
+  shaping; plan costs unchanged), and failure penalties charge leftovers.
+- **1.2c Verify:** one stages 1–2 run (~75 min); the replay must show discards near the
+  teacher's rate and no pile-up; s2 holding near its peak is a bonus.
+- Fallbacks: constant imitation anchor (dropped for now, D-33); self-imitation.
 
 **1.3 Second seed.** Repeat the fixed run with seed 1. Pass: the same within one grading's
 noise (about ±6 points on 40 problems).
@@ -106,7 +113,7 @@ The same recipe that worked for stages 1–2, per stage:
 on that stage together with the stages already learned. Never train a stage whose copy test
 fails.
 
-**3.1 Zero-shot check.** Grade the stage 1–2 agent on `val_s3`, `val_s4`, `val_s5` and the
+**3.1 Zero-shot check.** *Next, in parallel with 1.2a.* Grade the stage 1–2 agent on `val_s3`, `val_s4`, `val_s5` and the
 held-out cell (cost included). Cheap; shows how much already transfers (held-out: 50%).
 
 **3.2 Stage 3 (demand).** Teacher near-optimal on small s3 (E-17). Copy test on s3; if it
@@ -153,7 +160,10 @@ Written from `notes/paper_log.md`.
 
 ## 5. Waiting on the user
 
-- PDFs for the paper checks (6.1, 6.3).
+- PDFs for the paper checks and baselines (6.1, 6.3). Must have: robust aliquot (Poddar et
+  al., TODAES 26(1) 2020), Dong et al. (JETTA 40(1) 2024), e-MRCM (Liang et al., TCAD 39(10)
+  2020). For baselines: MRCM (Liang et al., ASP-DAC 2019), MTCS/MTMD (Kumar et al., TODAES 23(4)
+  2018), NFSP (Dinh et al., ASP-DAC 2014). Into `~/Downloads/sample prepration/`.
 - 3.5: is the pure-RL comparison on stages 3–5 still wanted?
 - 5.1: curriculum and regime design.
 

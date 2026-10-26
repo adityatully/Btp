@@ -298,6 +298,22 @@ Format: date · decision · alternatives considered · why · evidence.
   completion that replays from the final state), because an accurate penalty rightly charges
   little for a failed episode whose moves were good (E-19).
 
+- **D-33 (2026-10-26) Fix the cause, not the stage 2 score; then move to stages 3–5** (user,
+  after E-22–E-24). Stage 1 counts as learned (comparison with published heuristics still
+  open). Polishing s2 from 85% to 95% is not a goal in itself, but the failure mode (hoarding
+  and dithering on long plans, E-24) will get worse with more targets and demand, so its cause
+  is fixed first. Proposed fix, **not yet adopted**: charge waste up front (every unit is
+  charged as waste when it lands on the chip and refunded when delivered), a potential-based
+  shaping (Ng et al. 1999) that leaves every finished plan's cost unchanged, makes discarding
+  neutral, and closes the gap where the `share` failure penalty does not charge leftovers. The
+  user asked for more conclusive evidence before this change: experiments D1–D4 (discard
+  behaviour, discard probability on the teacher's own states for the copy network vs the RL
+  agent, a "janitor" intervention, and the size of the uncharged leftovers). Dropped for now:
+  the constant imitation anchor (run B), a crutch that may stop the agent beating the teacher.
+  In parallel: the zero-shot check on stages 3–5 (plan 3.1). The user also noted that "keep a
+  droplet only if it is useful later" is a lookahead question, which points toward MCTS
+  (plan 4.2).
+
 ---
 
 ## 4. Experiments and results
