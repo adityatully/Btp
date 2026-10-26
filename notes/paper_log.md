@@ -19,22 +19,24 @@ forgotten the details.
   happened*, which SPEC does not keep.
 
 *Started 2026-10-25 from every project chat (2026-09-06 to 2026-10-25), SPEC 0.22, `notes/`
-and git history. Last updated 2026-10-25 (E-17, SPEC 0.24).*
+and git history. Last updated 2026-10-26 (E-22, SPEC 0.26).*
 
 ---
 
-## 0. Status at a glance (2026-10-25)
+## 0. Status at a glance (2026-10-26)
 
 - **Built:** exact rules engine, mixing-DAG validator, Gymnasium env with masking, generator
   with feasibility witnesses, exact search with a proved lower bound, split-tree construction,
-  evaluation harness, PPO with a size-free set encoder (obs/net v2), 5-stage design
-  `track2_v1`, three training regimes, `workers` collector. SPEC 0.22.
-- **Trained:** two 6-run regime pilots (stages 1–3). Neither learned enough to choose a regime
-  (F-11, E-9, E-10).
-- **Diagnosed:** the reward is now sound; the blocker is exploration. Random play almost never
-  finishes a problem (E-11).
-- **Next:** imitation warm start from the construction, then PPO (D-30). Then a short stage
-  1–2 test, then the regime pilot again.
+  sharing pass (teacher and "finish from here" planner), candidate hint columns, evaluation
+  harness, PPO with a size-free set encoder (obs/net v2), imitation warm start with a fading
+  imitation term, 5-stage design `track2_v1`, three training regimes, `workers` collector.
+  SPEC 0.26.
+- **Trained:** two 6-run regime pilots (stages 1–3) that never learned mixtures (E-9, E-10).
+  Then imitation of the sharing pass with hint columns (E-20, E-21) and a 3M-step warm-start
+  PPO run on stages 1–2 (E-22): s1 100% and cheaper than the teacher on average, s2 85% after
+  peaking at 97.5%.
+- **Open:** why s2 decays after the imitation term ends (E-22); stages 3–5 (sharing-aware
+  hints, certifying the teacher on mixtures); the regime question; paper benchmarks.
 
 ---
 
@@ -134,6 +136,7 @@ pointless"). The case for learning:
 | 2026-10-26 | Finish-from-here planner as penalty, hint columns and teacher (SPEC 0.25). Cheap moves + finish beat the teacher on 7/40 s1 problems (168 vs 475). | D-32, E-19 |
 | 2026-10-26 | Copy test with hints + sharing teacher: s1 greedy 95% (70% before the last epoch), s2 72.5% (was 0%), 12 / 6 plans cheaper than best known. Step 1 passes. | E-20 |
 | 2026-10-26 | Workstation rerun and ablation: hints are the cause (old teacher does as well); s1 copies at ~70–77% (E-20's 95% was noise), s2 ~65%. Step 2 launched from this network. | E-21 |
+| 2026-10-26 | Warm start + PPO, stages 1–2, 3M steps: s1 100% (cheaper than the teacher on average), s2 peaks 97.5% just after imitation ends, settles at 85%; held-out cell 50% zero-shot. | E-22 |
 
 ---
 
@@ -725,6 +728,58 @@ epoch 20 (to the old best known): (b) s1 −3.3%, s2 +1.9%.
   70–77% and s2 at about 60–70%. So the D-31 copy bar is met on s2 and missed on s1 (≥ 90%);
   s1 still rose from 25–35%. Step 2 (PPO from the network of (a)) is where s1 must clear 90%;
   the remaining s1 misses are likely where the teacher's move is not unique or not best (E-19).
+
+### E-22 (2026-10-26) Warm start + PPO on stages 1–2 (step 2)
+Commit `bc93a7b` (SPEC 0.26), workstation, `outputs/warm/mixed_s0`, seed 0. PPO started from the
+E-21 (a) imitation network (`train.init_from=outputs/imitation/s12/imitation.pt`). Imitation term
+on sharing-pass demonstrations, weight 1.0 falling linearly to 0 at 1M steps (update ~245), then
+pure PPO to 3M (732 updates). `regime=mixed regime.num_stages=2` (s1 and s2 half and half, no
+promotions; not a regime test), `costs=geometric`, `reward_scale=0.01`, share penalty and hint
+columns (SPEC 0.25), `workers` collector, ~700 env steps/s, about 75 min. Greedy grading every 25
+updates on `val_s1_v2` and `val_s2_v2` (40 unseen problems each); final grading adds
+`heldout_combo_v2`.
+
+| Update (imitation weight) | 25 (0.9) | 100 (0.59) | 200 (0.18) | 250 (0) | 325 | 375 | 425 | 550 | 725 |
+|---|---|---|---|---|---|---|---|---|---|
+| s1 success | 97.5 | 97.5 | 97.5 | 100 | 100 | 100 | 100 | 100 | 100 |
+| s1 gap to old best known | −1.8 | +1.4 | −5.2 | −7.3 | −10.1 | −10.3 | −9.3 | −16.8 | −16.0 |
+| s2 success | 82.5 | 85 | 92.5 | **97.5** | 92.5 | 77.5 | 72.5 | 75 | 85 |
+| s2 gap to old best known | +0.9 | +1.2 | +1.2 | +10.7 | +8.5 | +3.6 | +0.2 | +2.5 | +0.1 |
+
+(%; gap is the mean over solved problems. The teacher's gap is −13.3% on s1 and −2.9% on s2.)
+Training at the end: success 91–94%, approx_kl 0.001–0.005 (learning rate annealed to 0),
+explained variance 0.88–0.89.
+
+**Final grading, agent vs the sharing-pass teacher per problem** (`outputs/vs_teacher.py`, not
+committed; checked on the Mac by grading the teacher against itself):
+
+| Set | Solved | Agent / teacher on solved: cheaper / equal / dearer | median, mean, min, max |
+|---|---|---|---|
+| s1 | 40/40 | 7 / 19 / 14 | 1.000, 0.978, 0.36, 1.53 |
+| s2 | 34/40 | 8 / 12 / 14 | 1.000, 1.035, 0.81, 1.58 |
+| held-out cell | 20/40 (50%) | not compared | |
+
+- Largest wins: s1 `val_s1-024` 77 vs 213, `-003` 209 vs 402, `-007` 77 vs 144; s2 `val_s2-007`
+  373 vs 458, `-039` 293 vs 358. Largest losses: s1 `-018` 205 vs 134, `-016` 455 vs 325; s2
+  `-023` 459 vs 291, `-028` 845 vs 635.
+- s2 failures (status `failed`): `val_s2-000, -004, -016, -019, -021, -037`, teacher costs
+  481–564, all among the set's dearest problems.
+- **Reading.** (1) **The warm start unblocks learning.** Pilot 2 reached s1 38–42% and s2 0% in
+  10M steps; this run is at s1 97.5% and s2 82.5% from the first grading (100k steps). (2) **The
+  D-31 pass bar is met:** s1 ≥ 90%, s2 well above 0, and plans cheaper than the teacher on
+  some problems (7 s1, 8 s2). (3) **On s1, RL improved on the teacher after imitation ended:**
+  the mean gap moved from about −5% to −15/−17%, past the teacher's −13.3%. It is a mean, not
+  a uniform win: the agent is dearer on 14 of 40 problems and much cheaper on a few. (4) **s2
+  decays after imitation ends.** It peaks at 97.5% at update 250, just after the weight reaches
+  0, and stays at 92.5% to update 325; from update 375 it falls to 72.5–85% and does not
+  recover. Its cost does not improve on the teacher (mean ratio 1.035 on solved problems). One
+  40-problem grading has a noise of about ±6 points, but the drop is sustained over 15
+  gradings. (5) **Zero-shot held-out cell: 50%** (dilution + many targets + demand + storage,
+  none of stages 3–5 seen in training). Its cost is not yet compared.
+- **Open (not tested):** why s2 decays. Candidate causes: s1 dominating the shared update once
+  imitation stops; cost-cutting moves learned on s1 that break long mixture plans near the step
+  limit; ordinary PPO drift without a teacher anchor. Status of the 6 failures (truncated vs
+  dead end) and their plans not yet inspected. One seed only.
 
 ---
 
