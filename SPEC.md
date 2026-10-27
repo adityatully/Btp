@@ -1,6 +1,15 @@
 # MEDA Design Automation — Codebase Specification
 
-Version 0.28 · 2026-10-27
+Version 0.29 · 2026-10-27
+
+Changes in 0.29 (literature baselines, 10.4; plan 2.4, D-36; numbered 0.28 on branch
+`claude/lit-bench-b3e8e4` before the merge): five published single-target methods are implemented from their papers, each reproducing a worked example or table of its
+paper: DFM and FacDA (`facda.py`, no longer a stub), DFMM (`dfmm.py`), Generic (`generic.py`)
+and MRCM (`mrcm.py`). They share `paper_graph.py`: the paper's n-input mixing graph, replayed
+as chains of 2-input mixes; a method that does not take a problem raises `NotApplicable` with
+the reason. No new dependency: FacDA's SMT call and MRCM's ILP are exhaustive searches over the
+same integer variables. New frozen sets `litbench_s1_v1`, `litbench_s2_v1` (fresh stage-1/2
+draws) and `litbench_paper_v1` (the papers' own problems); `scripts/lit_bench.py` runs them.
 
 Changes in 0.28 (planner-free hint ablation, 9.3; paper log E-31, Q-105): the env config gains
 `hint_source` (optional, default `planner`, unchanged behaviour). With `problem`, no planner is
@@ -8,8 +17,7 @@ called for hints: the recipe columns carry the fewest mixes along a pure-fluid c
 up to 4 (`hints.EXACT_DEPTH`, the aim itself at 0), a fact of the problem's arithmetic, instead
 of the distance along the tree's and the sharing pass's recipes; the chain columns are
 unchanged. `HintTables.recipe_left` now takes the droplet's volume. `scripts/imitation_check.py`
-takes `hints=planner|problem`. (The unmerged literature branch also calls itself 0.28; it
-becomes 0.29 when merged.)
+takes `hints=planner|problem`.
 
 Changes in 0.27 (teacher moves on identical droplets, 11.4; paper log F-16): the candidate list
 offers one move per class of identical droplets, while a teacher's plan names a particular
@@ -484,7 +492,11 @@ meda-da/
 │   │       ├── tree.py        # split tree: every reachable target, any number of fluids
 │   │       ├── share.py       # sharing pass: the constructions plus reuse across targets
 │   │       ├── bitscan.py     # 1:1 binary dilution (DMFB classic)
-│   │       └── facda.py       # factorisation-based MEDA dilution (from the paper)
+│   │       ├── paper_graph.py # published methods' n-input graphs, replayed as 2-input mixes
+│   │       ├── facda.py       # DFM and FacDA, MEDA dilution (Kundu et al. 2022)
+│   │       ├── dfmm.py        # DFMM, MEDA mixture (Kundu & Roy 2022)
+│   │       ├── generic.py     # Generic sample preparation (Poddar et al. 2022)
+│   │       └── mrcm.py        # MRCM, cost-weighted MEDA mixture (Liang et al. 2019)
 │   ├── agents/
 │   │   ├── base.py            # Agent protocol
 │   │   ├── random_agent.py
@@ -1624,11 +1636,29 @@ serves as tabular Q's value prior (11.3).
   baseline checks its preconditions and delegates rather than duplicating the algorithm; a test
   asserts the two agree on every dyadic target. It stays a separate named baseline because the
   literature reports it as one.
-- `facda.py`: factorisation-based MEDA dilution. A **stub** that raises, with `verified = False`,
-  reserved for M9. Two things must be settled before writing it: the author list is unconfirmed
-  (Kundu et al. vs Bhattacharjee et al.), and the paper's reported results must be transcribed
-  into `literature_v1` so the reproduction test has something to compare against. A
-  plausible-looking approximation would produce numbers nobody has checked.
+- **Published single-target methods** (0.28; plan 2.4), implemented from the papers only, with
+  the choices each paper leaves open in `notes/lit_bench/selection.md`. Each builds the
+  paper's mixing graph (`paper_graph.PaperGraph`: nodes are n-input mixes of pure-fluid units
+  and units of earlier nodes); `paper_graph.emit` replays it through the engine, each n-input
+  mix as a chain of 2-input mixes (D-29), so our mix count is at least the paper's nm. A method
+  that does not take a problem (fluid count, a ratio-sum with a prime factor above M, a last mix
+  smaller than the target droplet, the step limit, a search budget) raises `NotApplicable`
+  naming the reason; `PaperSolver` reports it as `infeasible` (only: *this* method).
+  - `facda.py`: **DFM** and **FacDA** (Kundu et al., TCAD 41(3), 2022), two-fluid dilution.
+    FacDA-Transformation moves a tolerant ratio to the next ratio-sum that factorises within
+    [2, M]; DFM builds the mixed-radix tree on the least-cardinality factor set; FacDA lets every
+    node share volume with any ancestor and draws the fewest sample units (the paper's SMT
+    model, solved by exhaustive search, `SEARCH_BUDGET` nodes). Reproduces Fig. 7 and 8 and all
+    eight FacDA rows of Poddar et al.'s Table III.
+  - `dfmm.py`: **DFMM** (Kundu & Roy, DSD 2022), any number of fluids, the DFM tree on the
+    ratio-sum's shortest factor list. Reproduces Fig. 5 (7:7:6 at M = 5).
+  - `generic.py`: **Generic** (Poddar et al., TCAD 41(11), 2022), two-fluid dilution, top-down
+    chain of mixes of sample, buffer and one intermediate CF. Reproduces Fig. 6(b) and seven of
+    the eight MEDA rows of its Table III.
+  - `mrcm.py`: **MRCM** (Liang et al., ASP-DAC 2019), any number of fluids, the cheapest of all
+    trees in reactant cost (then mixes, then waste), each mixing model's children chosen with
+    the least concentration-vector sum (the paper's ILP). Reproduces Fig. 3(a) and the ILP's
+    children of section 3.1.
 - `share.py` (0.24): the **sharing pass**. The targets are built one delivery group at a time
   on one chip; every leftover stays in a pool of idle droplets instead of going to waste. Per
   group it prices, on a copy of the plan, (1) a pool droplet within tolerance, (2) one mix of

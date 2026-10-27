@@ -1088,8 +1088,9 @@ Gap = share ÷ optimum − 1 on proved problems; gain = (share − best found) �
   storage 2). So no benchmark problem is out of the planner's reach.
 
 ### E-29 (2026-10-27) Mini literature benchmark, stages 1–2 (plan 2.4, D-36)
-Branch `claude/lit-bench-b3e8e4` (commits `4da0722`, `ec73f15`, `b7bafe4`; SPEC 0.28 on the
-branch, not merged), `notes/lit_bench/results.md` and `selection.md` there. Five methods
+Branch `claude/lit-bench-b3e8e4` (commits `4da0722`, `ec73f15`, `b7bafe4`, `7329590`; SPEC 0.28 on the
+branch; merged into `main` the same day as SPEC 0.29), `notes/lit_bench/results.md` and
+`selection.md`. Five methods
 implemented from their PDFs, no new dependency (solver calls replaced by exhaustive search):
 DFM and FacDA (Kundu et al., TCAD 2022), Generic (Poddar et al., TCAD 2022), DFMM (Kundu & Roy,
 DSD 2022), MRCM (Liang et al., ASP-DAC 2019). Paper checks: FacDA matches all 8 FacDA rows of
