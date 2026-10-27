@@ -42,10 +42,12 @@ from meda.generators.sampler import (
     GeneratorSource,
     dilution_grid,
     sample_instances,
+    step_limit_base,
 )
 from meda.generators.stages import Cell, StageDesign
 from meda.solvers.base import SolveBudget
 from meda.solvers.baselines.naive import naive_plan
+from meda.solvers.baselines.tree import tree_plan
 from meda.solvers.exact_search import ExactSearch
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -292,10 +294,20 @@ def build_val_stage1_v2() -> BenchmarkSet:
     )
 
 
-def build_design_set(design_name: str, which: int | None) -> BenchmarkSet:
+def build_design_set(
+    design_name: str,
+    which: int | None,
+    full: str | None = None,
+    seed: int | None = None,
+    size: int | None = None,
+    exclude: frozenset[str] = frozenset(),
+) -> BenchmarkSet:
     """A validation set of a stage design (SPEC 8.3, 8.4): stage `which`'s cells, or the
     held-out cells when `which` is None. `val_size` instances split evenly over the cells,
     each a fresh draw (unwitnessed draws are redrawn), no two the same problem.
+
+    `full`, `seed`, `size` and `exclude` override the set's name, seed, size and the problems
+    it may not contain (the literature benchmark draws its own sets this way, plan 2.4).
 
     Answer key per instance: [lower bound, best known], where best known is the cheaper of the
     naive and split-tree plans and the lower bound is exact search's conservation bound at the
@@ -309,15 +321,17 @@ def build_design_set(design_name: str, which: int | None) -> BenchmarkSet:
     weights = load_weights(design.costs)
     if which is None:
         cells: tuple[Cell, ...] = design.held_out
-        full, label, offset = design.held_out_val, "held-out cells", len(design.stages)
+        label, offset = "held-out cells", len(design.stages)
+        full = full or design.held_out_val
     else:
         stage = design.stages[which]
-        cells, full, label, offset = stage.cells, stage.val, f"stage {stage.name}", which
+        cells, default, label, offset = stage.cells, stage.val, f"stage {stage.name}", which
+        full = full or default
     name, version = full.rsplit("_v", 1)
-    seeds = (design.val_seed + offset,)
+    seeds = (design.val_seed + offset if seed is None else seed,)
     rng = np.random.default_rng(seeds[0])
-    per_cell = ceil(design.val_size / len(cells))
-    seen: set[str] = set()
+    per_cell = ceil((size or design.val_size) / len(cells))
+    seen: set[str] = set(exclude)
     instances: list[Instance] = []
     for cell in cells:
         drawn = 0
@@ -332,6 +346,32 @@ def build_design_set(design_name: str, which: int | None) -> BenchmarkSet:
                 )
             )
             drawn += 1
+    reference = answer_key(instances, weights)
+    return BenchmarkSet(
+        name=name,
+        version=int(version),
+        instances=tuple(instances),
+        reference=reference,
+        generator={
+            "builder": "scripts/make_benchmark.py:build_design_set",
+            "design": design.name,
+            "which": label,
+            "cells": {c.name: c.config.config_hash() for c in cells},
+            "chip": design.chip,
+            "costs": design.costs,
+            "answer_key": "[root conservation bound (SPEC 0.21), cheaper of naive and tree]",
+        },
+        seeds=seeds,
+        description=(
+            f"{'Validation' if size is None else 'Literature benchmark'} for {label} of "
+            f"stage design {design.name}: {per_cell} draws per cell "
+            f"over {', '.join(c.name for c in cells)}. Graded under costs/{design.costs}."
+        ),
+    )
+
+
+def answer_key(instances: list[Instance], weights: CostWeights) -> dict[str, InstanceReference]:
+    """[root conservation bound, cheaper of naive and tree] per instance (SPEC 0.21)."""
     solver = ExactSearch(weights)
     reference: dict[str, InstanceReference] = {}
     for inst in instances:
@@ -349,24 +389,85 @@ def build_design_set(design_name: str, which: int | None) -> BenchmarkSet:
             },
             lower_bound=None if proved else result.lower_bound,
         )
+    return reference
+
+
+# The literature benchmark's problems from the papers' own examples and tables (plan 2.4):
+# (stage, ratio, denominator, tolerance, M, droplet volume, source). A droplet volume the
+# paper states is kept (Poddar et al. prepare 4X and 8X targets); otherwise one unit.
+PAPER_PROBLEMS: list[tuple[str, tuple[int, ...], int, Rational, int, int, str]] = [
+    ("s1", (70, 49), 119, Rational.of(1, 200), 6, 1, "FacDA (TCAD 2022) Example 2, Fig. 6-8"),
+    ("s1", (7, 20), 27, Rational.of(1, 200), 4, 1, "FacDA (TCAD 2022) Fig. 2, 4"),
+    ("s1", (7, 5), 12, ZERO, 4, 1, "Generic (TCAD 2022) Fig. 6(b)"),
+    *[
+        (
+            "s1",
+            (x, 64 - x),
+            64,
+            ZERO,
+            m,
+            m,
+            f"Generic (TCAD 2022) Table II(b), {m}X"
+            + (", Table III" if x in (1, 17, 31, 44, 45, 56, 61, 63) and m == 4 else "")
+            + (", Example 3" if x == 42 and m == 4 else ""),
+        )
+        for m in (4, 8)
+        for x in range(1, 64)
+    ],
+    ("s2", (7, 7, 6), 20, ZERO, 5, 1, "DFMM/STWM (DSD 2022) Fig. 3, 5"),
+    ("s2", (25, 31, 44), 100, ZERO, 8, 4, "MRCM (ASP-DAC 2019) Fig. 3"),
+    ("s2", (1, 1, 1, 1), 4, ZERO, 8, 4, "MRCM (ASP-DAC 2019) Section 2.2"),
+]
+
+
+def build_litbench_paper() -> BenchmarkSet:
+    """One-target stage-1/2 problems from the chosen papers' worked examples and tables, in
+    our format (plan 2.4). Ratios are reduced, as every target of ours is; the papers' tables
+    sometimes work on the unreduced x/64."""
+    weights = load_weights("geometric")
+    base = load_chip("meda_m8")
+    kinds = {2: SB, 3: (Fluid(0, "S", FluidKind.SAMPLE), Fluid(1, "R1", FluidKind.REAGENT),
+                        Fluid(2, "B", FluidKind.BUFFER))}  # fmt: skip
+    kinds[4] = (*kinds[3][:2], Fluid(2, "R2", FluidKind.REAGENT), Fluid(3, "B", FluidKind.BUFFER))
+    instances: list[Instance] = []
+    for stage, ratio, den, tol, m, volume, source in PAPER_PROBLEMS:
+        chip = replace(base, name=f"{base.name}-M{m}-S32", max_mix_volume=m,
+                       storage_capacity=32, max_denominator=1024)  # fmt: skip
+        target = Target(0, 0, Composition.from_ints(ratio, den), tol, volume, 1)
+        probe = Instance("probe", kinds[len(ratio)], (target,), chip, 10_000)
+        witness = tree_plan(probe)
+        if witness is None:
+            raise ValueError(f"{source}: the split tree finds no plan for {ratio}/{den}")
+        limit = max(4 * step_limit_base(probe, "depth_support"), 2 * len(witness))
+        instances.append(
+            replace(
+                probe,
+                instance_id=f"litbench_paper-{len(instances):03d}",
+                step_limit=limit,
+                metadata={
+                    "generator": "paper",
+                    "source": source,
+                    "stage": stage,
+                    "witness_actions": len(witness),
+                    "witness_source": "tree",
+                },
+            )
+        )
     return BenchmarkSet(
-        name=name,
-        version=int(version),
+        name="litbench_paper",
+        version=1,
         instances=tuple(instances),
-        reference=reference,
+        reference=answer_key(instances, weights),
         generator={
-            "builder": "scripts/make_benchmark.py:build_design_set",
-            "design": design.name,
-            "which": label,
-            "cells": {c.name: c.config.config_hash() for c in cells},
-            "chip": design.chip,
-            "costs": design.costs,
+            "builder": "scripts/make_benchmark.py:build_litbench_paper",
+            "costs": "geometric",
             "answer_key": "[root conservation bound (SPEC 0.21), cheaper of naive and tree]",
         },
-        seeds=seeds,
+        seeds=(),
         description=(
-            f"Validation for {label} of stage design {design.name}: {per_cell} draws per cell "
-            f"over {', '.join(c.name for c in cells)}. Graded under costs/{design.costs}."
+            "Literature benchmark (plan 2.4): one-target dilution (s1) and mixture (s2) problems "
+            "from the worked examples and tables of FacDA, Generic, DFMM and MRCM. Graded under "
+            "costs/geometric."
         ),
     )
 
@@ -381,11 +482,26 @@ def design_builders(design_name: str) -> dict[str, Callable[[], BenchmarkSet]]:
     return out
 
 
+def build_litbench(which: int) -> BenchmarkSet:
+    """Fresh draws of track2_v1 stage `which` for the literature benchmark (plan 2.4): 100
+    problems on a new seed, none the same problem as any set already in `benchmarks/`."""
+    paths = sorted((ROOT / "benchmarks").glob("*_v*.json"))
+    held = frozenset().union(
+        *(BenchmarkSet.read(p.stem).hashes() for p in paths if not p.stem.startswith("litbench"))
+    )
+    return build_design_set(
+        "track2_v1", which, f"litbench_s{which + 1}_v1", 20261027 + which, 100, held
+    )
+
+
 BUILDERS: dict[str, Callable[[], BenchmarkSet]] = {
     "tiny_exact_v1": build_tiny_exact,
     "val_stage1_v1": build_val_stage1,
     "val_stage1_v2": build_val_stage1_v2,
     **design_builders("track2_v1"),
+    "litbench_s1_v1": functools.partial(build_litbench, 0),
+    "litbench_s2_v1": functools.partial(build_litbench, 1),
+    "litbench_paper_v1": build_litbench_paper,
 }
 
 
