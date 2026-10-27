@@ -44,6 +44,7 @@ chats. Last updated 2026-10-27.*
 | Q-50 | Does the best planner as teacher beat the plain sharing pass on stages 3–5? | 3.4 |
 | Q-60 | What hints do stages 3–5 need? | 3.3 |
 | Q-71 | Pure RL vs RL with a teacher on stages 3–5 | Waiting on the user (plan §5) |
+| Q-106 | Can learning plus search find plans cheaper than the planner, without the planner at play time? | 4.2 (D-37, workstation run pending) |
 | Q-72 | Self-imitation if cost stalls near the teacher? | 4.3 |
 | Q-73 | Are the results stable across seeds? | 5.1 |
 | Q-78 | Root cause of the long-plan failures (s2, and s3–5 zero-shot) | 3.2, then 3.5 |
@@ -462,6 +463,13 @@ Explained variance 0.88–0.89 at the end of the warm-start run.
 
 **Q-71 Pure RL vs RL with a teacher on stages 3–5?** · **Open → waiting on the user** (plan §5;
 was D-31 (6))
+
+**Q-106 Can learning plus search find plans cheaper than the planner, without the planner at
+play time?** · **Open → plan 4.2** (D-37; user, 2026-10-27)
+Asked because the agent alone ends level with the planner (E-22, E-29) and every fix so far
+improved the planner or its hints. `scripts/search_check.py` compares the greedy agent, search
+with planner finishes (network or flat prior) and search with the network's own value (no
+planner) on 23 proved planner misses; the reading is fixed in D-37.
 
 **Q-72 Self-imitation if cost stalls near the teacher?** · **Open → plan 4.3**
 

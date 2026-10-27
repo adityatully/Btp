@@ -377,6 +377,27 @@ Format: date · decision · alternatives considered · why · evidence.
   equal on 19 / 12, dearer on 14 / 14 problems, and fails 0 / 6 (s1 / s2). Its wins save 1–3
   sample units where the planner draws many (Q-100).
 
+- **D-37 (2026-10-27) Test search before training stages 3–5; stop adding heuristics**
+  (user; plan 4.2 brought forward, Q-8, Q-105, Q-106). Why: the agent learns beyond copying
+  (E-22) but ends level with the planner on average, and on proved s2 problems exactly where
+  the planner ends (1.425 vs 1.430 × optimum, MRCM 1.018; E-29). Each fix so far improved the
+  planner or its hints (sharing pass, variants, hints; MRCM was next), which raises the agent's
+  floor but ties its ceiling to our heuristics, and stages 4–5 have no published method to
+  borrow from. Alternative considered: MRCM's trees as a planner option and teacher for
+  mixtures (Q-104), kept as a baseline only for now. Test (`scripts/search_check.py`): MCTS
+  over the env on problems where a cheaper plan than the best planner is known (A: 23 proved
+  E2 problems where it is > 2% above the optimum; the greedy agent solves 15, beats the planner
+  on 1, reaches the optimum on 0. B: 13 `val_s2_v2` problems where MRCM is cheaper). Variants:
+  `net` (network prior, planner finish as leaf score), `uniform` (flat prior, planner finish),
+  `zero` (network prior and value head, no planner call during play), 64 and 256 simulations.
+  Reading fixed in advance, on A at 256: (1) `net` below the best planner on ≥ 1/3; (2) `net`
+  below on more problems than `uniform`; (3) `zero` below on ≥ 1/3. (3) → search as the
+  network's teacher (expert iteration) is next; (1) without (3) → the gains come from planner
+  finishes after a few searched moves (as E-19), not from learning; neither → rethink before
+  stages 3–5. `zero` was added after a Mac smoke test with a random network: a flat prior with
+  planner finishes found plans below the planner on 2 of 2 dilution problems at 8 simulations,
+  so lookahead with planner finishes alone cannot tell learning apart.
+
 ---
 
 ## 4. Experiments and results

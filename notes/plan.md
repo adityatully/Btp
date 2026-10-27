@@ -175,7 +175,10 @@ design before it starts.*
 units saved next to cost (D-25).
 **4.2 Small MCTS test at decision time** (M9 early): the network's policy as prior, "finish from
 here" as leaf value, on the headroom cells against the best planner. Lookahead targets the
-planner's known miss (building two intermediates ahead and blending them, E-17).
+planner's known miss (building two intermediates ahead and blending them, E-17). *Brought forward
+2026-10-27 (D-37), before 3.3–3.5:* `scripts/search_check.py`, three searches (network +
+planner finish, flat prior + planner finish, network + its own value with no planner) on 23
+proved planner misses and 13 MRCM wins, reading fixed in advance. Workstation run pending.
 **4.3 Self-imitation** if cost stalls near the teacher.
 
 ### Phase 5. Make it solid
