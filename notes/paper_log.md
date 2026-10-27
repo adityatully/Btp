@@ -365,6 +365,18 @@ Format: date · decision · alternatives considered · why · evidence.
   of open decisions overwhelming; from now on a decision is brought to them only when its
   step is reached.
 
+- **D-36 (2026-10-27) A mini literature comparison on stages 1–2 before the full benchmark**
+  (user; plan 2.4, `notes/questions.md` Q-49). Five or six published heuristics that claim
+  single-target dilution or mixture preparation are implemented from their PDFs (SPEC 10.4) and
+  checked against a worked example or table in each paper. They run on `val_s1_v2`,
+  `val_s2_v2` and the proved E2 s1/s2 problems, next to the sharing pass, the best planner and
+  the agent (E-22). Why now: no comparison with the literature exists (E-17 task 3, E-23), and
+  stage 1–2 methods are the most numerous and the simplest to check. The full comparison stays
+  plan 6.3. Run in its own session and branch. Agent and planner costs on these sets already
+  exist (`notes/headroom/records.jsonl`): against the best planner the agent is cheaper on 7 / 8,
+  equal on 19 / 12, dearer on 14 / 14 problems, and fails 0 / 6 (s1 / s2). Its wins save 1–3
+  sample units where the planner draws many (Q-100).
+
 ---
 
 ## 4. Experiments and results
@@ -1074,6 +1086,112 @@ Gap = share ÷ optimum − 1 on proved problems; gain = (share − best found) �
   env refuses problems its failure penalty cannot price. At our ranges this almost never
   binds: 1 draw discarded across the six val sets (in `val_s5_v2`), 3 of 48 in E3 (mixtures at
   storage 2). So no benchmark problem is out of the planner's reach.
+
+### E-29 (2026-10-27) Mini literature benchmark, stages 1–2 (plan 2.4, D-36)
+Branch `claude/lit-bench-b3e8e4` (commits `4da0722`, `ec73f15`, `b7bafe4`; SPEC 0.28 on the
+branch, not merged), `notes/lit_bench/results.md` and `selection.md` there. Five methods
+implemented from their PDFs, no new dependency (solver calls replaced by exhaustive search):
+DFM and FacDA (Kundu et al., TCAD 2022), Generic (Poddar et al., TCAD 2022), DFMM (Kundu & Roy,
+DSD 2022), MRCM (Liang et al., ASP-DAC 2019). Paper checks: FacDA matches all 8 FacDA rows of
+Poddar's Table III; Generic 7 of 8 (31/64 differs); MRCM Fig. 3(a) exactly (under Fig. 3(b)'s
+weights we find a tree costing 19 vs the paper's 20). Mac run, 436 problems; agent = E-22,
+stored results, so only on the val and E2 sets so far (the new sets need the workstation).
+Ratio = cost ÷ best planner (the three share variants coincide on one-target problems).
+
+| Set | Method | Accepted | Mean ratio | Cheaper / equal / dearer |
+|---|---|---|---|---|
+| val_s1 | FacDA | 30/40 | 1.095 | 9 / 5 / 16 |
+| val_s1 | MRCM | 27/40 | 1.006 | 10 / 13 / 4 |
+| val_s1 | agent | 40/40 | 0.978 | 7 / 19 / 14 |
+| val_s2 | MRCM | 17/40 | **0.658** | 13 / 4 / 0 |
+| val_s2 | DFMM | 15/40 | 0.974 | 8 / 2 / 5 |
+| val_s2 | agent | 34/40 | 1.035 | 8 / 12 / 14 |
+| fresh s2 | MRCM | 41/100 | 0.783 | 29 / 9 / 3 |
+
+- **Proved optima (E2):** s1, every method within 0.1% of the optimum except Generic (1.239);
+  our planner 1.027, agent 1.045. **s2 (7 problems): MRCM 1.018, our planner 1.430, agent
+  1.425.**
+- **Reading.** (1) Stage 1: the best published dilution methods (FacDA, MRCM) are level with
+  our planner on average; DFM, Generic, DFMM are dearer (1.17–1.73). The agent is level too.
+  (2) **Stage 2: our planner, the teacher, is weak on single-target mixtures.** MRCM, a
+  cost-weighted search over mixing trees, draws about half the sample units and half the waste
+  (val: 1.9 vs 3.8 sample, 5.6 vs 11.0 waste), and the agent inherits the planner's level
+  (1.024 on MRCM's problems). This revises E-17 and E-28: on proved s2 problems the sharing pass
+  looked fine only because just 2–7 were proved. (3) MRCM covers under half of s2 (exact
+  targets only, its intermediates' denominators must shrink, a search budget), so the claim is
+  "cheaper on what it takes".
+- **Workstation run with the agent on every set (added the same day, commit `7329590` on the
+  branch, `runs/e22/`; costs equal the Mac run and the stored E-22 results).** Agent vs best
+  planner: fresh s1 100/100 solved, mean 0.971 (cheaper 21 / equal 47 / dearer 32); paper s1
+  129/129, 0.982 (11 / 72 / 46), against MRCM 0.961 and FacDA 0.973 there; fresh s2 88/100
+  solved (12 fail), 1.003 (17 / 31 / 40), against MRCM 0.783 on the 41 it takes (agent 0.970
+  on those). On the papers' 10 proved s1 problems the agent is at 1.005 of the optimum. The
+  fresh draws may overlap the agent's training problems; the val and paper sets are clean.
+
+### E-31 (2026-10-27) Can the hint come from the problem alone? (Q-105)
+Scratch probe `exact_hint_probe.py` (session scratchpad), SPEC 0.27 code, Mac background
+priority. Distance = fewest mixes from a droplet (composition, volume) to the target's aim,
+worked back from the aim with no planner: each mix adds one pure fluid ("chain", depth D) or
+also a premix of two pure fluids ("premix", counted as 2 mixes). Measured per target: table
+build time and size (caps 300k entries, 20 s); share of the teacher's mixes the table covers;
+how often the teacher's mix has the smallest distance among the mix candidates; share of mix
+candidates with a value.
+
+| Set, variant | targets | time median / max | size median / max | teacher mixes covered | teacher at smallest | candidates with a value |
+|---|---|---|---|---|---|---|
+| val_s1, chain D2 (today's chain hint) | 40 | 2 ms / 0.02 s | 69 / 534 | 86% | 79% | 41% |
+| val_s1, chain D3 | 40 | 12 ms / 0.24 s | 276 / 3,869 | 93% | 85% | 73% |
+| val_s1, chain D4 | 40 | 87 ms / 2.0 s | 898 / 12,759 | **100%** | 85% | 86% |
+| val_s1, chain D5 | 40 | 0.25 s / 9.3 s | 2,853 / 17,085 | 100% | 85% | 87% |
+| val_s2, chain D4 | 12 | 46 ms / 4.2 s | 816 / 39,162 | **29%** | 28% | 8% |
+| val_s2, premix D3 | 12 | 0.17 s / 20 s (1 cap) | 1,110 / 17,479 | 30% | 30% | 6% |
+| val_s2, premix D5 (4 problems) | 4 | 17 s / 20 s (3 caps) | 221k / 300k | 44% | 36% | 19% |
+
+MRCM's intermediates on val_s2: 4 of 28 covered (chain D4), 5 of 28 (premix D3).
+- **Reading.** (1) **Dilutions: yes.** A depth-4 chain covers every teacher mix on val_s1 in
+  under 0.1 s per target (cached), with no planner. (2) **Mixtures: no, not this way.** Even
+  premixes at depth 5 cover under half of the teacher's mixes and almost none of MRCM's, and
+  the search hits its caps: a mixture of F fluids needs blends of intermediates, and the
+  backward search over blends explodes. A planner-free hint for mixtures needs another idea
+  (an exact lower bound on mixes left, or a constructive method's recipes, which is a planner
+  again). (3) Built as SPEC 0.28 `hint_source: problem` (depth-4 chain in the recipe columns)
+  for a copy-test comparison on stages 1–2 against the planner's hints.
+
+### E-30 (2026-10-27) Hint coverage along the teacher's plans and the agent's episodes (plan 3.2)
+`scripts/hint_coverage.py` at commit `d643f05` (SPEC 0.27), workstation, 30 workers, all six
+val sets (242 problems), E-22 final weights, greedy, `planner=1`, ~40 min (the failed s4
+episodes, one planner call per step, were the tail). Log `outputs/hint_coverage.log`, records
+`notes/hint_coverage/records.jsonl` on the workstation.
+- **Teacher states: the hint map covers the teacher's route.** Teacher mixes with a hint: s1
+  100%, s2 100%, s3 90%, s4 94%, s5 95%, held-out 95% (recipe hint 74–100%). On mixtures the
+  hint is selective (5–6% of mix candidates hinted per step, against 40–50% on dilutions) but
+  coarse: 17–36% of the teacher's recipe-hinted mixes read "4 or more".
+- **Agent episodes** (s3–s5 and held-out are zero-shot; s1–s2 trained):
+
+  | | n | own mixes hinted % | p own move | planner's move hinted % first / last | p planner's move | agent = planner % |
+  |---|---|---|---|---|---|---|
+  | s2 solved / failed | 34 / 6 | 97 / **22** | 0.92 / 0.46 | 100/85 / 100/100 | 0.32 / **0.00** | 48 / 4 |
+  | s3 solved / failed | 32 / 8 | 70 / **17** | 0.84 / 0.39 | 85/95 / 70/67 | 0.07 / 0.00 | 43 / 2 |
+  | s4 solved / failed | 11 / 29 | 94 / **33** | 0.63 / 0.27 | 78/69 / 94/90 | 0.00 / 0.00 | 10 / 3 |
+  | s5 solved / failed | 16 / 26 | 95 / **50** | 0.86 / 0.45 | 92/74 / 94/93 | 0.00 / 0.00 | 32 / 10 |
+  | held-out solved / failed | 20 / 20 | 85 / 97 | 0.88 / 0.97 | 93/86 / 91/91 | 0.00 / 0.00 | 17 / 30 |
+
+  s1: 40/40 solved, own mixes hinted 98%, p planner's move 0.99, agent = planner 69%.
+- **Verdict by the rule fixed in advance (D-34):** "will not commit" on s2, s4, s5 and
+  held-out; neither rule on s3. **Not blind:** in failed episodes the planner's next move
+  is hinted 67–100% of the time, to the last quarter.
+- **Reading.** (1) The agent is not lost off the hint map; the map is there and covers the
+  progress move. (2) What separates failures from successes is the agent's **own** choice:
+  in solved episodes 70–98% of its mixes are hinted, in failed ones 17–50%, with low
+  confidence (p 0.27–0.46). It leaves the hinted moves and wanders. (3) The rule's other half,
+  p of the planner's move < 0.3, is weak evidence on s3–s5: that probability is 0.00 in
+  **solved** episodes too, because the agent follows its own route, not the planner's next
+  move from its state. (4) The held-out failures differ: the agent picks hinted mixes
+  confidently (97%, p 0.97) and still fails, so there the hint misses what matters
+  (sharing and target order across many targets, which the per-target map ignores).
+  (5) For plan 3.3: the map's coverage is not the gap, except the cross-target information on
+  many-target problems and the coarse "4 or more" on mixtures. The main gap is that the
+  agent, trained only on s1–s2, does not stay on the hinted moves in long episodes.
 
 ---
 

@@ -36,9 +36,12 @@ chats. Last updated 2026-10-27.*
 | Q-40 | Is the sharing pass near-optimal on many-target mixtures? | 2.3 |
 | Q-41 | What's the reference ("best known") every grading uses? | 2.1 |
 | Q-42 | Can we prove more optima on the val sets? | 2.2 |
-| Q-49 | Are literature heuristics better teachers or competitors than our planner? | Open, no step (proposed 2.4) |
+| Q-49 | How do the agent and planner compare with published heuristics? Could one be a better teacher? | 2.4 (stages 1–2), 6.3 (all) |
+| Q-101 | Has the agent been fully trained (all stages, regime chosen, 3 seeds)? | 3.5, 3.6, 5.4 |
+| Q-103 | Is the mini benchmark's problem set big enough and unseen? | 2.4 |
+| Q-104 | Should MRCM become part of our planner and teacher for mixtures? | Open, no step yet (E-29) |
+| Q-105 | Too much dependence on the greedy planner's recipe hint? Can hints come from the problem alone? | Open, no step yet |
 | Q-50 | Does the best planner as teacher beat the plain sharing pass on stages 3–5? | 3.4 |
-| Q-59 | Is the agent lost off the hint map, or does it see the right move and not take it? | 3.2 (workstation run pending) |
 | Q-60 | What hints do stages 3–5 need? | 3.3 |
 | Q-71 | Pure RL vs RL with a teacher on stages 3–5 | Waiting on the user (plan §5) |
 | Q-72 | Self-imitation if cost stalls near the teacher? | 4.3 |
@@ -140,6 +143,55 @@ Yes, on s1: the mean gap went from −5% to −16% after imitation ended, and th
 the cost (mean ratio 1.035).
 
 ## C. Environment, reward and penalty
+
+**Q-100 Where is the agent better than the planner on stages 1–2?** · Closed (experiment, E-22,
+E-28)
+
+Against the best planner (`notes/headroom/records.jsonl`, E-22 weights, greedy):
+
+| | cheaper | equal | dearer | failed |
+|---|---|---|---|---|
+| `val_s1_v2` | 7 | 19 | 14 | 0 |
+| `val_s2_v2` | 8 | 12 | 14 | 6 |
+
+- **Wins** are on problems where the planner draws many sample units (5–7 on s1). The saving
+  is mostly a multiple of 64, so the agent draws 1–3 fewer sample units. Examples:
+  `val_s1-003` 209 vs 402, `val_s1-024` 77 vs 213, `val_s2-007` 373 vs 458.
+- **Losses** are mostly 1–6 units (a little extra waste). A few are large: `val_s1-016` 455 vs
+  325, `val_s1-018` 205 vs 134, `val_s2-023` 459 vs 291, `val_s2-028` 845 vs 635.
+- **On the proved small problems** (E2 s1/s2) it never beats the planner, except on
+  `mix-one-d1-loose-14` (330 vs 385; the optimum is 96).
+
+The agent's sample units weren't recorded, so "fewer sample units" is inferred from the cost
+differences.
+
+**Q-101 Has the agent been fully trained?** · **Open → plan 3.5, 3.6, 5.4**
+No. The only trained agent is E-22, a test run:
+- one seed, 3M steps;
+- stages 1–2 only, half and half, with no promotions, so it wasn't a regime test;
+- imitation faded to 0 at 1M steps, then pure PPO.
+
+The regime was never chosen (pilots 1–2 chose none, E-9, E-10). Full training comes once stages
+3–5 are learnable: warm start + PPO on s1–s3, s1–s4, s1–s5 (3.5), then regime pilot 3 with the
+user's curriculum (3.6), then the full run with 3 seeds (5.4). Every result so far, including
+the mini benchmark (2.4), is from the E-22 agent. It gets re-run on the trained agent.
+
+**Q-102 Does the agent learn beyond copying the teacher?** · Closed (experiment, E-22, E-25,
+E-28)
+
+Yes. After the imitation term reached 0 it trained 2M steps on reward alone.
+- **Cost:** on s1 its mean gap moved from about −5% to −16%, past the teacher's −13.3%.
+- **New plans:** some are cheaper than anything the teacher or the planner variants make, and
+  the teacher never showed them (`val_s1-024` 77 vs 213).
+- **New habit:** it dropped the teacher's discards (probability 0.85–0.96 → 0.00–0.04).
+
+But learning also made it worse in places: dearer on 14/40 problems per stage, and the s2
+decay. It still reads the planner's recipe hint at inference (Q-9, Q-11).
+
+**Q-103 Is the mini benchmark's problem set big enough and unseen?** · **Open → plan 2.4**
+Adding the problems from each paper's own examples and ~100 fresh s1 and s2 draws (user,
+2026-10-27). The val sets and paper problems are unseen by the agent. Fresh draws may overlap
+its training draws, so they're reported separately.
 
 **Q-16 Round mixes that can't be represented, or make them illegal?** · Closed (decision, D-1)
 Illegal. Rounding makes the arithmetic inexact and breaks the oracle.
@@ -274,12 +326,39 @@ No. On large denominators a cheap buffer-heavy start beats it (`val_s1-008` 168 
 E-17, E-28)
 Yes, often slightly. Lookahead 3 costs ~15× the time.
 
-**Q-49 Has our planner been compared with literature heuristics, and could one be a better
-teacher?** · **Open, no step** (proposed plan 2.4, awaiting the user)
-No comparison exists. Methods can't be rebuilt from memory (SPEC 10.4), and E-17 task 3 was
-skipped for that reason. The PDFs on disk that could be implemented: Kundu 2023 (multi-target
-MEDA, waste minimisation), Fukui 2024 (reusing intermediate droplets on MEDA), Kundu 2022
-(single-target MEDA mixture). Tier 3 (plan 6.3) needs this anyway, for the paper.
+**Q-49 How do the agent and planner compare with published heuristics, and could one be a
+better teacher?** · **Open → plan 2.4** (stages 1–2, D-36), **then 6.3** (everything)
+No comparison exists yet. Methods can't be rebuilt from memory (SPEC 10.4), and E-17 task 3
+was skipped for that reason. Step 2.4 implements 5–6 single-target methods from their PDFs.
+Multi-target ones (Kundu 2023, Fukui 2024, MTCS, DDMT) wait for 6.3.
+**First results (E-29):** on stage 1 the best published methods (FacDA, MRCM) are level with
+our planner and the agent. On stage 2, MRCM is clearly cheaper than our planner: mean ratio
+0.66 on the val problems it takes, and 1.8% above the optimum against our planner's 43% on 7
+proved problems. The agent's costs on the new sets still need the workstation run.
+
+**Q-104 Should MRCM (or its idea) become part of our planner, and the teacher, for
+mixtures?** · **Open, no step yet** (raised by E-29)
+
+**Q-105 Does the agent lean too much on the greedy planner through the recipe hint, and can
+the hint come from the problem alone?** · **Open, no step yet** (user, 2026-10-27)
+What we know:
+- Without any hint, copying fails (E-15).
+- A planner-free chain hint gets s1 to 67.5% (E-16).
+- The agent uses the hints as a map, not a script: it doesn't follow the planner's next move
+  (E-30), and it beats the planner on some s1/s2 problems (Q-100).
+- But on mixtures it ends up no better than the planner, which MRCM beats (E-29). So the
+  recipe hint may cap it there.
+
+Candidate: replace "mixes left along the planner's recipe" with the exact fewest mixes from
+a candidate's result to each target, computed from the problem alone.
+
+**Feasibility (E-31).**
+- *Dilutions:* yes. A depth-4 pure-fluid chain covers every teacher mix on s1, at under 0.1 s
+  per target.
+- *Mixtures:* not this way. Coverage is under half, and the search explodes on blends.
+
+Built as SPEC 0.28 `hint_source: problem`. **Next: copy test on s1–s2, planner hints vs
+problem hints (workstation).** Expected: s1 holds, s2 drops.
 
 **Q-50 Does the best planner as teacher do better on stages 3–5 than the plain pass?** ·
 **Open → plan 3.4** (decision D-35 made, effect unmeasured)
@@ -317,7 +396,14 @@ No. First-mix agreement was 24% (s1) and 6% (s2), even on trained problems. The 
 (why 1/8 leads to 33/40) is invisible to it.
 
 **Q-59 Is the agent lost off the hint map, or does it see the right move and not take it?** ·
-**Open → plan 3.2** (`scripts/hint_coverage.py` built; workstation run pending)
+Closed (experiment, E-30)
+It isn't lost. In failed episodes the planner's next move is hinted 67–100% of the time, but
+the agent picks unhinted mixes (17–50% of its mixes hinted, against 70–98% when it solves)
+with low confidence. The rule says "will not commit" on s2, s4, s5 and held-out. The held-out
+failures are different: the agent picks hinted moves confidently and still fails, because the
+map has no cross-target information.
+
+The rule as first written (kept for the record):
 The rule was fixed in advance. Lost: the planner's next move is hinted on < 50% of late steps
 in failed episodes, and less than half as often as in solved ones. Doesn't take it: hinted on
 ≥ 70% of failed steps, but median probability < 0.3.
@@ -397,8 +483,10 @@ E-27)
 RL unlearned discards (probability of the teacher's discard 0.85–0.96 → 0.00–0.04). But a
 clean chip and twice the steps rescue 0 of 6. Hoarding is a symptom.
 
-**Q-78 What is the root cause of the long-plan failures?** · **Open → plan 3.2, then 3.5**
-The two readings are Q-59. The same failure appears on every untrained mixture cell of stages
+**Q-78 What is the root cause of the long-plan failures?** · **Open → plan 3.4, 3.5**
+Narrowed by E-30: the right move is on the map, but in long episodes the agent drifts onto
+unhinted mixes and doesn't come back. Next to test: whether training on s3–s5 (copy tests,
+then PPO) keeps it on the map, and if not, search at decision time (4.2). The same failure appears on every untrained mixture cell of stages
 3–5 (E-26).
 
 **Q-79 Does s1 dominate the shared update once imitation stops?** · Parked (E-22 candidate

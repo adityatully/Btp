@@ -104,6 +104,19 @@ the best planner on the val sets and longer budgets on the E2/E3 timeouts.
 **2.3 Certify mixtures.** The bound is loose on many-target mixtures; tighten it or prove more
 small ones. Until then those results are intervals.
 
+**2.4 Mini literature comparison on stages 1–2** (D-36; *started 2026-10-27 in its own
+session*). Five or six published heuristics that claim single-target dilution or mixture
+preparation (candidates on disk: FacDA, Dong 2024, dilution from arbitrary stocks 2023, MRCM,
+Kundu 2022 mixture, the generic approach of Roy 2021), implemented from their PDFs and checked
+against a worked example or table in each paper. They run on `val_s1_v2`, `val_s2_v2` and the
+proved E2 s1/s2 problems, next to the sharing pass, the best planner and the agent (E-22). Each
+plan is replayed through our engine. Report: cost under 64/8/1 with sample units, each paper's
+own metric, and how many problems each method accepts. It also covers the papers' own example
+problems and ~100 fresh s1 and s2 draws (Q-103). Run on the workstation with the E-22 agent,
+and run again on the fully trained agent after 5.4 (user, 2026-10-27). It answers early where
+we stand against the literature. It isn't the paper's benchmark (that's 6.3), but its implementations
+carry over.
+
 ### Phase 3. Stages 3–5 (now)
 
 Per stage: (a) is the teacher good there? (b) can the network copy it, with hints? (c) warm
@@ -119,8 +132,10 @@ the env's. Tests on identical-droplet cases.
 **3.1 Zero-shot check.** *Done (E-26):* s3 32/40, s4 11/40, s5 16/42, held-out 20/40;
 single-target dilutions transfer at the teacher's cost; many-target mixtures 0/32.
 
-**3.2 Hint coverage** (*built 2026-10-27 as `scripts/hint_coverage.py`; workstation run
-pending*). Reading fixed in advance, on the planner's next move from the agent's state: blind
+**3.2 Hint coverage** (*done 2026-10-27, E-30: not blind; the hint map covers the teacher's
+route (87–100%) and the planner's next move in failures, but in failed episodes the agent
+picks unhinted mixes (17–50% hinted vs 70–98% when solved). Held-out failures pick hinted
+mixes and still fail: cross-target information is missing.*) Reading fixed in advance, on the planner's next move from the agent's state: blind
 off the map if it is hinted on < 50% of the last-quarter steps of failed episodes (and less
 than half as often as in solved ones); will not commit if it is hinted on ≥ 70% of failed
 steps but gets median probability < 0.3. Along the s2 failures and along the
@@ -168,7 +183,10 @@ planner's known miss (building two intermediates ahead and blending them, E-17).
 - **5.1** Second and third seeds of the full system.
 - **5.2** Generalisation probes (unseen sizes and constraints; benchmark tier 4).
 - **5.3** Recipe-hint ablation: copy test and agent without the planner-derived hint (chain
-  hint only), to report how much the agent leans on the planner at inference.
+  hint only), to report how much the agent leans on the planner at inference. *Brought
+  forward 2026-10-27 (Q-105, E-31):* `hint_source: problem` (SPEC 0.28) is built. A
+  planner-free hint covers dilutions but not mixtures. The stage 1–2 copy test, planner hints
+  vs problem hints, is the next workstation run.
 - **5.4** Full run, 5 stages × 3 seeds, with the regime chosen in 3.6.
 
 ### Phase 6. Paper benchmarks and baselines
