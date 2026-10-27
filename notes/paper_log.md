@@ -996,6 +996,53 @@ when the episode ended.
   agent does not take the costly steps that lead to the target. The same failure shows on
   every untrained mixture cell of stages 3–5 (E-26).
 
+### E-28 (2026-10-27) Headroom above the sharing pass (plan 2.0, D-34)
+`scripts/headroom_share.py` at commit `1b56707` (SPEC 0.26), workstation, 30 workers,
+`which=e2,e3,val exact=e2,e3 seconds=600 orders=32`, agent = E-22 final weights. Records in
+`notes/headroom/records.jsonl` (workstation; to be copied), log `outputs/headroom.log`. Producers
+per problem: `share` (the teacher), `share_look3`, `share_orders` (4 + 32 random target orders),
+the greedy agent; then exact search seeded with the cheapest plan (small and medium sets only).
+Gap = share ÷ optimum − 1 on proved problems; gain = (share − best found) ÷ share.
+
+- **H1 proofs.** Exact search ran on the 379 E2/E3 problems with no optimum on record: 155
+  proved, 224 timed out, 58 found a plan cheaper than every producer. E2 now has **220 of 399**
+  proved (65 before); E3 still 0 of 45.
+- **Small problems (E2), 220 proved:** the sharing pass is at the optimum on 141 (64%); gap mean
+  4.9%, median 0.0%, max 301%; above 2% on 27 (12%). Cheaper plans than share on 122 of 399, by
+  exact search 57, lookahead 51, more orders 10, agent 4.
+- **Cells with headroom by the rule fixed in advance** (plan 2.0):
+
+  | Set, cell | proved | share at opt | gap mean / max | gain median (improved) | by |
+  |---|---|---|---|---|---|
+  | e2 dil-many-d1-loose | 6 | 4 | 5.5 / 31.0 | 0.6 | look 6, search 2, orders 1 |
+  | e2 dil-many-d1-tight | 13 | 5 | 13.6 / 48.6 | 15.4 | search 5, orders 4 |
+  | e2 dil-one-d1-tight | 17 | 12 | 7.3 / 88.9 | 12.3 | search 2 |
+  | e2 mix-many-d1-tight | 10 | 7 | 8.2 / 50.0 | 2.8 | look 3, search 2, orders 1 |
+  | e2 mix-many-dN-tight | 8 | 4 | 8.6 / 37.6 | 0.4 | look 5, search 3, agent 1 |
+  | e2 mix-one-d1-loose | 7 | 6 | 43.0 / 301.0 (one problem) | 75.1 | search 1 |
+  | e3 mix-many-dN-tight | 0 | – | – | 5.3 (4 of 5; median over all 5.2) | look 2, orders 2 |
+  | val_s5 dilution-many-single-limited | 0 | – | – | 10.4 (4 of 6; all 9.1) | orders 4 |
+
+  No other cell meets the rule; in every cell the median gap is about 0.
+- **Medium and val sets (no proofs):** cheaper plans on e3 35/45 (median gain over all 0.3%,
+  max 15.2%), held-out 35/40 (3.2%, max 23.7%), val_s4 26/40 (1.6%, max 19.1%), val_s5 11/42
+  (0.0%, max 24.3%), almost all by `share_look3` or `share_orders`. **The agent's wins are
+  where no planner variant finds anything:** val_s1 7/40 (median gain 26.9%, max 63.8%), val_s2
+  8/40 (12.6%, max 18.6%), val_s3 mixture 3/20 (15.4%, max 40.7%); exact search was not run on
+  the val sets.
+- **Still uncertified:** many-target mixtures on val_s4/s5 stay at 1.65–3.58× the bound, with
+  22–72 units of waste in the sharing pass's plan (median, problems nothing improved).
+- **Reading.** (1) **Headroom is sparse but large:** the sharing pass is optimal on most small
+  problems, and a minority (12% of proved) is 2–90% off; the cells that qualify are mostly
+  **tight storage** (5 of 8) and **many-target** ones (6 of 8). (2) **Much of what is found is
+  taken by cheap planner variants** (more target orders, lookahead 3): any learned method
+  must be compared with the best of those, not with the plain sharing pass. (3) **Search and
+  the agent find what the variants do not:** exact search on small problems (57), the agent on
+  single-target s1–s3 problems (gains 13–64%). (4) The paper's class at medium and large size
+  stays uncertified; only its small tight-storage cells have proved headroom.
+  **Unchecked:** the 301% gap (`mix-one-d1-loose`, one problem) is a single outlier that drives
+  that cell's verdict; to be inspected from the records before it is used.
+
 ---
 
 ## 5. Failures, bugs and lessons

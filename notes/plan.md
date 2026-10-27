@@ -15,7 +15,7 @@ evidence (IDs like E-22 point there). This file says **what we are doing and why
   -b nice -n 19`). Anything longer than ~10 minutes goes to the workstation (`~/code/Btp`,
   tmux; never reboot it during runs).
 
-*Last updated 2026-10-27 (D-34, SPEC 0.26).*
+*Last updated 2026-10-27 (E-28, SPEC 0.26).*
 
 ---
 
@@ -103,10 +103,12 @@ it gave up.
 
 ### Phase 2. Grading we can trust (mostly workstation)
 
-**2.0 Headroom: where can the sharing pass be beaten, and by how much?** (*now*, D-34; built
-2026-10-27 as `scripts/headroom_share.py`, workstation run pending. Mac smoke test only, not a
-result: seeded search proved 3 small problems in < 0.2 s that the unseeded 60 s search had
-not; lookahead was 18–24% cheaper than the sharing pass on the 2 held-out problems tried.) The
+**2.0 Headroom: where can the sharing pass be beaten, and by how much?** (*done 2026-10-27,
+E-28:* headroom is sparse but large. Share is optimal on 141 of 220 proved small problems; 12%
+are 2–90% off, mostly tight storage and many targets; 8 cells meet the rule. Cheap planner
+variants (more orders, lookahead) take much of it; exact search and the agent find what they
+do not, the agent with 13–64% gains on single-target s1–s3. Large many-target mixtures stay
+uncertified. Next: inspect the records, then choose the follow-up with the user. The
 sharing pass already solves every problem of every stage and is at the optimum wherever we
 have proofs (51/65). Learning or search is only worth building where it can be beaten, so this
 comes before any further agent work.
