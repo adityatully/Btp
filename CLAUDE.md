@@ -17,6 +17,9 @@ sample-preparation agent. **`SPEC.md` is the source of truth. Read sections 1–
 - Keep `notes/paper_log.md` current: the same day a decision is made, an experiment or run
   reports numbers, or a bug changes behaviour or results, add a dated entry there with its
   evidence (commit, SPEC version, file, run folder) and the numbers. Read its rules at the top.
+- Keep `notes/questions.md` current: add every new question the day it comes up; an open one
+  points to the plan step that answers it, a closed one to the experiment or decision. Close a
+  question in the same change that adds its paper log entry.
 
 ## Non-negotiable rules (SPEC section 2)
 1. The environment computes all arithmetic exactly; networks only score candidates.

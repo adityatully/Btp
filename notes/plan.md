@@ -10,6 +10,8 @@ E-22 point there). This file says **what we are doing and why, in order**.
   the paper log ID that backs it.
 - When a result changes the plan, edit the plan here and record the decision in the paper log
   (D-…). Keep finished steps, marked done, so the path stays visible.
+- `notes/questions.md` lists every question with its status; each open question names the
+  step here that answers it. When a step finishes, close its questions there.
 - Each step names its pass bar and what happens on pass and on fail. No step starts before the
   step it depends on has passed.
 - **Defaults** (marked *default*) are Claude's choices so work can go on; the user can change
