@@ -1,6 +1,12 @@
 # MEDA Design Automation — Codebase Specification
 
-Version 0.26 · 2026-10-26
+Version 0.27 · 2026-10-27
+
+Changes in 0.27 (teacher moves on identical droplets, 11.4; paper log F-16): the candidate list
+offers one move per class of identical droplets, while a teacher's plan names a particular
+droplet. Demonstrations now match a teacher action the list does not hold by canonical key and
+keep a uid map, so the teacher's later actions follow the twin the env used
+(`imitation.UidMap`). Stage 1–2 demonstrations are unchanged; stages 3–5 no longer crash.
 
 Changes in 0.26 (warm start in PPO, 11.4): `train.init_from` starts a fresh PPO run from saved
 weights (the copy test's network), and the PPO config gains `imitation_coef`, `imitation_steps`,
@@ -1867,7 +1873,8 @@ E-15–E-20).** Random play almost never finishes a stage 1–2 problem (E-11), 
 successes to learn from. The teacher is the sharing pass (`share_plan`, 10.4; never dearer than
 the construction; `imitation.TEACHERS`, `teacher=construction` keeps the old one). Demonstrations
 play its plan through the env and record the teacher's candidate index per step, matching a
-mix up to operand order (5.5). By D-31 the teacher is imitated on stages 1–2 only, and RL must
+mix up to operand order (5.5) and an action on an unlisted identical droplet by canonical key,
+with a uid map so later actions follow the droplet the env used (0.27, F-16). By D-31 the teacher is imitated on stages 1–2 only, and RL must
 be able to leave it: it is not optimal everywhere, even on stage 1 (E-19).
 1. **Copy test** (`scripts/imitation_check.py`): cross-entropy on the teacher's index on fresh
    generator problems (validation and held-out problems excluded); reports agreement (all

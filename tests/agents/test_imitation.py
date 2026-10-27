@@ -17,13 +17,13 @@ from meda.agents.ppo.networks import NetConfig, SetEncoderNet
 from meda.agents.ppo.policy import PPOAgent, batch_obs
 from meda.agents.ppo.ppo import PPOConfig, PPOTrainer
 from meda.analysis.evaluate import build_env
-from meda.core.actions import Mix, Source
+from meda.core.actions import Action, Discard, Mix, Output, Source
 from meda.core.costs import CostWeights
 from meda.core.problem import Instance
 from meda.core.rules import replay
 from meda.generators.benchmark_io import BenchmarkSet
 from meda.train import load_initial_weights
-from tests.core.helpers import load_yaml
+from tests.core.helpers import dilution, load_yaml
 
 CFG = {
     "env": {**load_yaml("env/sample_prep.yaml"), "L_pad": 2048},
@@ -39,6 +39,52 @@ def test_teacher_index_matches_a_mix_up_to_operand_order() -> None:
     assert teacher_index(legal, Mix(d3, 1, r0, 2), "x") == 0
     with pytest.raises(ValueError, match=r"'x'.*not a candidate"):
         teacher_index(legal, Mix(r0, 2, d3, 2), "x")
+
+
+S, B = Source.reservoir(0), Source.reservoir(1)
+TWINS = (Mix(S, 1, B, 1), Mix(S, 1, B, 1))  # uids 2 and 3 (after the 2 fluids): identical 1/2
+
+
+def replay_through_env(inst: Instance, plan: tuple[Action, ...]) -> None:
+    """The plan, recorded as a demonstration, succeeds in the env at the plan's own cost."""
+    env = build_env(CFG, [inst])
+    demos = Demonstrations()
+    recorded = demos.add_episode(env, inst, WEIGHTS, lambda *_: plan)
+    _, totals, _ = replay(inst, plan)
+    assert recorded == WEIGHTS.scalar(totals, inst.fluids)
+    assert len(demos) == len(plan)
+
+
+def test_a_discard_of_the_unlisted_twin_is_matched_and_followed() -> None:
+    """F-16: the env lists one Discard for twins 2 and 3 (uid 2); the teacher discards uid 3,
+    then delivers uid 2, which in the env is now the droplet with uid 3."""
+    inst = dilution([(1, 2)], droplet_volume=2)
+    replay_through_env(inst, (*TWINS, Discard(3), Output(Source.droplet(2), 0)))
+
+
+def test_a_partial_take_from_the_unlisted_twin_is_matched_and_followed() -> None:
+    """F-16 with a mix: the teacher takes 1 unit of uid 3, so uid 2 stays whole; in the env the
+    listed twin (uid 2) is the one taken from, and the teacher's whole droplet becomes uid 3."""
+    inst = dilution([(1, 2), (1, 4)], droplet_volume=2)
+    plan = (
+        *TWINS,
+        Mix(Source.droplet(3), 1, B, 1),
+        Output(Source.droplet(2), 0),
+        Output(Source.droplet(4), 1),
+    )
+    replay_through_env(inst, plan)
+
+
+def test_demonstrations_on_stages_3_and_4_with_identical_droplets() -> None:
+    """The stage 4 problem that crashed the zero-shot check (paper log F-16), and stage 3
+    problems, where demand makes identical droplets common."""
+    insts = [i for i in BenchmarkSet.read("val_s4_v2").instances if i.instance_id == "val_s4-033"]
+    insts += list(BenchmarkSet.read("val_s3_v2").instances[:6])
+    assert insts[0].instance_id == "val_s4-033"
+    for inst in insts:
+        plan = TEACHERS["share"](inst, WEIGHTS)
+        assert plan is not None
+        replay_through_env(inst, plan)
 
 
 @pytest.mark.parametrize("teacher", sorted(TEACHERS))

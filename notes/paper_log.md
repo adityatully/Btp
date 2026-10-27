@@ -1137,6 +1137,10 @@ independent reference (oracle, optimum, bound, validator) catches it.**
   1–2 demonstrations (E-15–E-21), but it will on stages 3–5. Fix needed before any copy test
   there: match by canonical key and keep a uid map between the teacher's plan and the env.
   The probes now cost the teacher's plan with `rules.replay` instead of through the env.
+  **Fixed 2026-10-27** (SPEC 0.27): `imitation.UidMap` matches the move by canonical key and
+  lets the teacher's later actions follow the twin the env used; tests cover a discard and a
+  partial take of the unlisted twin, `val_s4-033` and six `val_s3_v2` problems (all three
+  failed on the old code).
 - **Ops lessons (not for the paper):** Python stdout buffering hid a 10 h background check;
   pytest thrashed at 1,144% CPU without `OMP_NUM_THREADS=1`; parallel checks on the Mac
   overheated it (heavy jobs now run only on the workstation).
