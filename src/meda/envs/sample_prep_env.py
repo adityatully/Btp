@@ -63,6 +63,7 @@ class FixedInstances:
 
 
 COST_TO_FINISH = ("share", "construction")
+HINT_SOURCES = ("planner", "problem")  # as `solvers.hints.HINT_SOURCES`
 
 
 @dataclass(frozen=True, slots=True)
@@ -78,6 +79,10 @@ class EnvConfig:
     # The env takes the function itself as `cost_to_finish`; this records the choice for
     # whoever builds it (`analysis.evaluate.build_env`).
     cost_to_finish: str = "construction"
+    # Where the recipe hint columns come from (SPEC 9.3): "planner" = the tree's and the
+    # sharing pass's recipes; "problem" = a deeper pure-fluid chain, no planner (Q-105).
+    # Recorded here for whoever builds the hint source (`analysis.evaluate.build_env`).
+    hint_source: str = "planner"
 
     def __post_init__(self) -> None:
         if self.failure_penalty_factor < 1:
@@ -88,6 +93,8 @@ class EnvConfig:
             raise ValueError(
                 f"cost_to_finish must be one of {COST_TO_FINISH}, got {self.cost_to_finish!r}"
             )
+        if self.hint_source not in HINT_SOURCES:
+            raise ValueError(f"hint_source must be one of {HINT_SOURCES}, got {self.hint_source!r}")
 
     @staticmethod
     def from_dict(data: Mapping[str, Any]) -> EnvConfig:
@@ -103,7 +110,7 @@ class EnvConfig:
             "failure_penalty_factor",
             "cost_to_finish",
         }
-        if set(data) != expected:
+        if set(data) - {"hint_source"} != expected:  # optional: configs before SPEC 0.28
             raise ValueError(f"env config keys must be {sorted(expected)}, got {sorted(data)}")
         return EnvConfig(
             EnvSizes(
@@ -117,6 +124,7 @@ class EnvConfig:
             preference_conditioning=bool(data["preference_conditioning"]),
             failure_penalty_factor=int(data["failure_penalty_factor"]),
             cost_to_finish=str(data["cost_to_finish"]),
+            hint_source=str(data.get("hint_source", "planner")),
         )
 
 

@@ -1,6 +1,15 @@
 # MEDA Design Automation — Codebase Specification
 
-Version 0.27 · 2026-10-27
+Version 0.28 · 2026-10-27
+
+Changes in 0.28 (planner-free hint ablation, 9.3; paper log E-31, Q-105): the env config gains
+`hint_source` (optional, default `planner`, unchanged behaviour). With `problem`, no planner is
+called for hints: the recipe columns carry the fewest mixes along a pure-fluid chain of depth
+up to 4 (`hints.EXACT_DEPTH`, the aim itself at 0), a fact of the problem's arithmetic, instead
+of the distance along the tree's and the sharing pass's recipes; the chain columns are
+unchanged. `HintTables.recipe_left` now takes the droplet's volume. `scripts/imitation_check.py`
+takes `hints=planner|problem`. (The unmerged literature branch also calls itself 0.28; it
+becomes 0.29 when merged.)
 
 Changes in 0.27 (teacher moves on identical droplets, 11.4; paper log F-16): the candidate list
 offers one move per class of identical droplets, while a teacher's plan names a particular
@@ -1386,7 +1395,9 @@ floats which intermediate leads to a target (33/40 S at M = 9 is one mix from 1/
 distance); on stage 1, a crude version lifted greedy copy success from 25% to 67.5% (E-16).
 They are information, not instructions: legality and costs are unchanged. Tables come from
 `solvers.hints.CandidateHints(weights)`, injected into the env (`SamplePrepEnv(..., hints)`),
-cached per (target, chip, fluid kinds); without it the columns are 0. Cost: about 1–2 ms per
+cached per (target, chip, fluid kinds); without it the columns are 0. With the env config's
+`hint_source: problem` (0.28, an ablation), the recipe columns instead carry the fewest mixes
+along a pure-fluid chain of depth ≤ 4 (one-hot 0..3, ≥ 4, none) and no planner is called. Cost: about 1–2 ms per
 step; 5–17 ms per reset median on stages 1, 2, 4 (largest 0.6 s, stage 4).
 
 **Globals (D_glob = 7):** step / step limit; steps left / `count_ref`; droplets on chip /

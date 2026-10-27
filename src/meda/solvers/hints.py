@@ -20,6 +20,11 @@ itself when exact), keyed by an exact composition `(numerators..., denominator)`
 
 Tables depend only on (aim, droplet volume, chip), so they are cached across instances.
 Hints are information, not instructions: nothing here changes what is legal or its cost.
+
+With `source="problem"` (the planner-free ablation, paper log Q-105 / plan 5.3) no planner is
+called: the recipe columns carry the fewest mixes along a pure-fluid chain of depth up to
+`EXACT_DEPTH` (the chain table, deeper, plus the aim itself at 0), a fact of the problem's
+arithmetic, instead of the distance along the tree's and the sharing pass's recipes.
 """
 
 from __future__ import annotations
@@ -41,6 +46,8 @@ from meda.solvers.fallback import RELAXED_STEP_LIMIT
 
 Key = tuple[int, ...]
 CHAIN_DEPTH = 2
+EXACT_DEPTH = 4  # covers every teacher mix on val_s1_v2, median 0.09 s per target (Q-105)
+HINT_SOURCES = ("planner", "problem")
 CACHE_LIMIT = 20_000  # tables; the cache is cleared when full (values never depend on it)
 
 
@@ -55,30 +62,41 @@ def _reduced(num: list[int], den: int) -> Key:
     return (*(v // g for v in num), den // g)
 
 
+def _fewest(table: dict[Key, dict[int, int]], key: Key, volume: int) -> int | None:
+    found = table.get(key)
+    if not found:
+        return None
+    fits = [d for d, take in found.items() if take <= volume]
+    return min(fits) if fits else None
+
+
 @dataclass(frozen=True, slots=True)
 class HintTables:
     recipe: dict[Key, int]
     chain: dict[Key, dict[int, int]]
+    exact: dict[Key, dict[int, int]] | None = None  # set for source "problem"
 
-    def recipe_left(self, key: Key) -> int | None:
-        """Mixes from this composition to the target along the tree's recipe, or None."""
+    def recipe_left(self, key: Key, volume: int) -> int | None:
+        """Mixes from this composition to the target along the tree's recipe, or None; for
+        source "problem", along a pure-fluid chain of depth up to `EXACT_DEPTH`."""
+        if self.exact is not None:
+            return _fewest(self.exact, key, volume)
         return self.recipe.get(key)
 
     def chain_left(self, key: Key, volume: int) -> int | None:
         """Fewest pure-fluid mixes from a droplet of this composition and volume to the
         target, or None (beyond `CHAIN_DEPTH`, or not on a chain)."""
-        found = self.chain.get(key)
-        if not found:
-            return None
-        fits = [d for d, take in found.items() if take <= volume]
-        return min(fits) if fits else None
+        return _fewest(self.chain, key, volume)
 
 
 class CandidateHints:
     """`tables(instance, target_id)` for the env's encoder, cached. Picklable."""
 
-    def __init__(self, weights: CostWeights) -> None:
+    def __init__(self, weights: CostWeights, source: str = "planner") -> None:
+        if source not in HINT_SOURCES:
+            raise ValueError(f"hint source must be one of {HINT_SOURCES}, got {source!r}")
         self.weights = weights
+        self.source = source
         self._cache: dict[tuple[object, ...], HintTables] = {}
 
     def tables(self, instance: Instance, target_id: int) -> HintTables:
@@ -93,10 +111,16 @@ class CandidateHints:
         if hit is not None:
             return hit
         aimed = aim(target, instance.chip) or target.composition
-        tables = HintTables(
-            _recipe_table(instance, target, aimed, self.weights),
-            _chain_table(aimed, target.droplet_volume, instance),
-        )
+        need = target.droplet_volume
+        if self.source == "problem":
+            exact = _chain_table(aimed, need, instance, EXACT_DEPTH)
+            exact[key_of(aimed)] = {0: need}
+            tables = HintTables({}, _chain_table(aimed, need, instance), exact)
+        else:
+            tables = HintTables(
+                _recipe_table(instance, target, aimed, self.weights),
+                _chain_table(aimed, need, instance),
+            )
         if len(self._cache) >= CACHE_LIMIT:
             self._cache.clear()
         self._cache[cache_key] = tables
@@ -158,12 +182,14 @@ def _add_left(table: dict[Key, int], single: Instance, plan: Sequence[Action], r
         table[key] = min(mixes, table.get(key, mixes))
 
 
-def _chain_table(aimed: Composition, need: int, instance: Instance) -> dict[Key, dict[int, int]]:
+def _chain_table(
+    aimed: Composition, need: int, instance: Instance, max_depth: int = CHAIN_DEPTH
+) -> dict[Key, dict[int, int]]:
     chip = instance.chip
     m, nf = chip.max_mix_volume, instance.num_fluids
     table: dict[Key, dict[int, int]] = {}
     frontier: list[tuple[Key, int]] = [(key_of(aimed), need)]  # (composition, units needed)
-    for depth in range(1, CHAIN_DEPTH + 1):
+    for depth in range(1, max_depth + 1):
         nxt: list[tuple[Key, int]] = []
         for y, units in frontier:
             num, den = y[:-1], y[-1]

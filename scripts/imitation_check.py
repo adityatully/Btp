@@ -56,6 +56,7 @@ DEFAULTS: dict[str, Any] = {
     "threads": 1,
     "out": "outputs/imitation/run",
     "teacher": "share",
+    "hints": "planner",  # the env's `hint_source`: planner or problem (planner-free, Q-105)
 }
 
 
@@ -84,6 +85,7 @@ def main(argv: list[str]) -> None:
 
     design = StageDesign.from_dict(load("stages/track2_v1.yaml")).first(args["stages"])
     cfg = {"costs": load(f"costs/{design.costs}.yaml"), "env": load("env/sample_prep.yaml")}
+    cfg["env"]["hint_source"] = args["hints"]
     weights = CostWeights.from_dict(cfg["costs"])
     chip = ChipLimits.from_dict(load(f"chip/{design.chip}.yaml"))
     val_sets = {s.name: BenchmarkSet.read(s.val) for s in design.stages}

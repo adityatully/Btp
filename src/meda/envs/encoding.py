@@ -394,7 +394,7 @@ class Encoder:
         for i in np.flatnonzero(is_mix):
             key = (*(int(v) for v in rnum[i]), int(rden[i]))
             vol = int(volume[i])
-            recipe = [d for tb in tables if (d := tb.recipe_left(key)) is not None]
+            recipe = [d for tb in tables if (d := tb.recipe_left(key, vol)) is not None]
             chain = [d for tb in tables if (d := tb.chain_left(key, vol)) is not None]
             r = min(min(recipe), RECIPE_MAX) if recipe else RECIPE_MAX + 1
             c = min(chain) if chain else CHAIN_MAX + 1

@@ -132,7 +132,7 @@ def build_env(
         FixedInstances(instances) if source is None else source,
         weights,
         penalty,
-        CandidateHints(weights),
+        CandidateHints(weights, config.hint_source),
     )
 
 

@@ -30,7 +30,7 @@ def test_chain_names_the_unexpected_intermediate_of_33_40() -> None:
     eighth, quarter3 = (1, 7, 8), (3, 1, 4)
     assert tables.chain_left(eighth, volume=1) == 1
     assert tables.chain_left(quarter3, volume=4) != 1
-    assert tables.recipe_left(key_of(inst.targets[0].composition)) == 0
+    assert tables.recipe_left(key_of(inst.targets[0].composition), volume=1) == 0
 
 
 def test_chain_needs_enough_volume() -> None:
@@ -58,7 +58,8 @@ def test_every_recipe_entry_is_made_by_a_teacher_plan(name: str) -> None:
                 uid = state.next_uid
                 state, _, _ = apply(state, action, inst)
                 if state.has_droplet(uid):
-                    assert tables.recipe_left(key_of(state.droplet(uid).composition)) is not None
+                    drop = state.droplet(uid)
+                    assert tables.recipe_left(key_of(drop.composition), drop.volume) is not None
             else:
                 state, _, _ = apply(state, action, inst)
 
@@ -86,3 +87,40 @@ def test_hint_columns_stay_zero_without_a_hint_source() -> None:
     env = make_env([mixture([(1, 1, 2)], step_limit=10)])
     obs, _ = env.reset(seed=0)
     assert (obs["candidates"][:, HINT_COL:] == 0).all()
+
+
+def test_problem_hints_call_no_planner(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Source "problem" (Q-105): the recipe columns come from the problem's arithmetic alone;
+    the tree and the sharing pass are never called."""
+    import meda.solvers.hints as hints_mod
+
+    def refuse(*_: object, **__: object) -> None:
+        raise AssertionError("planner called")
+
+    monkeypatch.setattr(hints_mod, "share_plan", refuse)
+    monkeypatch.setattr(hints_mod, "build", refuse)
+    inst = dilution([(33, 40)], chip("meda_m8", max_mix_volume=9))
+    tables = CandidateHints(GEOMETRIC, "problem").tables(inst, 0)
+    assert tables.recipe == {}
+    assert tables.recipe_left(key_of(inst.targets[0].composition), volume=1) == 0
+    assert tables.recipe_left((1, 7, 8), volume=1) == 1  # 1/8 S, one mix from 33/40
+    assert tables.chain_left((1, 7, 8), volume=1) == 1  # the chain columns are unchanged
+
+
+def test_problem_hints_reach_deeper_than_the_chain() -> None:
+    """A droplet three pure-fluid mixes from the target has no chain hint (depth 2) but a
+    recipe-column value of 3 under source "problem"."""
+    inst = dilution([(1, 16)], chip("meda_m8", max_mix_volume=2))
+    tables = CandidateHints(GEOMETRIC, "problem").tables(inst, 0)
+    half = (1, 1, 2)  # 1/2 S -> 1/4 -> 1/8 -> 1/16, one buffer unit each time
+    assert tables.chain_left(half, volume=1) is None
+    assert tables.recipe_left(half, volume=1) == 3
+
+
+def test_problem_hint_source_reaches_the_env() -> None:
+    cfg = {"costs": CFG["costs"], "env": {**CFG["env"], "hint_source": "problem"}}
+    env = build_env(cfg, [dilution([(33, 40)], chip("meda_m8", max_mix_volume=9))])
+    assert env.encoder.hints is not None
+    assert env.encoder.hints.source == "problem"
+    with pytest.raises(ValueError, match="hint_source"):
+        build_env({**cfg, "env": {**CFG["env"], "hint_source": "oracle"}}, [])

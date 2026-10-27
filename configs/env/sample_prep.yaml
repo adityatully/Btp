@@ -13,6 +13,9 @@ preference_conditioning: false
 failure_penalty_factor: 2     # truncation / dead-end penalty = this x the construction's cost to
                               # finish (SPEC 5.8); at 1, giving up out-earns any finished plan
                               # worse than ~1.1-1.3x the construction (pilot, 2026-10-23)
+hint_source: planner          # recipe hint columns (SPEC 9.3): planner = the tree's and the
+                              # sharing pass's recipes; problem = a deeper pure-fluid chain,
+                              # no planner at inference (ablation, Q-105)
 cost_to_finish: share         # the completion that prices an unfinished plan (SPEC 5.8): share =
                               # finish from here, reusing droplets on chip; construction = waste
                               # them and rebuild (gave no credit for intermediates, E-18)
