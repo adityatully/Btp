@@ -117,7 +117,11 @@ the env's. Tests on identical-droplet cases.
 **3.1 Zero-shot check.** *Done (E-26):* s3 32/40, s4 11/40, s5 16/42, held-out 20/40;
 single-target dilutions transfer at the teacher's cost; many-target mixtures 0/32.
 
-**3.2 Hint coverage** (*next*; Mac or workstation, light). Along the s2 failures and along the
+**3.2 Hint coverage** (*built 2026-10-27 as `scripts/hint_coverage.py`; workstation run
+pending*). Reading fixed in advance, on the planner's next move from the agent's state: blind
+off the map if it is hinted on < 50% of the last-quarter steps of failed episodes (and less
+than half as often as in solved ones); will not commit if it is hinted on ≥ 70% of failed
+steps but gets median probability < 0.3. Along the s2 failures and along the
 teacher's plans on s3–s5: how often the candidates carry any hint, whether the agent's move was
 hinted, and the probability it gave the planner's next move. Answers two things at once:
 whether the agent gets lost off the hint map (lesson 11), and where 3.3 must add hints.
