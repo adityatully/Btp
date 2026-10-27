@@ -13,8 +13,12 @@ gap is printed for reference).
 Usage:
     uv run python scripts/imitation_check.py problems=2000 epochs=20 out=outputs/imitation/s12
 
-Arguments are key=value. Writes `metrics.jsonl` (one line per round) and `imitation.pt` (the
-network, loadable with `PPOAgent.load`, the starting point of the PPO warm start) into `out`.
+Arguments are key=value. Expert iteration (D-38): `demos=<demos.jsonl> arm=search|planner
+init=<agent.pt>` trains on the practice problems of `scripts/expert_iteration.py` with that
+arm's plans, starting from the given weights; validation is unchanged.
+
+Writes `metrics.jsonl` (one line per round) and `imitation.pt` (the network, loadable with
+`PPOAgent.load`, the starting point of the PPO warm start) into `out`.
 """
 
 from __future__ import annotations
@@ -57,6 +61,9 @@ DEFAULTS: dict[str, Any] = {
     "out": "outputs/imitation/run",
     "teacher": "share",
     "hints": "planner",  # the env's `hint_source`: planner or problem (planner-free, Q-105)
+    "init": "",  # start from these weights (an agent.pt) instead of a fresh network
+    "demos": "",  # practice problems and plans from `expert_iteration.py` instead of draws
+    "arm": "search",  # with `demos`: copy the search's plans or the planner's (D-38)
 }
 
 
@@ -100,8 +107,16 @@ def main(argv: list[str]) -> None:
     env = build_env(cfg, [], source)
     teacher = TEACHERS[args["teacher"]]
     train = Demonstrations()
-    for _ in range(args["problems"]):
-        train.add_episode(env, source(rng), weights, teacher)
+    if args["demos"]:
+        sys.path.insert(0, str(CONFIGS.parent / "scripts"))
+        from expert_iteration import load_demos
+
+        problems, plans = load_demos(args["demos"], args["arm"])
+        for inst in problems:
+            train.add_episode(env, inst, weights, lambda i, _w: plans[i.instance_id])
+    else:
+        for _ in range(args["problems"]):
+            train.add_episode(env, source(rng), weights, teacher)
     val = {name: Demonstrations() for name in val_sets}
     for name, bench in val_sets.items():
         gaps = []
@@ -119,7 +134,11 @@ def main(argv: list[str]) -> None:
     )
 
     device = torch.device(args["device"])
-    net = SetEncoderNet(PPOConfig.from_dict(load("agent/ppo.yaml")).net).to(device)
+    if args["init"]:
+        net = PPOAgent.load(args["init"], device).net
+        print(f"network initialised from {args['init']}")
+    else:
+        net = SetEncoderNet(PPOConfig.from_dict(load("agent/ppo.yaml")).net).to(device)
     optimizer = torch.optim.Adam(net.parameters(), lr=args["lr"])
     eval_env = build_env(cfg, [i for b in val_sets.values() for i in b.instances])
     schedule = ScheduleConfig.from_dict(load("eval/default.yaml")["schedule"])
