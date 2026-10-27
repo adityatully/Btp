@@ -342,6 +342,29 @@ Format: date · decision · alternatives considered · why · evidence.
   decision time. MCTS is favoured if headroom exists, because lookahead targets the sharing
   pass's known miss (building two intermediates ahead and blending them, E-17).
 
+- **D-35 (2026-10-27) Plan rebuilt around stages 3–5; the best planner is the bar and the
+  teacher** (user, after E-28; `notes/plan.md` §4 rewritten). (1) **What the agent must show:**
+  cheaper plans than the best planner on stages 3–5, above all on tight storage and many
+  targets (E-28). The user's argument: if the agent beats the planner while using its hints,
+  the hybrid is a valid result; it must be stated plainly, and the recipe-hint ablation becomes
+  a reported analysis (plan 5.3), not a blocker. (2) **Best planner** = per problem the
+  cheapest of the sharing pass, its lookahead 3 and its extra target orders (E-28); the proved
+  optimum where one exists. It is the **competition** in every grading (answer keys `_v3`) and
+  the **teacher** for stage 3–5 demonstrations; new multi-target hints are built from it. The
+  failure penalty keeps the plain pass (training only, already ~2 s per failed episode on s4,
+  E-18). (3) Facts behind it, checked 2026-10-27: every benchmark problem is planner-solvable
+  by construction of the generator, so "problems the planner cannot solve" is no argument at
+  our ranges; at inference the planner enters only through the recipe hint, a fixed
+  per-target map that ignores what is on the chip and reuse across targets. (4) Order: fix
+  F-16, hint coverage (3.2) before any hint redesign (3.3), copy tests stage by stage, then
+  warm start + PPO. (5) **Defaults** until the user changes them: expanding regime as a
+  stand-in (regime pilot 3 once stages 1–5 are learnable, with the user's curriculum design),
+  pass bars move agreement ≥ 70% / greedy success ≥ 60% for copy tests, success ≥ 90% (s3) /
+  ≥ 80% (s4–s5) and median cost within 5% of the best planner for PPO. (6) Parked: stage 2
+  polish, the up-front waste charge, the second seed on stages 1–2. The user found the volume
+  of open decisions overwhelming; from now on a decision is brought to them only when its
+  step is reached.
+
 ---
 
 ## 4. Experiments and results
@@ -1042,6 +1065,15 @@ Gap = share ÷ optimum − 1 on proved problems; gain = (share − best found) �
   stays uncertified; only its small tight-storage cells have proved headroom.
   **Unchecked:** the 301% gap (`mix-one-d1-loose`, one problem) is a single outlier that drives
   that cell's verdict; to be inspected from the records before it is used.
+  **Checked the same day:** real. `mix-one-d1-loose-14`: the sharing pass draws 5 sample units
+  (cost 385); the proved optimum, replayed and validated, draws 1 in 3 mixes (cost 96). The
+  other gaps above 50% are `dil-one-d1-tight-1` (136 vs 72, the blend case of E-17) and
+  `mix-one-d1-tight-7` (234 vs 151). The sharing pass returned a plan on all 686 problems.
+- **Planner coverage of the benchmarks (checked the same day):** the generator keeps only
+  problems a construction can solve (`generators/sampler.py`, feasibility witness), and the
+  env refuses problems its failure penalty cannot price. At our ranges this almost never
+  binds: 1 draw discarded across the six val sets (in `val_s5_v2`), 3 of 48 in E3 (mixtures at
+  storage 2). So no benchmark problem is out of the planner's reach.
 
 ---
 
