@@ -44,7 +44,7 @@ chats. Last updated 2026-10-27.*
 | Q-50 | Does the best planner as teacher beat the plain sharing pass on stages 3–5? | 3.4 |
 | Q-60 | What hints do stages 3–5 need? | 3.3 |
 | Q-71 | Pure RL vs RL with a teacher on stages 3–5 | Waiting on the user (plan §5) |
-| Q-106 | Can learning plus search find plans cheaper than the planner, without the planner at play time? | 4.2 (D-37, workstation run pending) |
+| Q-107 | Can the network learn the plans search finds (search as teacher), and beat the planner without it? | 4.2, expert iteration round 1 (D-38) |
 | Q-72 | Self-imitation if cost stalls near the teacher? | 4.3 |
 | Q-73 | Are the results stable across seeds? | 5.1 |
 | Q-78 | Root cause of the long-plan failures (s2, and s3–5 zero-shot) | 3.2, then 3.5 |
@@ -465,11 +465,22 @@ Explained variance 0.88–0.89 at the end of the warm-start run.
 was D-31 (6))
 
 **Q-106 Can learning plus search find plans cheaper than the planner, without the planner at
-play time?** · **Open → plan 4.2** (D-37; user, 2026-10-27)
+play time?** · Closed (experiment, E-33)
 Asked because the agent alone ends level with the planner (E-22, E-29) and every fix so far
 improved the planner or its hints. `scripts/search_check.py` compares the greedy agent, search
 with planner finishes (network or flat prior) and search with the network's own value (no
 planner) on 23 proved planner misses; the reading is fixed in D-37.
+**Answer (E-33, 2026-10-28): no, not with today's network.** Without the planner, search with
+the network is below the planner on 3 of 23 (1.49 × optimum). Lookahead with planner finishes
+finds most misses even with a flat prior (20 of 23, 13 at the optimum), and the network's prior
+makes it worse (16 of 23). Learning has not yet added anything search with the planner does not
+find.
+
+**Q-107 Can the network learn the plans search finds, and then beat the planner without
+it?** · **Open → plan 4.2, expert iteration round 1** (D-38; user, 2026-10-28)
+E-33: search with planner finishes finds most of the planner's misses, slowly; the network,
+taught by the planner, adds nothing. Round 1 teaches it the search's plans, with a
+planner-taught control arm; pass bar in D-38.
 
 **Q-72 Self-imitation if cost stalls near the teacher?** · **Open → plan 4.3**
 

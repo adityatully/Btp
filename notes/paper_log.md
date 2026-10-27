@@ -398,6 +398,26 @@ Format: date · decision · alternatives considered · why · evidence.
   planner finishes found plans below the planner on 2 of 2 dilution problems at 8 simulations,
   so lookahead with planner finishes alone cannot tell learning apart.
 
+- **D-38 (2026-10-28) Expert iteration, round 1: search as the teacher** (user; plan 4.2,
+  E-33). Why: search with planner finishes finds the planner's misses (E-33), but takes minutes
+  per problem, and the network, taught by the planner, adds nothing. If the network can learn
+  the search's plans, learning earns its place (fast play, and a better prior for the next
+  search); if not, the method is search + planner. Alternatives: report search + planner and
+  drop learning; PPO with search plans as an anchor (later rounds). Design: ~1,000 new practice
+  problems (30 per E2 cell at indices ≥ 1000, the cells of the search test's set A, plus 400
+  fresh stage 1–2 draws held out from every val set; any equal to a search-test problem
+  dropped). Each is planned by the sharing pass and by flat-prior search with planner finishes
+  (256 simulations, 300 s cap), the search plan kept only if cheaper (`scripts/expert_iteration.py`).
+  Two copy arms from the E-22 weights, same problems and settings
+  (`scripts/imitation_check.py demos=... init=... arm=search|planner`, 20 epochs): A copies the
+  search's plans, B (control) the planner's. Re-test with `scripts/search_check.py` (sets A and
+  B, `net` and `zero` at 256) and the val greedy grading. **Pass bar, fixed in advance:** on set
+  A, arm A's greedy agent is below the best planner on ≥ 8 of 23 (E-22: 1) **or** its `zero`
+  search is (E-33: 3); arm A beats arm B on that measure; val_s1 success ≥ 95% and val_s2
+  ≥ 80% (E-22: 100%, 85%). Readings: pass → round 2 (the new network as the search's prior);
+  A ≈ B → the gain is the new problem kinds, not the better teacher; neither improves → the
+  network cannot absorb the search's plans; report search + planner.
+
 ---
 
 ## 4. Experiments and results
@@ -1178,6 +1198,41 @@ MRCM's intermediates on val_s2: 4 of 28 covered (chain D4), 5 of 28 (premix D3).
   (an exact lower bound on mixes left, or a constructive method's recipes, which is a planner
   again). (3) Built as SPEC 0.28 `hint_source: problem` (depth-4 chain in the recipe columns)
   for a copy-test comparison on stages 1–2 against the planner's hints.
+
+### E-33 (2026-10-28) Search test: lookahead finds the planner's misses; the network does not help (plan 4.2, D-37)
+`scripts/search_check.py` at commit `4582af4`, workstation, 30 workers, E-22 agent
+(`outputs/warm/mixed_s0/checkpoints/agent.pt`, planner hints), log `outputs/search.log`,
+records `notes/search/records.jsonl` on the workstation. Set A: 23 proved E2 problems where the
+best planner is > 2% above the optimum. Set B: 13 `val_s2_v2` problems where MRCM is cheaper
+than the best planner. "Below" = cheaper than the best planner.
+
+| set | search | sims | below planner | at optimum | ratio to optimum (A) / planner (B) | no plan | capped | median s |
+|---|---|---|---|---|---|---|---|---|
+| A | greedy agent | – | 1 / 23 | 0 | – (solved 15) | 8 | – | <1 |
+| A | net (prior + planner finish) | 64 | 14 | 7 | 1.125 | 0 | 0 | 4 |
+| A | net | 256 | 16 | 8 | 1.095 | 0 | 0 | 5 |
+| A | uniform (flat + planner finish) | 256 | **20** | **13** | **1.035** | 0 | 2 | 273 |
+| A | zero (network only, no planner) | 64 | 3 | 1 | 1.535 | 4 | 0 | 1 |
+| A | zero | 256 | 3 | 1 | 1.491 | 2 | 0 | 1 |
+| B | greedy agent | – | 3 / 13 | – | – (solved 11) | 2 | – | <1 |
+| B | net | 256 | 10 | – | 0.791 (≤ MRCM on 2) | 0 | 0 | 79 |
+| B | uniform | 256 | **11** | – | **0.674 (≤ MRCM on 7)** | 0 | 5 | 253 |
+| B | zero | 256 | 5 | – | 0.878 (≤ MRCM on 1) | 2 | 0 | 3 |
+
+- **Verdict by the rule fixed in advance (D-37):** (1) yes, (2) no, (3) no: the gains come
+  from planner finishes after a few searched moves, not from what the network learned.
+- **Reading.** (1) **Lookahead fixes most of the planner's misses.** Even with a flat prior,
+  search with planner finishes is below the best planner on 20 of 23 proved misses and at
+  the optimum on 13 (mean 1.035 × optimum); on the MRCM problems it is at 0.674 of the planner
+  and reaches MRCM's cost on 7 of 13. The planner's weakness is myopia, not its building
+  blocks. (2) **The network's prior makes search worse, not better** (16 vs 20 below, 1.095 vs
+  1.035): trained to copy the planner, it steers the search back toward the planner's moves.
+  (3) **Without the planner the network cannot find them:** 3 of 23 below, 1.49 × optimum, no
+  plan on 2; its value head is too rough to guide search. On mixtures (B) it is below the
+  planner on 5 of 13 (0.878), a weak signal. (4) **Caveat, unequal time:** at the same number
+  of simulations the flat-prior search took ~50× longer (median 273 s vs 5 s on A; 2 and 5
+  capped at 900 s), because the network concentrates visits; an equal-time comparison was not
+  run. n = 23 and 13.
 
 ### E-32 (2026-10-27) Copy test: planner hints vs problem-only hints (Q-105, plan 5.3)
 `scripts/imitation_check.py problems=1000 epochs=20 eval_every=5 seed=0|1 hints=planner|problem`

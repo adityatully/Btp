@@ -178,7 +178,13 @@ here" as leaf value, on the headroom cells against the best planner. Lookahead t
 planner's known miss (building two intermediates ahead and blending them, E-17). *Brought forward
 2026-10-27 (D-37), before 3.3–3.5:* `scripts/search_check.py`, three searches (network +
 planner finish, flat prior + planner finish, network + its own value with no planner) on 23
-proved planner misses and 13 MRCM wins, reading fixed in advance. Workstation run pending.
+proved planner misses and 13 MRCM wins, reading fixed in advance. *Done 2026-10-28 (E-33):*
+lookahead with planner finishes finds most misses even with a flat prior (20/23, 13 at the
+optimum); the network's prior hurts it (16/23); without the planner the network finds 3/23.
+*Next (D-38, chosen 2026-10-28): expert iteration round 1*: search writes the teacher's
+plans on ~1,000 new practice problems (`scripts/expert_iteration.py`), two copy arms from the
+E-22 weights (search plans vs planner plans, control), then the search test and val grading
+again. Pass bar in D-38. Workstation run pending.
 **4.3 Self-imitation** if cost stalls near the teacher.
 
 ### Phase 5. Make it solid
