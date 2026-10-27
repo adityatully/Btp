@@ -1,4 +1,4 @@
-"""Exact search, cost-to-finish fallback, bitscan and the facda stub (SPEC 10; milestone M5).
+"""Exact search, cost-to-finish fallback and bitscan (SPEC 10; milestone M5).
 
 M5's acceptance criteria are here: the hand-checked cases of SPEC 17.3 give their stated optima,
 and the exact search proves and stores an optimum for every instance of `tiny_exact_v1`.
@@ -21,7 +21,6 @@ from meda.core.state import PrepState
 from meda.generators.benchmark_io import BENCHMARKS_DIR, BenchmarkSet
 from meda.solvers.base import SolveBudget
 from meda.solvers.baselines.bitscan import BitScanSolver, applies_to, is_dyadic
-from meda.solvers.baselines.facda import FacDASolver
 from meda.solvers.baselines.naive import NaiveSolver, naive_plan
 from meda.solvers.baselines.tree import tree_plan
 from meda.solvers.exact_search import ExactSearch, fluid_bound_heuristic, zero_heuristic
@@ -317,7 +316,7 @@ def test_cost_to_finish_takes_the_cheaper_construction_per_target() -> None:
         ) == min(costs)
 
 
-# --------------------------------------------------------------------------- bitscan, facda
+# --------------------------------------------------------------------------- bitscan
 
 
 def test_bitscan_matches_naive_on_dyadic_dilutions() -> None:
@@ -349,13 +348,6 @@ def test_bitscan_declines_outside_its_scope(instance: Instance, reason: str) -> 
 
 def test_is_dyadic() -> None:
     assert [n for n in range(1, 17) if is_dyadic(n)] == [1, 2, 4, 8, 16]
-
-
-def test_facda_is_an_unverified_stub() -> None:
-    solver = FacDASolver(WEIGHTS)
-    assert solver.verified is False
-    with pytest.raises(NotImplementedError, match="reproduce the paper"):
-        solver.solve(dilution([(1, 4)]))
 
 
 def test_naive_is_never_cheaper_than_the_optimum() -> None:
