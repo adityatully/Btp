@@ -40,7 +40,7 @@ chats. Last updated 2026-10-27.*
 | Q-101 | Has the agent been fully trained (all stages, regime chosen, 3 seeds)? | 3.5, 3.6, 5.4 |
 | Q-103 | Is the mini benchmark's problem set big enough and unseen? | 2.4 |
 | Q-104 | Should MRCM become part of our planner and teacher for mixtures? | Open, no step yet (E-29) |
-| Q-105 | Too much dependence on the greedy planner's recipe hint? Can hints come from the problem alone? | Open, no step yet |
+| Q-105 | Too much dependence on the greedy planner's recipe hint? Can hints come from the problem alone? | Dilutions yes, mixtures no (E-32); open for mixtures |
 | Q-50 | Does the best planner as teacher beat the plain sharing pass on stages 3–5? | 3.4 |
 | Q-60 | What hints do stages 3–5 need? | 3.3 |
 | Q-71 | Pure RL vs RL with a teacher on stages 3–5 | Waiting on the user (plan §5) |
@@ -357,8 +357,12 @@ a candidate's result to each target, computed from the problem alone.
   per target.
 - *Mixtures:* not this way. Coverage is under half, and the search explodes on blends.
 
-Built as SPEC 0.28 `hint_source: problem`. **Next: copy test on s1–s2, planner hints vs
-problem hints (workstation).** Expected: s1 holds, s2 drops.
+Built as SPEC 0.28 `hint_source: problem`.
+
+**Copy test (E-32): s1 holds, s2 drops, as expected.** Problem-only hints: s1 greedy success
+100% (planner hints 85–87.5%); s2 mix agreement 37–39% (87–91%) and success 32.5% (45–67.5%).
+So the planner can leave inference on dilutions but not, so far, on mixtures. Still open:
+whether search at decision time (plan 4.2) can stand in for the planner's recipe on mixtures.
 
 **Q-50 Does the best planner as teacher do better on stages 3–5 than the plain pass?** ·
 **Open → plan 3.4** (decision D-35 made, effect unmeasured)

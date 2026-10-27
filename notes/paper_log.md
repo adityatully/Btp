@@ -1158,6 +1158,27 @@ MRCM's intermediates on val_s2: 4 of 28 covered (chain D4), 5 of 28 (premix D3).
   again). (3) Built as SPEC 0.28 `hint_source: problem` (depth-4 chain in the recipe columns)
   for a copy-test comparison on stages 1–2 against the planner's hints.
 
+### E-32 (2026-10-27) Copy test: planner hints vs problem-only hints (Q-105, plan 5.3)
+`scripts/imitation_check.py problems=1000 epochs=20 eval_every=5 seed=0|1 hints=planner|problem`
+at commit `00391f1` (SPEC 0.28), workstation, 4 runs in parallel (~58 min each), outputs
+`outputs/imitation/hints_<source>_s<seed>/`. Teacher = sharing pass. Epoch 20, unseen val sets:
+
+| hints, seed | s1 mix agree | s1 greedy success | s1 cheaper than best known | s2 mix agree | s2 greedy success | s2 gap |
+|---|---|---|---|---|---|---|
+| planner, 0 | 74% | 87.5% | 11 | 91% | 67.5% | −4.0% |
+| planner, 1 | 70% | 85.0% | 11 | 87% | 45.0% | +4.7% |
+| problem, 0 | 66% | **100%** | 14 | **39%** | **32.5%** | 0.0% |
+| problem, 1 | 62.5% | **100%** | 14 | **37%** | **32.5%** | −5.0% |
+
+- **Reading.** (1) **Dilutions do not need the planner.** With problem-only hints the network
+  copies the teacher's mixes a little less often (62–66% vs 70–74%) but solves every s1 val
+  problem (100% vs 85–87.5%), cheaper than best known on 14 vs 11. (2) **Mixtures do.**
+  Mix agreement falls from 87–91% to 37–39% and greedy success from 45–67.5% to 32.5% (both
+  seeds). 32.5% is well above the no-hint copy test (~0%, E-15), so the arithmetic facts carry
+  some of it. (3) Planner-hint s2 success varies 45–67.5% between seeds; copy-test success
+  numbers are noisy at 40 problems. (4) The expectation written before the run (s1 holds, s2
+  drops) held.
+
 ### E-30 (2026-10-27) Hint coverage along the teacher's plans and the agent's episodes (plan 3.2)
 `scripts/hint_coverage.py` at commit `d643f05` (SPEC 0.27), workstation, 30 workers, all six
 val sets (242 problems), E-22 final weights, greedy, `planner=1`, ~40 min (the failed s4

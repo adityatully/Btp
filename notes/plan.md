@@ -186,7 +186,8 @@ planner's known miss (building two intermediates ahead and blending them, E-17).
   hint only), to report how much the agent leans on the planner at inference. *Brought
   forward 2026-10-27 (Q-105, E-31):* `hint_source: problem` (SPEC 0.28) is built. A
   planner-free hint covers dilutions but not mixtures. The stage 1–2 copy test, planner hints
-  vs problem hints, is the next workstation run.
+  vs problem hints, *done (E-32)*: problem hints hold s1 (100% greedy success) but s2 falls
+  to 32.5% (planner hints 45–67.5%).
 - **5.4** Full run, 5 stages × 3 seeds, with the regime chosen in 3.6.
 
 ### Phase 6. Paper benchmarks and baselines
