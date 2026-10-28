@@ -418,6 +418,16 @@ Format: date · decision · alternatives considered · why · evidence.
   A ≈ B → the gain is the new problem kinds, not the better teacher; neither improves → the
   network cannot absorb the search's plans; report search + planner.
 
+- **D-39 (2026-10-28) Stages 3–5 first; stages 1–2 as the testbed** (supervisor Tom, meeting
+  with the user). Tom agrees with the direction so far, and asks for more attention on the
+  multi-target, multi-droplet problems (stages 3–5). Stages 1–2 stay as experimental problems
+  for trying methods quickly, not a goal in themselves. In practice: every experiment reports
+  stages 3–5 next to 1–2, and a method is judged by its effect there. Consistent with D-35 (the
+  claim is about stages 3–5) and D-34 (stop polishing stage 2). First application: expert
+  iteration round 1 (D-38) grades the copy arms on all five val sets (`stages=5`), not only
+  stages 1–2; its pass bar is unchanged, and the stage 3–5 numbers are reported against the
+  zero-shot E-26 baseline (s3 32/40, s4 11/40, s5 16/42).
+
 ---
 
 ## 4. Experiments and results

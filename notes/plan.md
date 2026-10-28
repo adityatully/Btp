@@ -21,7 +21,7 @@ E-22 point there). This file says **what we are doing and why, in order**.
   -b nice -n 19`). Anything longer than ~10 minutes goes to the workstation (`~/code/Btp`,
   tmux; never reboot it during runs).
 
-*Last updated 2026-10-27 (D-35, F-16 fixed, SPEC 0.27).*
+*Last updated 2026-10-28 (D-39: stages 3–5 first, stages 1–2 as testbed).*
 
 ---
 
@@ -38,6 +38,11 @@ planner** we have (the cheapest of the sharing pass, its lookahead and its extra
 orders; the proved optimum where one exists), above all where that planner is weak: tight
 storage and many targets (E-28). The agent may use planner-derived hints; the paper says so
 plainly and reports how much the agent leans on them.
+
+**How we work (D-39, supervisor, 2026-10-28):** stages 3–5 (many targets, demand, storage
+limits) are the problems that matter. Stages 1–2 are a testbed: quick, well understood, good for
+trying a method first, but not to be polished for their own sake. Every experiment reports
+stages 3–5 next to stages 1–2, and every method is judged by what it does there.
 
 ## 2. What we have learned (the reasons behind the plan)
 
