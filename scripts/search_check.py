@@ -6,6 +6,9 @@ Problems where a cheaper plan than our best planner is known:
   `share`, `share_look3`, `share_orders`) is more than 2% above it (`notes/headroom/records.jsonl`).
 - **B (reported, no bar):** `val_s2_v2` problems on which MRCM is cheaper than the best planner
   (`notes/lit_bench/runs/e22/records.jsonl`; no proved optimum, MRCM's cost is the reference).
+- **C (D-41):** `val_s3_v2`, `val_s4_v2`, `val_s5_v2` at full size, without the problems where
+  the best planner is within 2% of the lower bound (it is already optimal there), from
+  `notes/headroom/records.jsonl`. Reported per stage as C3, C4, C5.
 
 Searches, all from the same env and observations as the agent (AlphaZero-style MCTS, one tree
 per real move, kept across moves; value (C0 - total) / C0, total = cost so far + estimated cost
@@ -36,11 +39,16 @@ what the network learned; rethink the network's role. Neither: rethink before st
         workers=30 out=notes/search/records.jsonl
     uv run python scripts/search_check.py summary=notes/search/records.jsonl
 
-Arguments are key=value: `sets` (A,B), `limit=N` problems per set, `sims` (budgets, default
-64,256), `uniform` (budget for the flat prior, default the largest of `sims`; 0 = off),
-`seconds` (cap per problem and search, default 900), `hints` (the env's `hint_source`; must be
-the one the agent was trained with, default planner), `reward_scale` (the agent's PPO reward
-scale, for `zero`; default 0.01 as E-22), `workers`.
+Reading on C, fixed in advance (D-41), all of C at the largest budget: the same three
+questions, (2)'s tie broken by the mean ratio to the planner. (1) and (3) → round 3 is worth
+running where the paper's claim is; (1) without (3) → the value head does not carry over to
+full-size stages 3-5; neither → search does not beat the planner there, rethink before round 3.
+
+Arguments are key=value: `sets` (A,B; C on request), `limit=N` problems per set, `sims`
+(budgets, default 64,256), `uniform` (budget for the flat prior, default the largest of `sims`;
+0 = off), `seconds` (cap per problem and search, default 900), `hints` (the env's
+`hint_source`; must be the one the agent was trained with, default planner), `reward_scale`
+(the agent's PPO reward scale, for `zero`; default 0.01 as E-22), `workers`.
 """
 
 from __future__ import annotations
@@ -119,6 +127,20 @@ def tasks(sets: set[str], limit: int | None) -> list[dict[str, Any]]:
             _task("B", i, want[i.instance_id]["cell"], want[i.instance_id], None)
             for i in insts[:limit]
         ]
+    if "C" in sets:
+        recs = [json.loads(x) for x in (ROOT / "notes/headroom/records.jsonl").open()]
+        for stage in (3, 4, 5):
+            src = f"val_s{stage}_v2"
+            want = {
+                r["id"]: r
+                for r in recs
+                if r.get("source") == src and best_planner(r) > (1 + MISS) * r["bound"]
+            }
+            insts = [i for i in BenchmarkSet.read(src).instances if i.instance_id in want]
+            out += [
+                _task(f"C{stage}", i, want[i.instance_id]["cell"], want[i.instance_id], None)
+                for i in insts[:limit]
+            ]
     return out
 
 
@@ -421,6 +443,10 @@ def greedy_stats(rs: list[dict[str, Any]]) -> dict[str, Any]:
     }
 
 
+def _tie(st: dict[str, Any]) -> float | None:
+    return st["ratio_opt"] if st["ratio_opt"] is not None else st["ratio_plan"]
+
+
 def verdict(
     net: dict[str, Any] | None, uniform: dict[str, Any] | None, zero: dict[str, Any] | None
 ) -> str:
@@ -433,9 +459,9 @@ def verdict(
             net["below"] > uniform["below"]
             or (
                 net["below"] == uniform["below"]
-                and net["ratio_opt"] is not None
-                and uniform["ratio_opt"] is not None
-                and net["ratio_opt"] < uniform["ratio_opt"]
+                and _tie(net) is not None
+                and _tie(uniform) is not None
+                and _tie(net) < _tie(uniform)
             )
         )
     )
@@ -486,6 +512,21 @@ def summarise(path: Path) -> str:
         top = max(k[2] for k in a)
         net, uni, zero = (a.get(("A", kind, top)) for kind in ("net", "uniform", "zero"))
         lines += ["", f"Reading on A at {top} sims (fixed in advance): {verdict(net, uni, zero)}"]
+    c = [k for k in groups if k[0].startswith("C")]
+    if c:
+        top = max(k[2] for k in c)
+        pooled = {
+            kind: group_stats([r for k in c if k[1] == kind and k[2] == top for r in groups[k]])
+            for kind in ("net", "uniform", "zero")
+            if any(k[1] == kind and k[2] == top for k in c)
+        }
+        for kind, st in pooled.items():
+            lines.append(
+                f"C all, {kind} {top}: below {st['below']}/{st['n']}, ratio to planner "
+                f"{_r(st['ratio_plan'])}, no plan {st['failed']}, capped {st['capped']}"
+            )
+        net, uni, zero = (pooled.get(kind) for kind in ("net", "uniform", "zero"))
+        lines += [f"Reading on C at {top} sims (fixed in advance, D-41): {verdict(net, uni, zero)}"]
     return "\n".join(lines)
 
 

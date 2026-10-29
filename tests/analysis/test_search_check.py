@@ -64,6 +64,17 @@ def test_reading_follows_the_rule_fixed_in_advance() -> None:
     assert SC.verdict(stats(9, 2), stats(9, 2), stats(9, 0)).endswith("at this budget")
     # ties on "below" go to the lower mean ratio to the optimum
     assert "(2) yes" in SC.verdict(stats(9, 3, 1.02), stats(9, 3, 1.05), None)
+    # without optima (set C) ties go to the lower mean ratio to the planner
+    no_opt = {"ratio_opt": None}
+    net = stats(9, 3) | no_opt | {"ratio_plan": 0.95}
+    assert "(2) yes" in SC.verdict(net, stats(9, 3) | no_opt | {"ratio_plan": 0.97}, None)
+
+
+def test_set_c_is_full_size_stages_3_to_5_where_the_planner_is_not_known_optimal() -> None:
+    found = SC.tasks({"C"}, None)
+    assert {t["set"] for t in found} == {"C3", "C4", "C5"}
+    assert len(found) == len({t["id"] for t in found}) == 99  # 122 less 23 at the bound
+    assert all(t["optimum"] is None and t["planner"] > 0 for t in found)
 
 
 @pytest.mark.parametrize("instance", TINY.instances[:3], ids=lambda i: i.instance_id)
