@@ -19,7 +19,7 @@ answer, how it was settled, and the evidence (IDs like E-22 point to `notes/pape
 - The first table lists only the open questions. Keep it in sync with the sections below.
 
 *Started 2026-10-27 from the paper log (D-1–D-35, E-1–E-28, F-1–F-16), the plan and the
-chats. Last updated 2026-10-27.*
+chats. Last updated 2026-10-29.*
 
 ---
 
@@ -44,7 +44,10 @@ chats. Last updated 2026-10-27.*
 | Q-50 | Does the best planner as teacher beat the plain sharing pass on stages 3–5? | 3.4 |
 | Q-60 | What hints do stages 3–5 need? | 3.3 |
 | Q-71 | Pure RL vs RL with a teacher on stages 3–5 | Waiting on the user (plan §5) |
-| Q-107 | Can the network learn the plans search finds (search as teacher), and beat the planner without it? | 4.2, expert iteration round 1 (D-38) |
+| Q-107 | Can the network learn the plans search finds (search as teacher), and beat the planner without it? | Round 1 partly (E-34); 4.2, round 2 (D-40) |
+| Q-108 | Can the value head learn to judge positions, so the planner leaves the search? | 4.2, round 2 (D-40) |
+| Q-109 | Does the AlphaZero loop climb (each round's network better than the last)? | 4.2, round 2 (D-40) |
+| Q-110 | Why did s2 drop to 47.5% when copying the search's plans? | Open, no step (after D-40) |
 | Q-72 | Self-imitation if cost stalls near the teacher? | 4.3 |
 | Q-73 | Are the results stable across seeds? | 5.1 |
 | Q-78 | Root cause of the long-plan failures (s2, and s3–5 zero-shot) | 3.2, then 3.5 |
@@ -481,6 +484,27 @@ it?** · **Open → plan 4.2, expert iteration round 1** (D-38; user, 2026-10-28
 E-33: search with planner finishes finds most of the planner's misses, slowly; the network,
 taught by the planner, adds nothing. Round 1 teaches it the search's plans, with a
 planner-taught control arm; pass bar in D-38.
+**Round 1 (E-34): partly.** The search-taught network guides search as well as a flat prior,
+~30× faster, and beats MRCM's cost on 8 of 13 mixtures with planner finishes; alone, or in search
+without the planner, it is still not below the planner (greedy 1 of 23, no-planner search 5 of
+23), and it got worse on mixtures (val_s2 47.5%). Its value head was not trained.
+**Next: round 2 (D-40)**, with the value head trained on what the search observed.
+
+**Q-108 Can the value head learn to judge positions, so the planner leaves the search?** ·
+**Open → plan 4.2, round 2** (D-40; user, 2026-10-29)
+The no-planner search runs on the value head, which PPO trained on stages 1-2 only and round 1
+did not train at all (E-34: 5 of 23). Round 2 trains it on the cheapest remaining cost the
+search saw, with a policy-only control; bar (a) in D-40.
+
+**Q-109 Does the AlphaZero loop climb?** · **Open → plan 4.2, round 2** (D-40; user,
+2026-10-29)
+Round 1 was half a turn (search taught, the network copied); the new network has not yet guided
+a search that teaches it again. Bar (b) in D-40.
+
+**Q-110 Why did s2 drop to 47.5% when copying the search's plans?** · **Open, no step** (E-34)
+A guess, unchecked: a searched opening spliced onto the planner's finish is harder to copy
+than the planner's consistent style. Round 2 copies visit counts instead of one plan; look
+again if the drop persists.
 
 **Q-72 Self-imitation if cost stalls near the teacher?** · **Open → plan 4.3**
 

@@ -428,6 +428,38 @@ Format: date · decision · alternatives considered · why · evidence.
   stages 1–2; its pass bar is unchanged, and the stage 3–5 numbers are reported against the
   zero-shot E-26 baseline (s3 32/40, s4 11/40, s5 16/42).
 
+- **D-40 (2026-10-29) Expert iteration round 2: test the loop, and teach the value head to
+  judge** (user, after E-34; plan 4.2). Why: round 1 was half a turn of the AlphaZero loop
+  (search observed, the network copied the moves); the loop itself (the new network guides the
+  next search, which teaches again) was never run, and the value head, which a search without
+  the planner runs on, was never trained on what search observes (a gap in D-38's design). Of
+  the open questions this answers the most: whether learning climbs past search + planner, and
+  whether the planner can leave the judging role on stages 4-5, where no published method
+  exists. Deferred until it reads: a stage 3-5 comparison of search alone against the planner
+  at equal time, the stage 2 drop of E-34, regimes and the full training run.
+  **Design.** (1) *Search:* the round 1 search-taught network (`copy_search`) as the prior,
+  planner finishes as the judge, 256 simulations, 600 s cap, ties at random (seeded per
+  problem). Practice problems all new: 30 per E2 cell at indices ≥ 2000 and 500 fresh draws
+  over stages 1-5 (`upto=5`, seed 1; D-39). (2) *What it observed* (`samples=1`): at every
+  position visited ≥ 64 times, the visit counts; at those and up to 16 other positions per
+  problem, the remaining cost of the cheapest whole plan seen through it (an achievable upper
+  bound). (3) *Two copy arms from `copy_search`*, same data and settings
+  (`imitation_check.py arm=visits`, 10 epochs, stages=5): **V** trains the policy toward the
+  visit counts and the value head toward -(remaining) x 0.01 (`value_coef=0.5`, PPO's own
+  weight and scale); **P**, the control, the policy only (`value_coef=0`). 5% of the problems
+  are held out for the value's error in cost units. (4) *Re-test* as E-34: `search_check.py`
+  (sets A and B, `net` and `zero` at 256, greedy at 1) and the greedy val grading on s1-s5.
+  **Pass bar, fixed in advance** (R1 = round 1's `copy_search`, E-34), on set A at 256:
+  **(a) the value head judges:** V's `zero` search below the best planner on ≥ 8 of 23 (R1: 5)
+  and on more than P's (ties: lower mean ratio to the optimum). **(b) the loop climbs:** V's
+  greedy agent solves ≥ 21 of 23 at a lower mean ratio to the optimum than R1 (1.447), and V's
+  mean greedy success over val s3-s5 is at least R1's (59.2%: 85, 45, 47.6). Readings: (a) →
+  round 3 with the value head as the judge (the no-planner search writes the answers; the
+  planner stays only as the bar); (b) without (a) → the loop climbs with the planner as judge,
+  round 3 as round 2 with more value data; neither → stop the loop: the method is
+  network-guided search with planner finishes, and learning's role is speed. s1-s2 reported as
+  the testbed (D-39), not in the bar.
+
 ---
 
 ## 4. Experiments and results
@@ -1208,6 +1240,59 @@ MRCM's intermediates on val_s2: 4 of 28 covered (chain D4), 5 of 28 (premix D3).
   (an exact lower bound on mixes left, or a constructive method's recipes, which is a planner
   again). (3) Built as SPEC 0.28 `hint_source: problem` (depth-4 chain in the recipe columns)
   for a copy-test comparison on stages 1–2 against the planner's hints.
+
+### E-34 (2026-10-29) Expert iteration round 1 (D-38)
+`scripts/expert_iteration.py small=30 stages=400 workers=28 seconds=600` at commit `54f7ab6`,
+workstation, 12,833 s (3.6 h), `outputs/expert/round1/demos.jsonl` there. 999 practice problems
+(599 from the E2 cells at indices ≥ 1000, 400 fresh stage 1–2 draws; one small draw skipped).
+Flat-prior search with planner finishes (256 simulations a move) is cheaper than the sharing
+pass on **544 of 999** (300 of 599 small, 244 of 400 stage 1–2); mean search / planner cost
+0.902; 422 hit the 600 s cap (median 395 s), so the search answers are a lower estimate of what
+search can find.
+
+**Copy arms** (`imitation_check.py stages=5 demos=… init=E-22 epochs=20`, ~95 min each). Greedy
+on the val sets at epoch 20 (success %, gap to old best known, cheaper than best known):
+
+| | s1 | s2 | s3 | s4 | s5 |
+|---|---|---|---|---|---|
+| E-22 (before; s3–s5 zero-shot, E-26) | 100 | 85 | 80 | 27.5 | 38 |
+| A, search-taught | 95 (−13.1%, 18) | **47.5** (+7.0%, 6) | **85** (−25.4%, 27) | **45** (−28.9%, 17) | 47.6 (−13.7%, 12) |
+| B, planner-taught | 95 (−4.9%, 15) | 80 (−3.0%, 7) | 80 (−17.1%, 23) | 37.5 (−31.9%, 14) | 50 (−0.3%, 8) |
+
+**Re-test** (`search_check.py sims=256 uniform=0`; "below" = cheaper than the best planner):
+
+| | A net (prior + planner finish) | A zero (no planner) | B net | B zero |
+|---|---|---|---|---|
+| E-22 (E-33) | 16 / 23, 1.095 × opt, 5 s | 3, 1.491 | 10 / 13, 0.791 | 5, 0.878 (2 no plan) |
+| flat prior (E-33) | 20, 1.035, 273 s | – | 11, 0.674, 253 s | – |
+| A, search-taught | **20**, 10 at opt, **1.036**, **8 s** | **5**, 1.246 (3 no plan) | **13**, **0.632** (≤ MRCM on 8), 48 s | 2 (7 no plan) |
+| B, planner-taught | 18, 8 at opt, 1.047, 4 s | 3, 1.415 | 10, 0.923, 6 s | 1 |
+
+- **Pass bar (D-38): not met.** `zero` below on 5 of 23 (bar 8; E-22 3); val_s2 47.5% (bar
+  80%). The greedy agents (measured as `zero` at 1 simulation, which plays the top move;
+  `outputs/expert/round1/greedy_*.log`) are not below the planner either:
+
+  | greedy, alone | A below planner | A solved | A × optimum | B below planner | B failed |
+  |---|---|---|---|---|---|
+  | E-22 | 1 | 15 / 23 | 1.752 | 3 | 2 / 13 |
+  | A, search-taught | 1 | **21 / 23** | **1.447** | 0 | **8 / 13** |
+  | B, planner-taught | 0 | 22 / 23 | 1.633 | 1 | 3 / 13 |
+
+  (E-22's fresh run matches its stored result: 1 below, 15 solved.) **Verdict: round 1 fails
+  every "alone" criterion of D-38.** Copying the search's plans made the network solve more
+  of set A and cheaper (1.75 → 1.45 × optimum), but still dearer than the planner (1.13 ×), and
+  worse on mixtures (8 of 13 MRCM problems unsolved).
+- **Reading.** (1) **The search-taught network guides search as well as a flat prior, about
+  30× faster** (A: 20 below, 1.036 × optimum, 8 s vs 273 s), and on the MRCM mixtures better
+  than any search so far (0.632 of the planner; MRCM's cost or lower on 8 of 13). The planner-
+  taught control gets 18 and 0.923: the better teacher, not the new problems, makes that
+  difference. (2) **Without the planner it is still weak** (5 of 23; on B it fails to finish
+  7 of 13). The copy step trains the move choice only, not the value head, so the no-planner
+  search's judgment did not improve. (3) **Stages 3–5 improved in both arms**, more with the
+  search teacher on s3 and s4 (85% and 45% against 80% and 37.5%) and at lower cost. (4)
+  **Stage 2 collapsed in the search arm** (47.5%): the search's mixture plans (a searched
+  opening, then the planner's finish) may be harder to imitate than the planner's consistent
+  ones; not yet examined.
 
 ### E-33 (2026-10-28) Search test: lookahead finds the planner's misses; the network does not help (plan 4.2, D-37)
 `scripts/search_check.py` at commit `4582af4`, workstation, 30 workers, E-22 agent
