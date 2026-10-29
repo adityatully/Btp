@@ -460,6 +460,26 @@ Format: date · decision · alternatives considered · why · evidence.
   network-guided search with planner finishes, and learning's role is speed. s1-s2 reported as
   the testbed (D-39), not in the bar.
 
+- **D-41 (2026-10-30) Before round 3: test search where the claim is, full-size stages 3-5**
+  (user, after E-35). Why: every search result so far (E-33-E-35) is on set A (23 *small*
+  proved problems, 18 of them stage 4-5 cells) and set B (stage 2 mixtures); the claim (D-35)
+  is about full-size stages 3-5, which were only graded with the network alone. E-35's "17 of
+  23 without the planner" may not carry over. No new training. **Design.** Set C: `val_s3_v2`,
+  `val_s4_v2`, `val_s5_v2`, minus the 23 of 122 where the best planner is within 2% of the
+  lower bound (already optimal): **99 problems** (C3, C4, C5). Round 2's V network
+  (`outputs/expert/round2/copy_v`), `search_check.py sets=C sims=1,256 uniform=256
+  seconds=900`: `net` (prior + planner finish), `zero` (no planner; at 1 simulation = the
+  network alone), `uniform` (flat prior + planner finish: lookahead without learning). Time
+  per problem is reported; the planners take milliseconds, so "equal time" is read as cost at
+  the reported time. **Reading, fixed in advance**, on all of C at 256 (D-37's three
+  questions): (1) `net` below the best planner on ≥ 1/3 (33 of 99); (2) `net` below on more
+  than `uniform` (ties: lower mean ratio to the planner); (3) `zero` below on ≥ 1/3. **(1) and
+  (3)** → round 3 is worth running; **(1) without (3)** → the value head does not carry over to
+  full-size stages 3-5, so round 3 must train on them before it can judge there; **neither**
+  → search does not beat the planner where the claim is; rethink before round 3. Caveat
+  known in advance: on long plans (up to 232 steps) the flat-prior search will often hit the
+  cap, which weakens the (2) comparison; the cap count is reported.
+
 ---
 
 ## 4. Experiments and results
@@ -1240,6 +1260,52 @@ MRCM's intermediates on val_s2: 4 of 28 covered (chain D4), 5 of 28 (premix D3).
   (an exact lower bound on mixes left, or a constructive method's recipes, which is a planner
   again). (3) Built as SPEC 0.28 `hint_source: problem` (depth-4 chain in the recipe columns)
   for a copy-test comparison on stages 1–2 against the planner's hints.
+
+### E-35 (2026-10-30) Expert iteration round 2 (D-40): the value head judges, and the loop climbs
+Code at `0f3d808` (notes `70d4694`), workstation, `outputs/expert/round2/` there. **Search**
+(`expert_iteration.py small=30 stages=500 upto=5 first=2000 seed=1 agent=round1/copy_search
+samples=1 workers=28 seconds=600`): 1100 problems (600 small, 500 stage 1-5 draws); search
+cheaper than the planner on **720** (small 334); mean search / planner cost 0.904; 218 capped
+at 600 s; median 35 s (round 1: 395 s); 37,220 samples, 20,593 with visit counts. **Copy arms**
+(`imitation_check.py arm=visits epochs=10 stages=5`, ~2.55 h each) from `copy_search`.
+
+| | V (policy + value, `value_coef` 0.5) | P (policy only, control) | R1 `copy_search` (E-34) |
+|---|---|---|---|
+| held-out visit agreement | 71.9% | 74.1% | – |
+| held-out value error (cost units, mean abs) | **269** | 642 (untrained head) | – |
+| val greedy success s1 / s2 / s3 / s4 / s5 (%) | 95 / **45** / 87.5 / 45 / 50 | 92.5 / 60 / 80 / 47.5 / 50 | 95 / 47.5 / 85 / 45 / 47.6 |
+| mean s3-s5 | **60.8** | 59.2 | 59.2 |
+
+Re-test (`search_check.py sims=1,256 uniform=0`; "below" = cheaper than the best planner; greedy
+= `zero` at 1 simulation, as in E-34; the table's "greedy agent (stored)" row is E-22's stored
+result, not these networks):
+
+| | A greedy: below, solved, × opt | A net 256 | A **zero 256** | B net 256 | B zero 256 |
+|---|---|---|---|---|---|
+| R1 (E-34) | 1, 21/23, 1.447 | 20, 10 at opt, 1.036, 8 s | 5, 1.246 (3 no plan) | 13, 0.632 (≤ MRCM 8), 48 s | 2 (7 no plan) |
+| **V** | 3, **22/23**, **1.390** | 21, 10 at opt, 1.018, 6 s | **17**, 6 at opt, **1.077**, 4 s | 13, 0.583 (≤ MRCM 6), 151 s, 1 capped | 4, 0.843 (**9 no plan**) |
+| P | 2, 22/23, 1.478 | 21, 11 at opt, 1.024, 9 s | 7, 1 at opt, 1.294 (2 no plan) | 13, 0.591 (≤ MRCM 7), 123 s | 0, 1.204 (7 no plan) |
+
+- **Pass bar (D-40): (a) met, (b) met.** (a) V's no-planner search is below the best planner on
+  **17 of 23** (bar 8; R1 5; P 7) at 1.077 × optimum. (b) V greedy solves 22 of 23 at 1.390 ×
+  optimum (R1 21, 1.447) and its mean s3-s5 success is 60.8% (R1 59.2%); (b) is met narrowly.
+  The script's own reading at 256 (fixed in advance, D-37): V "(3) yes: learning plus search
+  finds them without the planner"; P "(3) no".
+- **Reading.** (1) **The value head learned to judge on the small proved problems.** With the
+  same policy data, training the value head turns the no-planner search from 7 to 17 of 23,
+  near the planner-finish search (21), and the held-out value error falls from 642 to 269 cost
+  units. This is the first result where what the network learned, not the planner, finds the
+  planner's misses. (2) **It does not judge mixtures yet:** on set B the no-planner search
+  fails to finish 9 of 13 (P 7, R1 7); where it finishes it is at 0.843 of the planner. (3)
+  **The loop climbs, slightly:** the round 2 network alone is cheaper than round 1 (1.390 vs
+  1.447 × optimum) and the search is faster (median 35 s vs 395 s on the practice problems).
+  (4) **Stage 2 is still the weak spot** (V 45%, P 60%, R1 47.5%; E-22 85%): training the value
+  head did not cure it and may cost policy agreement (V 71.9% vs P 74.1% held out). (5) The
+  planner-finish search on B gets slower with V (151 s vs 48 s), not yet examined. n = 23 and
+  13; one seed.
+- **Next, by D-40's reading:** round 3 with the value head as the judge (the no-planner search
+  writes the answers, the planner stays as the bar). Open before it runs: what the no-planner
+  search does on problems it cannot finish (B: 9 of 13). **Decision pending (user).**
 
 ### E-34 (2026-10-29) Expert iteration round 1 (D-38)
 `scripts/expert_iteration.py small=30 stages=400 workers=28 seconds=600` at commit `54f7ab6`,

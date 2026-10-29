@@ -19,7 +19,7 @@ answer, how it was settled, and the evidence (IDs like E-22 point to `notes/pape
 - The first table lists only the open questions. Keep it in sync with the sections below.
 
 *Started 2026-10-27 from the paper log (D-1–D-35, E-1–E-28, F-1–F-16), the plan and the
-chats. Last updated 2026-10-29.*
+chats. Last updated 2026-10-30.*
 
 ---
 
@@ -45,9 +45,10 @@ chats. Last updated 2026-10-29.*
 | Q-60 | What hints do stages 3–5 need? | 3.3 |
 | Q-71 | Pure RL vs RL with a teacher on stages 3–5 | Waiting on the user (plan §5) |
 | Q-107 | Can the network learn the plans search finds (search as teacher), and beat the planner without it? | Round 1 partly (E-34); 4.2, round 2 (D-40) |
-| Q-108 | Can the value head learn to judge positions, so the planner leaves the search? | 4.2, round 2 (D-40) |
-| Q-109 | Does the AlphaZero loop climb (each round's network better than the last)? | 4.2, round 2 (D-40) |
-| Q-110 | Why did s2 drop to 47.5% when copying the search's plans? | Open, no step (after D-40) |
+| Q-108 | Can the value head learn to judge positions, so the planner leaves the search? | Small problems yes (E-35: 17/23); mixtures no (9/13 unfinished); 4.2, round 3 |
+| Q-109 | Does the AlphaZero loop climb (each round's network better than the last)? | One turn, slightly (E-35); 4.2, round 3 |
+| Q-112 | Does search (with the planner, and with the value head alone) beat the planner on full-size stages 3-5? | 4.2, D-41 |
+| Q-110 | Why did s2 drop to 47.5% when copying the search's plans? | Persists in round 2 (E-35: 45%); open, no step |
 | Q-72 | Self-imitation if cost stalls near the teacher? | 4.3 |
 | Q-73 | Are the results stable across seeds? | 5.1 |
 | Q-78 | Root cause of the long-plan failures (s2, and s3–5 zero-shot) | 3.2, then 3.5 |
@@ -495,16 +496,40 @@ without the planner, it is still not below the planner (greedy 1 of 23, no-plann
 The no-planner search runs on the value head, which PPO trained on stages 1-2 only and round 1
 did not train at all (E-34: 5 of 23). Round 2 trains it on the cheapest remaining cost the
 search saw, with a policy-only control; bar (a) in D-40.
+**Round 2 (E-35): yes on the small proved problems, not on mixtures.** With the value head
+trained, the no-planner search is below the planner on 17 of 23 (policy-only control 7; held-out
+value error 269 vs 642 cost units), but fails to finish 9 of 13 MRCM problems. **Next: round 3**
+with the value head as judge; handling unfinished problems is to be decided.
 
 **Q-109 Does the AlphaZero loop climb?** · **Open → plan 4.2, round 2** (D-40; user,
 2026-10-29)
 Round 1 was half a turn (search taught, the network copied); the new network has not yet guided
 a search that teaches it again. Bar (b) in D-40.
+**Round 2 (E-35): one turn, slightly.** The round 2 network alone solves 22 of 23 at 1.390 ×
+optimum (round 1: 21, 1.447); s3-s5 success 60.8% (59.2%). Bar met narrowly; more turns needed
+to call it a climb.
 
 **Q-110 Why did s2 drop to 47.5% when copying the search's plans?** · **Open, no step** (E-34)
 A guess, unchecked: a searched opening spliced onto the planner's finish is harder to copy
 than the planner's consistent style. Round 2 copies visit counts instead of one plan; look
 again if the drop persists.
+**Round 2 (E-35): it persists** (V 45%, policy-only P 60%), so copying visit counts instead of
+one plan did not cure it.
+
+**Q-112 Does search beat the planner on full-size stages 3-5?** · **Open → plan 4.2, D-41**
+(user, 2026-10-30)
+Every search result so far is on small problems (set A) or stage 2 mixtures (set B); the claim
+is about full-size stages 3-5. D-41 runs the search test on 99 val s3-s5 problems with round 2's
+network before round 3 is built.
+
+**Q-111 Is the network itself what limits stages 4-5?** · **Parked** (user, 2026-10-29: for the proof of concept the network is unlikely to be the bottleneck; architecture and hyperparameters are tuning, after the training and search method is settled. Exception: if D-40's bar (a) fails, look at the value error on the training problems first)
+Never questioned since E-16 (fixed by input features, not architecture). E-34: copy agreement on
+the val sets falls to 47% / 46% on s4 / s5 (s1-s3 68-79%). Three explanations fit: too little
+s4-s5 data (round 1 had no stage 3-5 draws), an inconsistent teacher, or a network that cannot
+represent them (3 layers of width 128; the value head reads only the global token). Check after
+round 2: per-stage agreement and value error on the training problems against validation. Low
+on training too → architecture (deeper, or a value head attending over the tokens); high on
+training only → data or generalisation.
 
 **Q-72 Self-imitation if cost stalls near the teacher?** · **Open → plan 4.3**
 

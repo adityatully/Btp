@@ -21,7 +21,7 @@ E-22 point there). This file says **what we are doing and why, in order**.
   -b nice -n 19`). Anything longer than ~10 minutes goes to the workstation (`~/code/Btp`,
   tmux; never reboot it during runs).
 
-*Last updated 2026-10-29 (E-34: round 1 fails its bar; D-40: expert iteration round 2).*
+*Last updated 2026-10-30 (E-35: round 2 meets both bars; D-41: search test on full-size s3-s5 first).*
 
 ---
 
@@ -195,7 +195,14 @@ the round 1 network guides the search (planner finishes), the search records wha
 (visit counts, cheapest remaining cost), two copy arms (policy + value vs policy only), re-test
 as E-34. Pass bar in D-40: (a) the value head judges (no-planner search ≥ 8 of 23 and above the
 control), (b) the loop climbs (greedy cheaper than round 1 on set A, s3-s5 success at least
-round 1's). Everything below 4.2 waits for its reading. Workstation run pending.
+round 1's). *Done 2026-10-30 (E-35): (a) and (b) met.* Trained on what search observed, the
+value head judges: the no-planner search is below the planner on 17 of 23 (control 7, round 1
+5); the network alone is cheaper than round 1 (1.390 vs 1.447 × optimum, 22/23 solved). Not on
+mixtures: the no-planner search fails to finish 9 of 13 MRCM problems; s2 stays at 45%.
+*Next (D-41, 2026-10-30): before round 3, the same search test on full-size val s3-s5* (set
+C, 99 problems where the planner is not known optimal), round 2's network, no training; bar in
+D-41. Then round 3 (value head as judge, the planner finishes only problems the search cannot
+finish, gating on round 2), if D-41 says so. Everything below 4.2 waits.
 **4.3 Self-imitation** if cost stalls near the teacher.
 
 ### Phase 5. Make it solid
