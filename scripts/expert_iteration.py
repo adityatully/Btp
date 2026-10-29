@@ -1,4 +1,5 @@
-"""Expert iteration, round 1 (plan 4.2; paper log D-38): search writes the teacher's plans.
+"""Expert iteration (plan 4.2): search writes what the network learns from. Round 1 (paper log
+D-38): the teacher's plans. Round 2 (D-40): also what the search observed (`samples=1`).
 
 Draws practice problems and plans each two ways, for the two copy arms of
 `scripts/imitation_check.py demos=...`:
@@ -12,12 +13,22 @@ Every plan is replayed and validated. Problems (all new; none is a test problem)
   test draws them), so the network keeps what it knows.
 Any draw equal to a search-test problem (sets A and B) is dropped.
 
+Round 2 (D-40) differs in four ways: the search's prior is a network (`agent=`, round 1's
+search-taught one), still with planner finishes; ties break at random (seeded per problem);
+problems are new again (`first=2000 seed=1`) and the stage draws cover stages 1-5 (`upto=5`);
+and with `samples=1` each record also keeps what the search observed (`Search.samples`): visit
+counts where a position was visited at least `min_visits` times, and at every kept position
+the remaining cost of the cheapest whole plan seen through it. `load_targets(path)` reads them.
+
     uv run python scripts/expert_iteration.py small=30 stages=400 workers=30 \
         out=outputs/expert/round1/demos.jsonl
 
-Arguments are key=value: `small`, `stages`, `sims` (default 256), `seconds` (cap per problem,
-default 300), `seed`, `workers`, `out`. Each output line: the instance (JSON), both plans
-(pickled, base64) and their costs; `load_demos(path, arm)` reads them back.
+Arguments are key=value: `small`, `stages`, `upto` (stages drawn, default 2), `first` (first
+E2 index, default 1000), `sims` (default 256), `seconds` (cap per problem, default 300), `seed`,
+`agent` (the prior; default a flat one), `samples` (0/1), `min_visits` (default 64),
+`value_cap` (default 16), `workers`, `out`. Each output line: the instance (JSON), both plans
+(pickled, base64) and their costs, and with `samples=1` the samples (pickled, base64);
+`load_demos(path, arm)` reads the plans back.
 """
 
 from __future__ import annotations
@@ -52,10 +63,10 @@ WEIGHTS = sc.WEIGHTS
 FIRST_INDEX = 1000  # E2 drew indices 0-19 per cell
 
 
-def small_problems(per_cell: int) -> list[Instance]:
+def small_problems(per_cell: int, first: int = FIRST_INDEX) -> list[Instance]:
     out = []
     for cell, cfg, grad in headroom.cells("small"):
-        for index in range(FIRST_INDEX, FIRST_INDEX + per_cell):
+        for index in range(first, first + per_cell):
             rng = np.random.default_rng([zlib.crc32(cell.encode()), index])
             try:
                 inst = sample_instance(GeneratorConfig.from_dict(cfg), headroom.CHIP, rng, WEIGHTS)
@@ -76,9 +87,9 @@ def small_problems(per_cell: int) -> list[Instance]:
     return out
 
 
-def stage_problems(count: int, seed: int) -> list[Instance]:
+def stage_problems(count: int, seed: int, upto: int = 2) -> list[Instance]:
     load = sc._load
-    design = StageDesign.from_dict(load("stages/track2_v1.yaml")).first(2)
+    design = StageDesign.from_dict(load("stages/track2_v1.yaml")).first(upto)
     chip = ChipLimits.from_dict(load(f"chip/{design.chip}.yaml"))
     held = set(BenchmarkSet.read(design.held_out_val).hashes())
     for s in design.stages:
@@ -107,18 +118,34 @@ def search_test_hashes() -> set[str]:
     return {instance_hash(Instance.from_json(t["instance"])) for t in sc.tasks({"A", "B"}, None)}
 
 
-def _pack(plan: tuple[Action, ...]) -> str:
-    return base64.b64encode(pickle.dumps(plan)).decode()
+def _pack(obj: tuple[Any, ...]) -> str:
+    return base64.b64encode(pickle.dumps(obj)).decode()
 
 
-def _unpack(text: str) -> tuple[Action, ...]:
-    plan = pickle.loads(base64.b64decode(text))  # our own file, written by `run_task`
-    assert isinstance(plan, tuple)
-    return plan
+def _unpack(text: str) -> tuple[Any, ...]:
+    obj = pickle.loads(base64.b64decode(text))  # our own file, written by `run_task`
+    assert isinstance(obj, tuple)
+    return obj
 
 
-def run_task(task: tuple[str, int, float]) -> dict[str, Any]:
-    inst_json, sims, seconds = task
+_AGENT: dict[str, Any] = {}
+
+
+def _agent(path: str) -> Any:
+    if path not in _AGENT:
+        import torch
+
+        from meda.agents.ppo.policy import PPOAgent
+
+        torch.set_num_threads(1)
+        _AGENT[path] = PPOAgent.load(path)
+    return _AGENT[path]
+
+
+def run_task(task: tuple[Any, ...]) -> dict[str, Any]:
+    """task: (instance JSON, sims, seconds[, options]); options as in `main` (round 2)."""
+    inst_json, sims, seconds = task[:3]
+    opts: dict[str, Any] = task[3] if len(task) > 3 else {}
     inst = Instance.from_json(inst_json)
     t0 = time.perf_counter()
     planner = share_plan(inst, WEIGHTS)
@@ -126,11 +153,25 @@ def run_task(task: tuple[str, int, float]) -> dict[str, Any]:
         raise RuntimeError(f"{inst.instance_id}: the sharing pass found no plan")
     p_stats = sc.hs.plan_stats(inst, "share", planner, 0.0)
     cfg = {"costs": sc._load("costs/geometric.yaml"), "env": sc._load("env/sample_prep.yaml")}
-    search = sc.Search(build_env(cfg, [inst]), inst, None, t0 + seconds)
+    agent = _agent(opts["agent"]) if opts.get("agent") else None
+    rng = None
+    if "seed" in opts:
+        rng = np.random.default_rng([opts["seed"], zlib.crc32(inst.instance_id.encode())])
+    collect = opts["min_visits"] if opts.get("samples") else None
+    search = sc.Search(build_env(cfg, [inst]), inst, agent, t0 + seconds, rng=rng, collect=collect)
     found = search.run(sims)
     s_stats = sc.hs.plan_stats(inst, "search", found["plan"], 0.0) if found["plan"] else None
     improved = s_stats is not None and s_stats["cost"] < p_stats["cost"] - 1e-9
     best = found["plan"] if improved else planner
+    extra: dict[str, Any] = {}
+    if opts.get("samples"):
+        assert rng is not None, "samples need a seed"
+        got = search.samples(opts["value_cap"], rng)
+        extra = {
+            "samples": _pack(tuple(got)),
+            "n_policy": sum(v is not None for _, v, _ in got),
+            "n_value": len(got),
+        }
     return {
         "id": inst.instance_id,
         "cell": inst.metadata.get("cell", inst.metadata.get("stage", "")),
@@ -142,6 +183,7 @@ def run_task(task: tuple[str, int, float]) -> dict[str, Any]:
         "seconds": round(time.perf_counter() - t0, 1),
         "planner_plan": _pack(planner),
         "search_plan": _pack(best),
+        **extra,
     }
 
 
@@ -158,16 +200,33 @@ def load_demos(path: str | Path, arm: str) -> tuple[list[Instance], dict[str, tu
     return insts, plans
 
 
+def load_targets(path: str | Path) -> list[tuple[Instance, tuple[sc.Sample, ...]]]:
+    """Round 2 (D-40): per practice problem, what the search observed (`Search.samples`)."""
+    out = []
+    for line in Path(path).read_text().splitlines():
+        rec = json.loads(line)
+        if "samples" not in rec:
+            raise ValueError(f"{path}: record {rec['id']} has no samples (run with samples=1)")
+        out.append((Instance.from_json(rec["instance"]), _unpack(rec["samples"])))
+    return out
+
+
 def summarise(path: Path) -> str:
     recs = [json.loads(x) for x in path.read_text().splitlines()]
     ratio = [r["search_cost"] / r["planner_cost"] for r in recs]
     small = [r for r in recs if r["id"].startswith("ei-") and not r["id"].startswith("ei-stage")]
+    samples = ""
+    if recs and "samples" in recs[0]:
+        samples = (
+            f"; samples {sum(r['n_value'] for r in recs)} "
+            f"(with visit counts {sum(r['n_policy'] for r in recs)})"
+        )
     return (
-        f"{len(recs)} problems ({len(small)} small, {len(recs) - len(small)} stage 1-2): search "
+        f"{len(recs)} problems ({len(small)} small, {len(recs) - len(small)} stages): search "
         f"cheaper than the planner on {sum(r['improved'] for r in recs)} "
         f"(small {sum(r['improved'] for r in small)}); mean search/planner cost "
         f"{np.mean(ratio):.3f}; capped {sum(r['capped'] for r in recs)}; median "
-        f"{np.median([r['seconds'] for r in recs]):.0f} s"
+        f"{np.median([r['seconds'] for r in recs]):.0f} s{samples}"
     )
 
 
@@ -177,14 +236,23 @@ def main(argv: list[str]) -> None:
         print(summarise(Path(args["summary"])))
         return
     seed = int(args.get("seed", 0))
-    probs = small_problems(int(args.get("small", 30))) + stage_problems(
-        int(args.get("stages", 400)), seed
-    )
+    probs = small_problems(
+        int(args.get("small", 30)), int(args.get("first", FIRST_INDEX))
+    ) + stage_problems(int(args.get("stages", 400)), seed, int(args.get("upto", 2)))
     held = search_test_hashes()
     kept = [i for i in probs if instance_hash(i) not in held]
     print(f"{len(probs)} problems drawn, {len(probs) - len(kept)} equal to a test problem dropped")
     sims, seconds = int(args.get("sims", 256)), float(args.get("seconds", 300))
-    todo = [(i.to_json(), sims, seconds) for i in kept]
+    opts: dict[str, Any] = {}
+    if args.get("agent") or args.get("samples", "0") != "0":  # round 2 (D-40)
+        opts = {
+            "agent": args.get("agent", ""),
+            "seed": seed,
+            "samples": args.get("samples", "0") != "0",
+            "min_visits": int(args.get("min_visits", 64)),
+            "value_cap": int(args.get("value_cap", 16)),
+        }
+    todo = [(i.to_json(), sims, seconds, opts) for i in kept]
     out = Path(args.get("out", "outputs/expert/round1/demos.jsonl"))
     out.parent.mkdir(parents=True, exist_ok=True)
     workers = int(args.get("workers", 1))

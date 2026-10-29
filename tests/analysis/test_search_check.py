@@ -64,3 +64,28 @@ def test_reading_follows_the_rule_fixed_in_advance() -> None:
     assert SC.verdict(stats(9, 2), stats(9, 2), stats(9, 0)).endswith("at this budget")
     # ties on "below" go to the lower mean ratio to the optimum
     assert "(2) yes" in SC.verdict(stats(9, 3, 1.02), stats(9, 3, 1.05), None)
+
+
+@pytest.mark.parametrize("instance", TINY.instances[:3], ids=lambda i: i.instance_id)
+def test_recording_samples_does_not_change_the_search(instance: Any) -> None:
+    import time
+
+    import numpy as np
+
+    from meda.analysis.evaluate import build_env
+
+    cfg = {"costs": SC._load("costs/geometric.yaml"), "env": SC._load("env/sample_prep.yaml")}
+    found = []
+    for collect in (None, 2):
+        search = SC.Search(
+            build_env(cfg, [instance]),
+            instance,
+            None,
+            time.perf_counter() + 60,
+            rng=np.random.default_rng(0),
+            collect=collect,
+        )
+        found.append(search.run(8)["plan"])
+    assert found[0] == found[1]
+    root = [s for s in search.samples(4, np.random.default_rng(0)) if s[0] == ()]
+    assert len(root) == 1 and root[0][1] is not None

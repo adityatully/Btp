@@ -51,3 +51,36 @@ def test_practice_problems_are_new() -> None:
     assert small and all(i.instance_id.startswith("ei-") for i in small)
     held = EI.search_test_hashes()
     assert len(held) == 36
+
+
+ROUND2 = {"agent": "", "seed": 0, "samples": True, "min_visits": 4, "value_cap": 8}
+
+
+@pytest.mark.parametrize("instance", TINY.instances[:2], ids=lambda i: i.instance_id)
+def test_round2_samples_are_what_the_search_saw(instance: Any, tmp_path: Path) -> None:
+    rec = EI.run_task((instance.to_json(), 8, 30.0, ROUND2))
+    assert rec["n_value"] >= rec["n_policy"] >= 1
+    path = tmp_path / "demos.jsonl"
+    path.write_text(json.dumps(rec) + "\n")
+    [(inst, samples)] = EI.load_targets(path)
+    assert inst.instance_id == instance.instance_id
+    root = [s for s in samples if s[0] == ()]
+    assert len(root) == 1 and root[0][1] is not None  # the root always has its visit counts
+    optimum = instance.metadata.get("optimum")
+    if optimum is not None:
+        assert root[0][2] >= float(optimum) - 1e-9
+    assert root[0][2] <= rec["planner_cost"] + 1e-9 or not rec["improved"]
+    for _actions, visits, remaining in samples:
+        assert remaining >= -1e-9
+        assert visits is None or sum(visits) >= ROUND2["min_visits"]
+    # the same seed gives the same samples (rule 6)
+    again = EI.run_task((instance.to_json(), 8, 30.0, ROUND2))
+    assert again["samples"] == rec["samples"]
+
+
+def test_load_targets_needs_samples(tmp_path: Path) -> None:
+    rec = EI.run_task((TINY.instances[0].to_json(), 4, 30.0))
+    path = tmp_path / "demos.jsonl"
+    path.write_text(json.dumps(rec) + "\n")
+    with pytest.raises(ValueError, match="samples=1"):
+        EI.load_targets(path)

@@ -141,6 +141,9 @@ def _task(
 # --------------------------------------------------------------------------- search
 
 
+Sample = tuple[tuple[Action, ...], list[int] | None, float]  # moves, visits, remaining cost
+
+
 @dataclass
 class Node:
     snap: EnvSnapshot
@@ -148,6 +151,7 @@ class Node:
     prior: np.ndarray
     value: float  # the leaf value when it was expanded
     terminal: bool
+    best: float = math.inf  # cheapest whole plan seen through this node (fits the step limit)
     visits: np.ndarray = field(init=False)
     total: np.ndarray = field(init=False)
     children: dict[int, Node] = field(default_factory=dict)
@@ -168,12 +172,20 @@ class Search:
         deadline: float,
         planner_leaf: bool = True,
         reward_scale: float = 0.01,
+        rng: np.random.Generator | None = None,
+        collect: int | None = None,
     ) -> None:
         self.env, self.inst, self.agent, self.deadline = env, inst, agent, deadline
         self.planner_leaf, self.reward_scale = planner_leaf, reward_scale
+        self.rng = rng  # breaks ties at random; without it ties go in candidate order (E-33)
         self.best: tuple[float, tuple[Action, ...], int] | None = None  # cost, plan, tail
         self.c0 = 1.0
         self.leaves = 0
+        # Expert iteration round 2 (D-40): with `collect` (the fewest visits for a position's
+        # visit counts to be kept), record what the search observed; see `samples`.
+        self.collect = collect
+        self._policy: list[Sample] = []
+        self._other: list[Sample] = []
 
     def net(self, obs: dict[str, Any], n: int) -> tuple[np.ndarray, float]:
         """Move probabilities over the `n` candidates (flat without a network) and the
@@ -202,20 +214,22 @@ class Search:
             if info["success"]:
                 cost = float(info["plan_cost"])
                 self._offer(cost, actions)
-                return Node(snap, actions, np.zeros(0), self.score(cost), True)
+                return Node(snap, actions, np.zeros(0), self.score(cost), True, cost)
             return Node(snap, actions, np.zeros(0), -1.0, True)
         prior, estimate = self.net(obs, len(env.legal))
         if not self.planner_leaf:
             return Node(snap, actions, prior, self.score(float(snap.plan_cost) + estimate), False)
         found = finish_from(env.state, self.inst, WEIGHTS)
+        best = math.inf
         if found is None:
             value = -1.0
         else:
             cost = float(snap.plan_cost + found[1])
             if env.state.step + len(found[0]) <= self.inst.step_limit:
                 self._offer(cost, actions + found[0], len(found[0]))
+                best = cost
             value = self.score(cost)
-        return Node(snap, actions, prior, value, False)
+        return Node(snap, actions, prior, value, False, best)
 
     def score(self, cost: float) -> float:
         return max(-1.0, (self.c0 - cost) / self.c0)
@@ -233,19 +247,23 @@ class Search:
             n = node.visits.sum()
             q = np.where(node.visits > 0, node.total / np.maximum(node.visits, 1), node.value)
             u = C_PUCT * node.prior * math.sqrt(n + 1) / (1 + node.visits)
-            i = int(np.argmax(q + u))
+            score = q + u
+            if self.rng is not None:
+                score = score + 1e-9 * self.rng.random(len(score))
+            i = int(np.argmax(score))
             path.append((node, i))
             if i not in node.children:
                 node.children[i] = self.child(node, i)
-                value = node.children[i].value
+                end = node.children[i]
                 break
             node = node.children[i]
             if node.terminal:
-                value = node.value
+                end = node
                 break
         for nd, i in path:
             nd.visits[i] += 1
-            nd.total[i] += value
+            nd.total[i] += end.value
+            nd.best = min(nd.best, end.best)
 
     def run(self, sims: int) -> dict[str, Any]:
         obs, _ = self.env.reset(options={"instance": self.inst})
@@ -256,6 +274,7 @@ class Search:
             self.c0 = max(self.net(obs, len(self.env.legal))[1], 1.0)
             root = self.leaf(obs, (), None)
         root.value = 0.0
+        past: list[Node] = []
         capped = False
         while not root.terminal:
             for _ in range(sims):
@@ -265,7 +284,21 @@ class Search:
                 self.simulate(root)
             if capped or root.visits.sum() == 0:
                 break
-            root = root.children[int(np.argmax(root.visits))]
+            i = int(np.argmax(root.visits))
+            if self.collect is not None:  # the other branches are never visited again
+                for j, other in root.children.items():
+                    if j != i:
+                        self._take(other)
+                root.children = {i: root.children[i]}
+                past.append(root)
+            root = root.children[i]
+        if self.collect is not None:
+            self._take(root)
+            later = root
+            for node in reversed(past):  # plans found after the search moved on count too
+                node.best = min(node.best, later.best)
+                self._keep(node)
+                later = node
         if self.best is None:  # `zero` reached no finished plan
             return {"plan": None, "tail": 0, "capped": capped, "played_to_end": root.terminal}
         return {
@@ -274,6 +307,37 @@ class Search:
             "capped": capped,
             "played_to_end": root.terminal,
         }
+
+    def _keep(self, node: Node) -> None:
+        if node.terminal or not math.isfinite(node.best):
+            return
+        remaining = node.best - float(node.snap.plan_cost)
+        assert self.collect is not None
+        if node.visits.sum() >= self.collect:
+            self._policy.append((node.actions, [int(v) for v in node.visits], remaining))
+        else:
+            self._other.append((node.actions, None, remaining))
+
+    def _take(self, top: Node) -> None:
+        """Record every position under `top` (its search is over)."""
+        stack = [top]
+        while stack:
+            node = stack.pop()
+            stack.extend(node.children.values())
+            self._keep(node)
+
+    def samples(self, value_cap: int, rng: np.random.Generator) -> list[Sample]:
+        """What the search observed, for the network to learn from (expert iteration round 2,
+        D-40): per position, the moves from the start, the visit counts over its candidates
+        (only where it was visited at least `collect` times, else None) and the remaining cost
+        of the cheapest whole plan seen through it. Every position with visit counts is kept,
+        plus up to `value_cap` others drawn with `rng` (value only); positions with no whole
+        plan seen through them are left out. Branches are recorded as soon as the search
+        leaves them and then freed, so the tree never holds more than in round 1."""
+        if self.collect is None:
+            raise RuntimeError("construct the search with collect=<min visits>")
+        pick = rng.permutation(len(self._other))[:value_cap]
+        return self._policy + [self._other[int(i)] for i in sorted(pick)]
 
 
 _AGENT: dict[str, Any] = {}
