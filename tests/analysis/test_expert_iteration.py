@@ -53,6 +53,17 @@ def test_practice_problems_are_new() -> None:
     assert len(held) == 36
 
 
+def test_final_weights_draw_mostly_stages_3_to_5() -> None:
+    """Round 3 (D-45): s5 (limited storage) takes about its 0.35 weight, s1-s2 cells about 0.1."""
+    for weights, s5_share in (("equal", 0.2), ("final", 0.35)):
+        cells = [str(i.metadata["cell"]) for i in EI.stage_problems(200, 3, 5, weights)]
+        assert abs(sum("limited" in c for c in cells) / 200 - s5_share) < 0.08
+    early = sum(c.endswith("one-single-loose") for c in cells)  # s1 and s2 cells, final weights
+    assert early / 200 < 0.17
+    with pytest.raises(ValueError, match="weights"):
+        EI.stage_problems(1, 3, 5, "even")
+
+
 ROUND2 = {"agent": "", "seed": 0, "samples": True, "min_visits": 4, "value_cap": 8}
 
 

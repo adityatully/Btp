@@ -21,6 +21,8 @@ visit counts (cross-entropy with the normalised counts) and, with `value_coef` >
 head toward -(remaining cost of the cheapest plan seen) x `reward_scale`, the PPO value's own
 scale (gamma 1). The last 5% of the practice problems are held out and report the value's mean
 absolute error in cost units and how often the top move is the search's most visited.
+Round 3 (D-45): `demos` may list several files, comma-separated (earlier rounds' data kept as a
+replay); the held-out 5% come from the end of the last.
 
 Writes `metrics.jsonl` (one line per round) and `imitation.pt` (the network, loadable with
 `PPOAgent.load`, the starting point of the PPO warm start) into `out`.
@@ -167,6 +169,11 @@ def search_loss(
     return ce[has_pi].sum(), (err**2).sum(), agree, err.abs().sum()
 
 
+def load_all(demos: str, load_targets: Any) -> list[Any]:
+    """Round 3 (D-45): the problems of every file in `demos` (comma-separated), in order."""
+    return [x for path in demos.split(",") for x in load_targets(path)]
+
+
 def main(argv: list[str]) -> None:
     args = parse(argv)
     torch.set_num_threads(args["threads"])
@@ -199,7 +206,7 @@ def main(argv: list[str]) -> None:
         sys.path.insert(0, str(CONFIGS.parent / "scripts"))
         from expert_iteration import load_targets
 
-        loaded = load_targets(args["demos"])
+        loaded = load_all(args["demos"], load_targets)
         cut = len(loaded) - max(1, len(loaded) // 20)
         for idx, (inst, samples) in enumerate(loaded):
             store = targets if idx < cut else held_out

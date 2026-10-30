@@ -66,3 +66,14 @@ def test_search_targets_replay_and_loss(tmp_path: Path) -> None:
         opt.step()
         first = first if first is not None else float((ce + mse).detach())
     assert float(ce + mse) < first  # both heads learn from the targets
+
+
+def test_several_demos_files_load_in_order(tmp_path: Path) -> None:
+    opts = {"agent": "", "seed": 0, "samples": True, "min_visits": 4, "value_cap": 8}
+    paths = []
+    for k, inst in enumerate(TINY.instances[:2]):
+        path = tmp_path / f"round{k}.jsonl"
+        path.write_text(json.dumps(EI.run_task((inst.to_json(), 8, 30.0, opts))) + "\n")
+        paths.append(str(path))
+    loaded = IC.load_all(",".join(paths), EI.load_targets)
+    assert [i.instance_id for i, _ in loaded] == [i.instance_id for i in TINY.instances[:2]]

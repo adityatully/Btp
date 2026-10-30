@@ -20,10 +20,16 @@ and with `samples=1` each record also keeps what the search observed (`Search.sa
 counts where a position was visited at least `min_visits` times, and at every kept position
 the remaining cost of the cheapest whole plan seen through it. `load_targets(path)` reads them.
 
+Round 3 (D-45): the prior is round 2's V network; the stage draws follow the design's final
+weights (`weights=final`: s3 0.2, s4 0.35, s5 0.35, s1 and s2 0.05 each) instead of equal shares,
+so most practice is on full-size stages 3-5, and more value positions are kept per problem
+(`value_cap=64`).
+
     uv run python scripts/expert_iteration.py small=30 stages=400 workers=30 \
         out=outputs/expert/round1/demos.jsonl
 
-Arguments are key=value: `small`, `stages`, `upto` (stages drawn, default 2), `first` (first
+Arguments are key=value: `small`, `stages`, `upto` (stages drawn, default 2), `weights`
+(`equal` shares of the stages drawn, the default, or the design's `final` weights), `first` (first
 E2 index, default 1000), `sims` (default 256), `seconds` (cap per problem, default 300), `seed`,
 `agent` (the prior; default a flat one), `samples` (0/1), `min_visits` (default 64),
 `value_cap` (default 16), `workers`, `out`. Each output line: the instance (JSON), both plans
@@ -87,16 +93,21 @@ def small_problems(per_cell: int, first: int = FIRST_INDEX) -> list[Instance]:
     return out
 
 
-def stage_problems(count: int, seed: int, upto: int = 2) -> list[Instance]:
+def stage_problems(count: int, seed: int, upto: int = 2, weights: str = "equal") -> list[Instance]:
     load = sc._load
     design = StageDesign.from_dict(load("stages/track2_v1.yaml")).first(upto)
+    if weights not in ("equal", "final"):
+        raise ValueError(f"weights must be 'equal' or 'final', got {weights!r}")
+    shares = (
+        dict(design.final_weights)
+        if weights == "final"
+        else {s.name: 1 / len(design.stages) for s in design.stages}
+    )
     chip = ChipLimits.from_dict(load(f"chip/{design.chip}.yaml"))
     held = set(BenchmarkSet.read(design.held_out_val).hashes())
     for s in design.stages:
         held |= BenchmarkSet.read(s.val).hashes()
-    source = design.source(
-        {s.name: 1 / len(design.stages) for s in design.stages}, chip, WEIGHTS, frozenset(held)
-    )
+    source = design.source(shares, chip, WEIGHTS, frozenset(held))
     rng = np.random.default_rng([seed, 38])
     out = []
     for i in range(count):
@@ -238,7 +249,12 @@ def main(argv: list[str]) -> None:
     seed = int(args.get("seed", 0))
     probs = small_problems(
         int(args.get("small", 30)), int(args.get("first", FIRST_INDEX))
-    ) + stage_problems(int(args.get("stages", 400)), seed, int(args.get("upto", 2)))
+    ) + stage_problems(
+        int(args.get("stages", 400)),
+        seed,
+        int(args.get("upto", 2)),
+        args.get("weights", "equal"),
+    )
     held = search_test_hashes()
     kept = [i for i in probs if instance_hash(i) not in held]
     print(f"{len(probs)} problems drawn, {len(probs) - len(kept)} equal to a test problem dropped")
