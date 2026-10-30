@@ -21,7 +21,7 @@ E-22 point there). This file says **what we are doing and why, in order**.
   -b nice -n 19`). Anything longer than ~10 minutes goes to the workstation (`~/code/Btp`,
   tmux; never reboot it during runs).
 
-*Last updated 2026-10-30 (E-35: round 2 meets both bars; D-41: search test on full-size s3-s5 first).*
+*Last updated 2026-10-30 (E-36; D-42: fair-time test next).*
 
 ---
 
@@ -202,7 +202,12 @@ mixtures: the no-planner search fails to finish 9 of 13 MRCM problems; s2 stays 
 *Next (D-41, 2026-10-30): before round 3, the same search test on full-size val s3-s5* (set
 C, 99 problems where the planner is not known optimal), round 2's network, no training; bar in
 D-41. Then round 3 (value head as judge, the planner finishes only problems the search cannot
-finish, gating on round 2), if D-41 says so. Everything below 4.2 waits.
+finish, gating on round 2), if D-41 says so. *Done 2026-10-30 (E-36): (1) yes, (3) no.* Search
+with planner finishes beats the best planner on 85 of 99 full-size s3-s5 problems (16% cheaper
+on average), with or without the network's prior; without the planner it fails to finish 47.
+*Now (D-42, 2026-10-30): fair-time test* — the planner restarted with random choices for the
+same 900 s; does the search still win? Bar in D-42. *Then:* a faster planner (engineering), and
+round 3 (train on full-size s3-s5, D-41's reading). Everything below 4.2 waits.
 **4.3 Self-imitation** if cost stalls near the teacher.
 
 ### Phase 5. Make it solid

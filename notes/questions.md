@@ -47,7 +47,7 @@ chats. Last updated 2026-10-30.*
 | Q-107 | Can the network learn the plans search finds (search as teacher), and beat the planner without it? | Round 1 partly (E-34); 4.2, round 2 (D-40) |
 | Q-108 | Can the value head learn to judge positions, so the planner leaves the search? | Small problems yes (E-35: 17/23); mixtures no (9/13 unfinished); 4.2, round 3 |
 | Q-109 | Does the AlphaZero loop climb (each round's network better than the last)? | One turn, slightly (E-35); 4.2, round 3 |
-| Q-112 | Does search (with the planner, and with the value head alone) beat the planner on full-size stages 3-5? | 4.2, D-41 |
+| Q-113 | Is search's gain on full-size s3-s5 lookahead, or only more time than the planner? | 4.2, D-42 |
 | Q-110 | Why did s2 drop to 47.5% when copying the search's plans? | Persists in round 2 (E-35: 45%); open, no step |
 | Q-72 | Self-imitation if cost stalls near the teacher? | 4.3 |
 | Q-73 | Are the results stable across seeds? | 5.1 |
@@ -516,11 +516,19 @@ again if the drop persists.
 **Round 2 (E-35): it persists** (V 45%, policy-only P 60%), so copying visit counts instead of
 one plan did not cure it.
 
-**Q-112 Does search beat the planner on full-size stages 3-5?** · **Open → plan 4.2, D-41**
+**Q-112 Does search beat the planner on full-size stages 3-5?** · **Closed** (E-36)
 (user, 2026-10-30)
 Every search result so far is on small problems (set A) or stage 2 mixtures (set B); the claim
 is about full-size stages 3-5. D-41 runs the search test on 99 val s3-s5 problems with round 2's
 network before round 3 is built.
+**Closed (E-36): with the planner yes, without it no.** Search with planner finishes is below
+the best planner on 85 of 99 (16% cheaper on average), about the same with a flat prior (83);
+with the value head alone 29 of 99, and 47 not finished.
+
+**Q-113 Is search's gain on full-size s3-s5 lookahead, or only more time?** · **Open → plan
+4.2, D-42** (user, 2026-10-30)
+E-36's search ran up to 900 s against the planner's ~1 s. D-42 gives the planner the same time
+(random restarts) and checks whether the search still wins.
 
 **Q-111 Is the network itself what limits stages 4-5?** · **Parked** (user, 2026-10-29: for the proof of concept the network is unlikely to be the bottleneck; architecture and hyperparameters are tuning, after the training and search method is settled. Exception: if D-40's bar (a) fails, look at the value error on the training problems first)
 Never questioned since E-16 (fixed by input features, not architecture). E-34: copy agreement on

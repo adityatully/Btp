@@ -480,6 +480,20 @@ Format: date · decision · alternatives considered · why · evidence.
   known in advance: on long plans (up to 232 steps) the flat-prior search will often hit the
   cap, which weakens the (2) comparison; the cap count is reported.
 
+- **D-42 (2026-10-30) Fair-time test: is E-36's gain lookahead or time?** (user, after E-36).
+  Why: in E-36 the search ran up to 900 s per problem against the planner's ~1 s, so "16%
+  cheaper" may only be "more time". The planner gets the same 900 s: `scripts/fair_time.py`
+  restarts the sharing pass with random choices (a random target order, a quarter of the time
+  one of its own; for each delivery group one of the 4 cheapest candidates, the i-th with
+  weight 2^-i), seeded per problem, keeping the cheapest plan; it starts from the best
+  planner's cost, so it is never dearer. Cost recorded at 1, 10, 60, 300 and 900 s. Set C as
+  E-36 (99 problems). Leans the planner's way: the search often finished early (C3 median
+  162 s). **Reading, fixed in advance**, on all of C, `net` at 256 (E-36's records) against the
+  planner at 900 s, ratio = mean search / planner cost: **ratio ≤ 0.95 and search cheaper on ≥
+  50** → lookahead is real, not time; **ratio ≥ 0.99** → the gain was time; otherwise partly,
+  reporting how much of the 16% survives. Smoke run (3 problems, 30 s): the restarts found
+  nothing below the planner (28 to 859 tries).
+
 ---
 
 ## 4. Experiments and results
@@ -1260,6 +1274,40 @@ MRCM's intermediates on val_s2: 4 of 28 covered (chain D4), 5 of 28 (premix D3).
   (an exact lower bound on mixes left, or a constructive method's recipes, which is a planner
   again). (3) Built as SPEC 0.28 `hint_source: problem` (depth-4 chain in the recipe columns)
   for a copy-test comparison on stages 1–2 against the planner's hints.
+
+### E-36 (2026-10-30) Search test on full-size stages 3-5 (D-41)
+`search_check.py sets=C sims=1,256 uniform=256 workers=28`, code `19d57b5`, workstation, round 2's
+V network (`outputs/expert/round2/copy_v`), log `outputs/expert/round2/search_c.log` there. Set C:
+99 val s3-s5 problems where the best planner is not within 2% of the bound (C3 30, C4 32, C5 37).
+"Below" = cheaper than the best planner; ratio = mean cost / best planner over finished plans;
+cap 900 s. "zero 1" = the network alone (top move each step).
+
+| | C3 below, ratio | C4 | C5 | **all C** | no plan | capped | median s (C3/C4/C5) |
+|---|---|---|---|---|---|---|---|
+| net 256 (prior + planner finish) | 25/30, 0.810 | 28/32, 0.867 | 32/37, 0.847 | **85/99, 0.842** | 0 | 51 | 162 / 901 / 900 |
+| uniform 256 (flat prior + planner finish) | 23, 0.776 | 30, 0.868 | 30, 0.846 | **83/99, 0.832** | 0 | 70 | 900 / 901 / 900 |
+| zero 256 (no planner) | 13, 0.865 | 5, 1.005 | 11, 0.839 | **29/99, 0.891** | **47** | 3 | 10 / 243 / 14 |
+| zero 1 (network alone) | 6, 1.120 | 1, 1.327 | 2, 1.223 | 9/99 | 48 | 0 | 0 / 1 / 0 |
+| net 1 | 12, 0.920 | 11, 0.991 | 9, 0.986 | 32/99 | 0 | 13 | 2 / 168 / 14 |
+
+(E-22's stored greedy agent: below on 3 / 1 / 0, solved 22 / 7 / 11.)
+- **Reading (D-41, fixed in advance): (1) yes, (2) yes, (3) no.** By the rule: the value head
+  does not carry over to full-size stages 3-5, so round 3 must train on them before it can judge
+  there.
+- **(1) Lookahead with planner finishes beats the best planner on full-size stages 3-5: 85 of
+  99, 16% cheaper on average** (C3 19%, C4 13%, C5 15%). This is the first result on the
+  paper's claim (D-35) at full size. Caveat: no optimum or tight bound here, so "cheaper than
+  our best planner" is the only reference; 51 of 99 hit the 900 s cap, so these costs are
+  upper estimates of what this search finds.
+- **(2) is a tie in substance.** The network's search is below on 85 against 83 for the flat
+  prior, but at a slightly higher mean ratio (0.842 vs 0.832). It is ~5× faster on C3 (162 s vs
+  900 s); on C4 and C5 both hit the cap (median 900 s). At full size the gains come from
+  lookahead plus planner finishes; the network adds speed on the smaller problems only.
+- **(3) The value head does not carry over.** Without the planner the search is below on 29 of
+  99 (bar 33) and fails to finish 47 (C4 19 of 32, C5 20 of 37), mostly not from time (3
+  capped): it walks into states it cannot complete. Where it finishes it is good (0.891 of the
+  planner; C5 0.839). The network alone fails to finish 48 of 99. Likely cause, unchecked:
+  round 2's practice problems had ~100 full-size draws per stage, 218 of 1100 capped.
 
 ### E-35 (2026-10-30) Expert iteration round 2 (D-40): the value head judges, and the loop climbs
 Code at `0f3d808` (notes `70d4694`), workstation, `outputs/expert/round2/` there. **Search**
