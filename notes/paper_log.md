@@ -508,6 +508,12 @@ Format: date · decision · alternatives considered · why · evidence.
   round 3 trains for it; not faster → the network adds nothing as a guide on full-size problems
   and its only remaining role is the judge (round 3) or none.
 
+- **D-44 (2026-10-30) No weaker-planner finish in the search** (user, after E-38). A depth-2
+  finish inside the search (10-18× faster, 7-10% dearer, E-38) would be one more open line to
+  manage. Parked: it can return as a no-learning baseline for round 3's value head if needed.
+  Planner speed work stops at E-38's safe changes (identical plans). Order: D-43's race, then
+  round 3.
+
 ---
 
 ## 4. Experiments and results
@@ -1288,6 +1294,30 @@ MRCM's intermediates on val_s2: 4 of 28 covered (chain D4), 5 of 28 (premix D3).
   (an exact lower bound on mixes left, or a constructive method's recipes, which is a planner
   again). (3) Built as SPEC 0.28 `hint_source: problem` (depth-4 chain in the recipe columns)
   for a copy-test comparison on stages 1–2 against the planner's hints.
+
+### E-38 (2026-10-30) Planner speed: where the time goes, and what depth costs
+On the Mac (background priority), `share_plan` on all 202 val s1-s5 problems. **Profile:** ~99%
+of the pass's time on large problems is the chain search (`_chain`, up to `CHAIN_DEPTH` = 3
+mixes worked back from the target): ~180,000 search positions on val_s5-041, most of the
+time spent building exact compositions. **Safe changes** (uncommitted at the time of writing):
+the dilute-up steps back from a composition and `_unmix` are pure, so cached; last-level calls
+that can only return nothing are skipped. **Plans identical on all 202.** Time: s1 3.3 → 1.5 s,
+s2 2.4 → 2.0, s3 10.9 → 6.0, s4 298 → 272, s5 230 → 241 (noise): ~2× on s1-s3, nothing on s4-s5,
+where compositions rarely repeat (cache misses). **Chain depth 2 instead of 3** (a design
+change, not adopted):
+
+| | time d3 → d2 | speed-up | mean cost d2 / d3 | dearer / cheaper with d2 |
+|---|---|---|---|---|
+| s1 | 1.7 → 0.3 s | 5.3× | 1.179 | 15 / 0 of 40 |
+| s2 | 2.3 → 0.5 s | 5.0× | 1.043 | 5 / 0 |
+| s3 | 6.5 → 0.9 s | 7.2× | 1.063 | 13 / 4 |
+| s4 | 291 → 28 s | 10.3× | 1.101 | 20 / 9 |
+| s5 | 253 → 14 s | 18.4× | 1.075 | 20 / 3 of 42 |
+
+- **Reading.** Engineering without changing plans gives ~2× on small problems only. Depth is
+  the lever: depth 2 is 10-18× faster on s4-s5 but 7-10% dearer (the code's note "3 adds
+  little", measured on E2's small problems, does not hold at full size). The trade-off is
+  AlphaGo's: a fast, weaker play-out against a slow, strong one.
 
 ### E-37 (2026-10-30) Fair-time test (D-42): the search's gain is lookahead, not time
 `scripts/fair_time.py seconds=900 workers=28`, code `f43cdb0`, workstation,
