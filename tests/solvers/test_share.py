@@ -173,3 +173,31 @@ def test_penalty_at_the_start_is_never_dearer_than_the_construction() -> None:
     penalty = SharingCostToFinish(GEOMETRIC)
     for inst in BenchmarkSet.read("val_s1_v2").instances[:10]:
         assert penalty(PrepState.initial(inst), inst) <= construction_cost(inst)
+
+
+def test_cached_dilute_steps_are_every_step_back_from_the_composition() -> None:
+    from meda.core.composition import Composition, mix
+    from meda.solvers.baselines.share import _dilute_steps
+
+    x = Composition.from_ints((3, 2, 7), 12)
+    for size in range(2, 9):
+        steps = _dilute_steps(x, size, 1024)
+        for f, l, xp in steps:
+            assert mix(xp, size - l, Composition.pure(f, 3), l) == x
+        expect = {
+            (f, l)
+            for f in range(3)
+            for l in range(1, size)
+            if all(size * n - (l * x.den if g == f else 0) >= 0 for g, n in enumerate(x.num))
+        }
+        assert {(f, l) for f, l, _ in steps} == expect
+
+
+def test_plans_do_not_depend_on_what_the_caches_hold() -> None:
+    from meda.solvers.baselines.share import _dilute_steps, _unmix
+
+    insts = _stage_draws("s5_storage", 3, seed=7)
+    warm = [share_plan(i, GEOMETRIC) for i in insts]
+    _dilute_steps.cache_clear()
+    _unmix.cache_clear()
+    assert [share_plan(i, GEOMETRIC) for i in reversed(insts)] == warm[::-1]

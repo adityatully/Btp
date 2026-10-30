@@ -35,6 +35,7 @@ from __future__ import annotations
 import time
 from collections.abc import Callable, Iterator
 from dataclasses import dataclass, field, replace
+from functools import lru_cache
 
 from meda.core.actions import Action, Discard, Mix, Output, Source
 from meda.core.composition import ZERO, Composition, Rational, linf_distance, mix
@@ -210,7 +211,8 @@ _Chain = tuple[Rational, _Base, tuple[tuple[int, int, int], ...]]
 
 CHAIN_DEPTH = 3
 """Most mixes in one chain. Measured on the E2 problems: 2 finds the tight-storage optima the
-constructions miss (3/4 at volume 2 via 1/2); 3 adds little and costs 10-50x the time."""
+constructions miss (3/4 at volume 2 via 1/2); 3 adds little there and costs 10-50x the time.
+On the full-size val sets 2 is 5-18x faster but 4-18% dearer per stage (paper log E-38)."""
 
 
 BLEND_PARTNERS = 4
@@ -245,17 +247,16 @@ def _chain(b: _Builder, aimed: Composition, need: int, depth: int) -> _Chain | N
         if key in memo:
             return memo[key]
         best: _Chain | None = None
+        last = left == 1  # an input at the last level ends the chain only as a fluid or in the pool
         for size in range(max(take, chip.min_mix_volume), chip.max_mix_volume + 1):
-            for f, units in enumerate(x.num):
-                for l in range(1, min(size - 1, size * units // x.den) + 1):
-                    xp = dilute_up_input(x, size, f, l)
-                    if xp is None or xp.den > chip.max_denominator:
-                        continue
-                    sub = search(xp, size - l, left - 1)
-                    if sub is not None:
-                        cost = sub[0] + fluid_w[f] * l + w.w_mix
-                        if best is None or cost < best[0]:
-                            best = (cost, sub[1], (*sub[2], (f, size - l, l)))
+            for f, l, xp in _dilute_steps(x, size, chip.max_denominator):
+                if last and xp.den != 1 and xp not in idle:
+                    continue
+                sub = search(xp, size - l, left - 1)
+                if sub is not None:
+                    cost = sub[0] + fluid_w[f] * l + w.w_mix
+                    if best is None or cost < best[0]:
+                        best = (cost, sub[1], (*sub[2], (f, size - l, l)))
             # the same step with an idle droplet in place of the fluid (a blend)
             for pc, (uid, pv) in partners:
                 for l in range(1, min(size - 1, pv) + 1):
@@ -263,6 +264,8 @@ def _chain(b: _Builder, aimed: Composition, need: int, depth: int) -> _Chain | N
                         continue
                     xp = _unmix(x, size, pc, l)
                     if xp is None or xp == pc or xp.den > chip.max_denominator:
+                        continue
+                    if last and xp.den != 1 and xp not in idle:
                         continue
                     sub = search(xp, size - l, left - 1)
                     if sub is None or sub[1] == ("pool", uid):
@@ -276,6 +279,23 @@ def _chain(b: _Builder, aimed: Composition, need: int, depth: int) -> _Chain | N
     return search(aimed, need, depth)
 
 
+@lru_cache(maxsize=1 << 14)
+def _dilute_steps(
+    x: Composition, size: int, max_den: int
+) -> tuple[tuple[int, int, Composition], ...]:
+    """(fluid, l, input) for every dilute-up step that ends at `x` in a `size`-unit mix, in the
+    order the chain search tries them. Pure, so cached: every delivery group of a target works
+    back from the same compositions, and rebuilding them was most of the pass's time."""
+    out = []
+    for f, units in enumerate(x.num):
+        for l in range(1, min(size - 1, size * units // x.den) + 1):
+            xp = dilute_up_input(x, size, f, l)
+            if xp is not None and xp.den <= max_den:
+                out.append((f, l, xp))
+    return tuple(out)
+
+
+@lru_cache(maxsize=1 << 16)
 def _unmix(x: Composition, size: int, partner: Composition, l: int) -> Composition | None:
     """The droplet y with `Mix(y size - l, partner l) = x`, or None if it would need a
     negative amount of some fluid: y = (size * x - l * partner) / (size - l)."""
