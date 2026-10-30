@@ -21,7 +21,7 @@ E-22 point there). This file says **what we are doing and why, in order**.
   -b nice -n 19`). Anything longer than ~10 minutes goes to the workstation (`~/code/Btp`,
   tmux; never reboot it during runs).
 
-*Last updated 2026-10-30 (E-36; D-42: fair-time test next).*
+*Last updated 2026-10-30 (E-37; D-43: cost-vs-time race next).*
 
 ---
 
@@ -205,8 +205,10 @@ D-41. Then round 3 (value head as judge, the planner finishes only problems the 
 finish, gating on round 2), if D-41 says so. *Done 2026-10-30 (E-36): (1) yes, (3) no.* Search
 with planner finishes beats the best planner on 85 of 99 full-size s3-s5 problems (16% cheaper
 on average), with or without the network's prior; without the planner it fails to finish 47.
-*Now (D-42, 2026-10-30): fair-time test* — the planner restarted with random choices for the
-same 900 s; does the search still win? Bar in D-42. *Then:* a faster planner (engineering), and
+*Fair-time test (D-42) done 2026-10-30 (E-37): lookahead is real.* The planner given 900 s of
+random restarts gains 1-2%; the search stays ~14% cheaper (79 of 99). *Now (D-43):* a
+cost-vs-time race, search with and without the network stopped at 10 s, 60 s and 900 s on set C
+and the mixtures (tests the network as a guide); bar in D-43. *Then:* a faster planner (engineering), and
 round 3 (train on full-size s3-s5, D-41's reading). Everything below 4.2 waits.
 **4.3 Self-imitation** if cost stalls near the teacher.
 

@@ -47,7 +47,7 @@ chats. Last updated 2026-10-30.*
 | Q-107 | Can the network learn the plans search finds (search as teacher), and beat the planner without it? | Round 1 partly (E-34); 4.2, round 2 (D-40) |
 | Q-108 | Can the value head learn to judge positions, so the planner leaves the search? | Small problems yes (E-35: 17/23); mixtures no (9/13 unfinished); 4.2, round 3 |
 | Q-109 | Does the AlphaZero loop climb (each round's network better than the last)? | One turn, slightly (E-35); 4.2, round 3 |
-| Q-113 | Is search's gain on full-size s3-s5 lookahead, or only more time than the planner? | 4.2, D-42 |
+| Q-114 | Does the network make search faster (a good plan sooner) on full-size s3-s5? | 4.2, D-43 |
 | Q-110 | Why did s2 drop to 47.5% when copying the search's plans? | Persists in round 2 (E-35: 45%); open, no step |
 | Q-72 | Self-imitation if cost stalls near the teacher? | 4.3 |
 | Q-73 | Are the results stable across seeds? | 5.1 |
@@ -525,10 +525,17 @@ network before round 3 is built.
 the best planner on 85 of 99 (16% cheaper on average), about the same with a flat prior (83);
 with the value head alone 29 of 99, and 47 not finished.
 
-**Q-113 Is search's gain on full-size s3-s5 lookahead, or only more time?** · **Open → plan
-4.2, D-42** (user, 2026-10-30)
+**Q-113 Is search's gain on full-size s3-s5 lookahead, or only more time?** · **Closed** (E-37;
+user, 2026-10-30)
 E-36's search ran up to 900 s against the planner's ~1 s. D-42 gives the planner the same time
 (random restarts) and checks whether the search still wins.
+**Closed (E-37): lookahead.** With 900 s of random restarts the planner gains 1-2%; the search
+stays ~14% cheaper, on 79 of 99.
+
+**Q-114 Does the network make search faster on full-size s3-s5?** · **Open → plan 4.2, D-43**
+(user, 2026-10-30)
+At 900 s the network adds no quality (E-36: 85 vs 83 of 99); the gain is lookahead (E-37). Its
+remaining role as a guide is speed. D-43 races search with and without it at 10 s, 60 s, 900 s.
 
 **Q-111 Is the network itself what limits stages 4-5?** · **Parked** (user, 2026-10-29: for the proof of concept the network is unlikely to be the bottleneck; architecture and hyperparameters are tuning, after the training and search method is settled. Exception: if D-40's bar (a) fails, look at the value error on the training problems first)
 Never questioned since E-16 (fixed by input features, not architecture). E-34: copy agreement on

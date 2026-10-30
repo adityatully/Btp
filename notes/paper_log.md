@@ -494,6 +494,20 @@ Format: date · decision · alternatives considered · why · evidence.
   reporting how much of the 16% survives. Smoke run (3 problems, 30 s): the restarts found
   nothing below the planner (28 to 859 tries).
 
+- **D-43 (2026-10-30) Cost-vs-time race: does the network make search faster?** (user, after
+  E-37). Why: E-36/E-37 show the gain is lookahead, and the network adds no quality at 900 s
+  (85 vs 83 of 99). If it has a role as a guide, it is speed: a good plan sooner. This is the
+  amortisation claim's first test, with no training. **Design.** `search_check.py` now records
+  each search's cheapest whole plan over time (`trace`), so one run at the 900 s cap gives every
+  shorter budget. Cost at t = the cheaper of the best planner and the search's plan by t. Round
+  2's V network, sets C (99) and B (13), `net`, `zero` and `uniform` at 256 simulations.
+  **Reading, fixed in advance**, on all of C: **the network makes search faster** if at 10 s
+  or at 60 s `net`'s mean cost / planner is at least 0.02 below `uniform`'s and `net` is
+  cheaper than `uniform` on more problems than the reverse; otherwise no speed gain at these
+  budgets. B (mixtures) reported the same way, no bar. Faster → the guide's role is speed, and
+  round 3 trains for it; not faster → the network adds nothing as a guide on full-size problems
+  and its only remaining role is the judge (round 3) or none.
+
 ---
 
 ## 4. Experiments and results
@@ -1274,6 +1288,26 @@ MRCM's intermediates on val_s2: 4 of 28 covered (chain D4), 5 of 28 (premix D3).
   (an exact lower bound on mixes left, or a constructive method's recipes, which is a planner
   again). (3) Built as SPEC 0.28 `hint_source: problem` (depth-4 chain in the recipe columns)
   for a copy-test comparison on stages 1–2 against the planner's hints.
+
+### E-37 (2026-10-30) Fair-time test (D-42): the search's gain is lookahead, not time
+`scripts/fair_time.py seconds=900 workers=28`, code `f43cdb0`, workstation,
+`outputs/expert/round2/fair_time.{jsonl,log}` there. Set C (99), the best planner restarted with
+random choices for 900 s per problem (never dearer than the planner).
+
+| | random restarts below the planner at 1 / 10 / 60 / 300 / 900 s | mean cost / planner at 900 s | tries (median) |
+|---|---|---|---|
+| C3 (30) | 1 / 1 / 1 / 1 / 1 | 0.993 | 20,192 |
+| C4 (32) | 2 / 2 / 5 / 12 / 14 | 0.979 | 2,164 |
+| C5 (37) | 0 / 1 / 3 / 7 / 8 | 0.987 | 14,310 |
+
+E-36's searches against the planner at 900 s (all of C): `net` 256 cheaper on **79**, equal 10,
+dearer 10, mean **0.856**; `uniform` 256: 75 / 13 / 11, 0.845; `net` 1: 31 / 42 / 26, 0.982;
+`zero` 256 (52 finished): 29 / 10 / 13, 0.902; `zero` 1 (51 finished): 9 / 8 / 34, 1.211.
+- **Reading (D-42, fixed in advance): lookahead is real, not time** (0.856 ≤ 0.95, 79 ≥ 50).
+  Given the same 900 s, the planner gains only 1-2% by random restarts (most on C4); the search
+  stays ~14% cheaper. Of E-36's 16%, about 14 points survive equal time.
+- One walk per move with planner finishes (`net` 1) is already as good as 900 s of restarts
+  (0.982), in a median of 2-168 s.
 
 ### E-36 (2026-10-30) Search test on full-size stages 3-5 (D-41)
 `search_check.py sets=C sims=1,256 uniform=256 workers=28`, code `19d57b5`, workstation, round 2's
