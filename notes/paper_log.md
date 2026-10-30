@@ -514,6 +514,29 @@ Format: date · decision · alternatives considered · why · evidence.
   Planner speed work stops at E-38's safe changes (identical plans). Order: D-43's race, then
   round 3.
 
+- **D-45 (2026-10-31) Expert iteration round 3: teach the value head full-size stages 3-5**
+  (user, after E-39). Why: the network adds nothing as a guide on full-size s3-s5 (E-39); its
+  remaining role there is the judge, which works on small problems (E-35: 17 of 23) but gets
+  stuck on 48 of 99 full-size ones (E-36, E-39), likely because round 2 practised on ~100
+  full-size problems per stage. One change from round 2, the practice mix, plus the value data
+  it needs. **Design.** (1) *Search:* round 2's V network as the prior, planner finishes, 256
+  simulations, 600 s cap. Practice problems all new: 1000 stage draws with the design's final
+  weights (`weights=final`: s3 0.2, s4 0.35, s5 0.35, s1 and s2 0.05; seed 2) and 10 per E2
+  cell (`first=3000`). Up to 64 value positions per problem (`value_cap=64`; round 2: 16). (2)
+  *One copy arm* from V: policy toward visit counts, value toward the remaining cost
+  (`value_coef=0.5`), on round 2's data and round 3's together (a replay, as AlphaZero keeps
+  recent games), 10 epochs. (3) *Re-test:* `search_check.py sets=A,B,C sims=1,256 uniform=0`.
+  **Pass bar, fixed in advance** (R2 = round 2's V, E-35/E-36/E-39), at 256: **(a) the judge
+  works at full size:** `zero` on C below the best planner on ≥ 33 of 99 (R2 29) and
+  unfinished on ≤ 24 (R2 48); **(b) kept on small problems:** `zero` on A below on ≥ 14 of 23
+  (R2 17). Gate: R3 replaces R2 only if (a) and (b) hold. **Readings:** (a) and (b) → the value
+  head can judge full-size problems; next, race `zero` against `net` at equal time on C (is
+  the judge faster than the planner's finish?). Not (a), but unfinished on C ≤ 36 → more
+  full-size data helps; one more round of the same. Otherwise → judging full-size problems
+  does not come from this kind of data; stop the loop on s3-s5: the method is search with
+  planner finishes, learning where the planner is weak (mixtures, E-39). Reported, no bar:
+  val greedy success s1-s5 (watch s2), set B.
+
 ---
 
 ## 4. Experiments and results
@@ -1294,6 +1317,34 @@ MRCM's intermediates on val_s2: 4 of 28 covered (chain D4), 5 of 28 (premix D3).
   (an exact lower bound on mixes left, or a constructive method's recipes, which is a planner
   again). (3) Built as SPEC 0.28 `hint_source: problem` (depth-4 chain in the recipe columns)
   for a copy-test comparison on stages 1–2 against the planner's hints.
+
+### E-39 (2026-10-30) Cost-vs-time race (D-43): no speed gain on stages 3-5; a clear gain on mixtures
+`search_check.py sets=C,B sims=256 uniform=256 workers=28`, code `0a4b15d`, workstation, round
+2's V network, `outputs/expert/round2/race.{jsonl,log}` there. Cost at t = the cheaper of the
+best planner and the search's plan by t, mean over problems, / best planner (problems with a
+search plan by t in brackets).
+
+| set | search | 1 s | 10 s | 60 s | 300 s | 900 s |
+|---|---|---|---|---|---|---|
+| C (99) | net | 0.940 (72) | **0.893** (94) | **0.863** (98) | 0.848 | 0.840 |
+| C | uniform | 0.953 (73) | **0.893** (95) | **0.862** (99) | 0.844 | 0.828 |
+| C | zero | 0.985 (19) | 0.952 (36) | 0.934 (43) | 0.931 (50) | 0.931 (51) |
+| B (13) | net | 0.886 | **0.713** | **0.591** | 0.583 | 0.583 |
+| B | uniform | 0.836 | 0.761 | 0.675 | 0.674 | 0.674 |
+| B | zero | 0.998 (2) | 0.952 (4) | 0.952 (4) | 0.952 (4) | 0.952 (4) |
+
+- **Reading on C (D-43, fixed in advance): no speed gain at these budgets.** At 10 s both 0.893
+  (net cheaper on 24, dearer on 10, by small margins); at 60 s 0.863 vs 0.862 (33 / 22). At 900 s
+  the flat prior is slightly ahead (0.828 vs 0.840). The 900 s rows repeat E-36 (net below on 84
+  of 99, uniform 83; zero 29, 48 unfinished).
+- **On the mixtures (B, reported, no bar) the network helps, in speed and in quality:** 0.713 vs
+  0.761 at 10 s, 0.591 vs 0.675 at 60 s, and still 0.583 vs 0.674 at 900 s (net cheaper on 7,
+  dearer on 2 at 60 s). n = 13.
+- **Reading.** As a guide, the network adds nothing on full-size stages 3-5 overall, where the
+  planner's finish is a good judge; it helps where the planner's finish is weak (B is by
+  construction the problems where MRCM beats our planner). A hypothesis, not tested: the
+  network's guidance matters where the hand-made judge is poor, as in Go. By D-43's rule its
+  remaining role on stages 3-5 is the judge (round 3).
 
 ### E-38 (2026-10-30) Planner speed: where the time goes, and what depth costs
 On the Mac (background priority), `share_plan` on all 202 val s1-s5 problems. **Profile:** ~99%
