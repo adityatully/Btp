@@ -44,6 +44,13 @@ questions, (2)'s tie broken by the mean ratio to the planner. (1) and (3) → ro
 running where the paper's claim is; (1) without (3) → the value head does not carry over to
 full-size stages 3-5; neither → search does not beat the planner there, rethink before round 3.
 
+Race, fixed in advance (D-43): each record keeps the cost of the cheapest whole plan over time
+(`trace`), so one run gives every time budget up to its cap. Cost at t = the cheaper of the best
+planner and the search's best plan by t (what one would use if stopped at t). On all of C at
+the largest budget: **the network makes search faster** if at 10 s or at 60 s `net`'s mean cost
+/ planner is at least 0.02 below `uniform`'s and `net` is cheaper than `uniform` on more
+problems than the reverse; otherwise no speed gain at these budgets. B is reported the same way.
+
 Arguments are key=value: `sets` (A,B; C on request), `limit=N` problems per set, `sims`
 (budgets, default 64,256), `uniform` (budget for the flat prior, default the largest of `sims`;
 0 = off), `seconds` (cap per problem and search, default 900), `hints` (the env's
@@ -83,6 +90,7 @@ PLANNERS = ("share", "share_look3", "share_orders")
 C_PUCT = 1.5
 # Fixed in advance (module docstring).
 FOUND_SHARE, MISS = 1 / 3, 0.02
+RACE_AT, RACE_GAP = (1, 10, 60, 300, 900), 0.02
 
 
 def best_planner(rec: dict[str, Any]) -> float:
@@ -201,6 +209,9 @@ class Search:
         self.planner_leaf, self.reward_scale = planner_leaf, reward_scale
         self.rng = rng  # breaks ties at random; without it ties go in candidate order (E-33)
         self.best: tuple[float, tuple[Action, ...], int] | None = None  # cost, plan, tail
+        # (seconds, cost) each time the cheapest whole plan improves: the race of D-43
+        self.t0 = time.perf_counter()
+        self.trace: list[tuple[float, float]] = []
         self.c0 = 1.0
         self.leaves = 0
         # Expert iteration round 2 (D-40): with `collect` (the fewest visits for a position's
@@ -227,6 +238,7 @@ class Search:
     def _offer(self, cost: float, actions: tuple[Action, ...], tail: int = 0) -> None:
         if self.best is None or cost < self.best[0]:
             self.best = (cost, actions, tail)
+            self.trace.append((round(time.perf_counter() - self.t0, 3), cost))
 
     def leaf(self, obs: dict[str, Any], actions: tuple[Action, ...], info: dict | None) -> Node:
         """A node for the env's current state: its prior and its value."""
@@ -395,6 +407,7 @@ def run_task(task: dict[str, Any], kind: str, sims: int, opts: dict[str, Any]) -
         capped=out["capped"],
         played_to_end=out["played_to_end"],
         planner_tail=out["tail"],
+        trace=search.trace,
         **{f"search_{k}": v for k, v in stats.items()},
     )
     return rec
@@ -476,6 +489,64 @@ def verdict(
     return ", ".join(out) + ": search does not find them at this budget"
 
 
+def cost_at(rec: dict[str, Any], t: float) -> float:
+    """The cheaper of the best planner and the search's best plan found by `t` seconds."""
+    return min([rec["planner"], *(c for s, c in rec.get("trace", []) if s <= t)])
+
+
+def race(groups: dict[tuple[str, str, int], list[dict[str, Any]]]) -> list[str]:
+    """Cost over time per set (C pooled), and the reading of D-43."""
+    pools: dict[tuple[str, str, int], list[dict[str, Any]]] = defaultdict(list)
+    for (s, kind, sims), rs in groups.items():
+        if rs and "trace" in rs[0]:
+            pools[("C" if s.startswith("C") else s, kind, sims)] += rs
+    if not pools:
+        return []
+    head = " | ".join(f"{t} s" for t in RACE_AT)
+    lines = [
+        "",
+        "Race (D-43): mean cost / best planner if stopped at t (planner when no plan yet); "
+        "with a plan by t in brackets",
+        "",
+        f"| set | search | sims | n | {head} |",
+        "|---" * (4 + len(RACE_AT)) + "|",
+    ]
+    for key in sorted(pools):
+        rs = pools[key]
+        cells = []
+        for t in RACE_AT:
+            ratio = float(np.mean([cost_at(r, t) / r["planner"] for r in rs]))
+            have = sum(1 for r in rs if any(s <= t for s, _ in r["trace"]))
+            cells.append(f"{ratio:.3f} ({have})")
+        lines.append(f"| {key[0]} | {key[1]} | {key[2]} | {len(rs)} | {' | '.join(cells)} |")
+    for s in sorted({k[0] for k in pools}):
+        top = max(k[2] for k in pools if k[0] == s)
+        net, uni = pools.get((s, "net", top)), pools.get((s, "uniform", top))
+        if net and uni:
+            lines.append(
+                f"Race reading on {s} at {top} sims (fixed in advance, D-43): "
+                + race_verdict(net, uni)
+            )
+    return lines
+
+
+def race_verdict(net: list[dict[str, Any]], uni: list[dict[str, Any]]) -> str:
+    by_id = {r["id"]: r for r in uni}
+    pairs = [(r, by_id[r["id"]]) for r in net if r["id"] in by_id]
+    out, faster = [], False
+    for t in (10, 60):
+        a = float(np.mean([cost_at(n, t) / n["planner"] for n, _ in pairs]))
+        b = float(np.mean([cost_at(u, t) / u["planner"] for _, u in pairs]))
+        wins = sum(cost_at(n, t) < cost_at(u, t) - 1e-9 for n, u in pairs)
+        losses = sum(cost_at(n, t) > cost_at(u, t) + 1e-9 for n, u in pairs)
+        faster |= a <= b - RACE_GAP and wins > losses
+        out.append(
+            f"at {t} s net {a:.3f} vs uniform {b:.3f}, net cheaper on {wins}, dearer {losses}"
+        )
+    verdict = "the network makes search faster" if faster else "no speed gain at these budgets"
+    return "; ".join(out) + f": {verdict}"
+
+
 def _r(x: float | None) -> str:
     return "-" if x is None else f"{x:.3f}"
 
@@ -527,6 +598,7 @@ def summarise(path: Path) -> str:
             )
         net, uni, zero = (pooled.get(kind) for kind in ("net", "uniform", "zero"))
         lines += [f"Reading on C at {top} sims (fixed in advance, D-41): {verdict(net, uni, zero)}"]
+    lines += race(groups)
     return "\n".join(lines)
 
 

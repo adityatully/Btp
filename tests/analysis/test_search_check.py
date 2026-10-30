@@ -100,3 +100,38 @@ def test_recording_samples_does_not_change_the_search(instance: Any) -> None:
     assert found[0] == found[1]
     root = [s for s in search.samples(4, np.random.default_rng(0)) if s[0] == ()]
     assert len(root) == 1 and root[0][1] is not None
+
+
+@pytest.mark.parametrize("instance", TINY.instances[:3], ids=lambda i: i.instance_id)
+def test_trace_ends_at_the_answer_and_only_improves(instance: Any) -> None:
+    start = finish_from(PrepState.initial(instance), instance, SC.WEIGHTS)
+    assert start is not None
+    task = {
+        "set": "C3",
+        "id": instance.instance_id,
+        "cell": "",
+        "instance": instance.to_json(),
+        "optimum": None,
+        "planner": float(start[1]),
+        "mrcm": None,
+        "greedy": None,
+    }
+    rec = SC.run_task(task, "uniform", 8, OPTS)
+    costs = [c for _, c in rec["trace"]]
+    times = [s for s, _ in rec["trace"]]
+    assert costs and costs[-1] == pytest.approx(rec["search_cost"])
+    assert costs == sorted(costs, reverse=True) and times == sorted(times)
+    assert SC.cost_at(rec, 1e9) == pytest.approx(min(rec["search_cost"], task["planner"]))
+    assert SC.cost_at(rec, -1) == task["planner"]
+
+
+def test_race_reading_follows_the_rule_fixed_in_advance() -> None:
+    def rec(i: int, trace: list[tuple[float, float]]) -> dict[str, Any]:
+        return {"id": str(i), "planner": 100.0, "trace": trace}
+
+    fast = [rec(i, [(5.0, 90.0)]) for i in range(10)]
+    slow = [rec(i, [(100.0, 90.0)]) for i in range(10)]
+    assert SC.race_verdict(fast, slow).endswith("the network makes search faster")
+    assert SC.race_verdict(slow, fast).endswith("no speed gain at these budgets")
+    near = [rec(i, [(5.0, 99.0)]) for i in range(10)]  # cheaper, but by less than 0.02
+    assert SC.race_verdict(near, slow).endswith("no speed gain at these budgets")
