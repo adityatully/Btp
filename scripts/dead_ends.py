@@ -22,6 +22,14 @@ practice search drops at least 1% of its positions. (2) and (1) → keep the dro
 the value data, labelled with the worst value. (2) without (1) → too few to keep; take dead ends
 from the no-planner search's own failed games instead. Not (2) → the head sees the cliff; the
 failures come from somewhere else (step limit, search depth), and Q-115 is not the cause.
+E-42: (2) without (1).
+
+Round 4 (D-47), `part=label`: the no-planner search plays fresh stage draws (final weights,
+`seed` default 4, `count` default 400; never a test problem) and every position of its game
+becomes a value target: the planner's remaining cost where it can still finish, the env's
+failure penalty (`failure_penalty_factor` times the planner's remaining cost at the last finishable
+position) where it cannot. The records are in `expert_iteration.py`'s demos format (value only,
+no visit counts), so `imitation_check.py demos=...` trains on them with rounds 2 and 3.
 
     uv run python scripts/dead_ends.py part=practice count=56 seconds=600 workers=28 \
         agent=outputs/expert/round2/copy_v/imitation.pt \
@@ -29,9 +37,11 @@ failures come from somewhere else (step limit, search depth), and Q-115 is not t
     uv run python scripts/dead_ends.py part=zero workers=28 \
         agent=outputs/expert/round3/copy/imitation.pt out=outputs/expert/round3/dead_zero.jsonl
     uv run python scripts/dead_ends.py summary=outputs/expert/round3/dead_zero.jsonl
+    uv run python scripts/dead_ends.py part=label count=400 workers=28 \
+        agent=outputs/expert/round3/copy/imitation.pt out=outputs/expert/round4/dead.jsonl
 
-Arguments are key=value: `part`, `agent` (practice: the prior, default flat; zero: required),
-`count`, `seed`, `seconds` (cap per problem, default 600 practice / 900 zero), `sims` (256),
+Arguments are key=value: `part`, `agent` (practice: the prior, default flat; zero and label:
+required), `count`, `seed`, `seconds` (cap per problem, default 600; zero 900), `sims` (256),
 `limit` (zero: problems per stage), `workers`, `out`, `summary`.
 """
 
@@ -50,6 +60,7 @@ import numpy as np
 
 from meda.analysis.evaluate import build_env
 from meda.core.problem import Instance
+from meda.generators.benchmark_io import instance_hash
 from meda.solvers.baselines.share import finish_from
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -131,18 +142,57 @@ def replay(inst: Instance, path: tuple[Any, ...], agent: Any) -> dict[str, Any]:
     return {"positions": rows, "end": end, "steps": len(path)}
 
 
-def run_zero(task: tuple[dict[str, Any], dict[str, Any]]) -> dict[str, Any]:
-    t, opts = task
-    inst = Instance.from_json(t["instance"])
+def zero_game(inst: Instance, opts: dict[str, Any]) -> tuple[bool, tuple[Any, ...], dict]:
+    """The no-planner search on `inst`: whether it finished, the moves it played, their replay."""
     agent = ei._agent(opts["agent"])
     env = build_env(_cfg(), [inst])
     search = sc.Search(
         env, inst, agent, time.perf_counter() + opts["seconds"], False, opts["reward_scale"]
     )
     found = search.run(opts["sims"])
-    rec = {"set": t["set"], "id": t["id"], "finished": found["plan"] is not None}
-    rec.update(replay(inst, search.path, agent))
-    return rec
+    return found["plan"] is not None, search.path, replay(inst, search.path, agent)
+
+
+def run_zero(task: tuple[dict[str, Any], dict[str, Any]]) -> dict[str, Any]:
+    t, opts = task
+    finished, _, played = zero_game(Instance.from_json(t["instance"]), opts)
+    return {"set": t["set"], "id": t["id"], "finished": finished, **played}
+
+
+def label(
+    path: tuple[Any, ...], positions: list[tuple[float, float | None]], factor: float
+) -> list[sc.Sample]:
+    """Round 4 (D-47): value targets for every position of a no-planner game. A finishable
+    position gets the planner's remaining cost; one the planner can no longer finish gets the
+    env's failure penalty, `factor` times the planner's remaining cost at the last finishable
+    position before it (SPEC 5.8). No visit counts: these train the value head only."""
+    out: list[sc.Sample] = []
+    last: float | None = None
+    for k, (_, planner) in enumerate(positions):
+        if planner is not None:
+            last = planner
+            out.append((tuple(path[:k]), None, planner))
+        elif last is not None:
+            out.append((tuple(path[:k]), None, factor * last))
+    return out
+
+
+def run_label(task: tuple[str, dict[str, Any]]) -> dict[str, Any]:
+    inst_json, opts = task
+    inst = Instance.from_json(inst_json)
+    finished, path, played = zero_game(inst, opts)
+    samples = label(path, played["positions"], opts["factor"])
+    return {
+        "id": inst.instance_id,
+        "cell": inst.metadata.get("cell", ""),
+        "instance": inst_json,
+        "finished": finished,
+        "end": played["end"],
+        "samples": ei._pack(tuple(samples)),
+        "n_value": len(samples),
+        "n_policy": 0,
+        "n_dead": sum(p is None for _, p in played["positions"]),
+    }
 
 
 def cliff(positions: list[list[Any]]) -> float | None:
@@ -156,6 +206,13 @@ def cliff(positions: list[list[Any]]) -> float | None:
 
 def summarise(path: Path) -> str:
     recs = [json.loads(x) for x in path.read_text().splitlines()]
+    if recs and "samples" in recs[0]:
+        n = sum(r["n_value"] for r in recs)
+        return (
+            f"dead-end labels, {len(recs)} problems (failed {sum(not r['finished'] for r in recs)}"
+            f"; endings {dict(Counter(r['end'] for r in recs))}): {n} value samples, "
+            f"{sum(r['n_dead'] for r in recs)} of them unfinishable"
+        )
     if recs and "positions" not in recs[0]:
         kept = sum(r.get("kept", 0) for r in recs)
         dropped = sum(r.get("dropped", 0) for r in recs)
@@ -230,8 +287,22 @@ def main(argv: list[str]) -> None:
         limit = int(args["limit"]) if "limit" in args else None
         todo = [(t, opts) for t in sc.tasks({"C"}, limit)]
         fn = run_zero
+    elif part == "label":  # round 4 (D-47): value targets from no-planner games
+        if "agent" not in args:
+            raise SystemExit("part=label needs agent=<imitation.pt>")
+        opts = {
+            "agent": args["agent"],
+            "seconds": float(args.get("seconds", 600)),
+            "sims": sims,
+            "reward_scale": float(args.get("reward_scale", 0.01)),
+            "factor": float(_cfg()["env"]["failure_penalty_factor"]),
+        }
+        held = ei.search_test_hashes()
+        probs = ei.stage_problems(int(args.get("count", 400)), int(args.get("seed", 4)), 5, "final")
+        todo = [(i.to_json(), opts) for i in probs if instance_hash(i) not in held]
+        fn = run_label
     else:
-        raise SystemExit(f"part must be practice or zero, got {part!r}")
+        raise SystemExit(f"part must be practice, zero or label, got {part!r}")
     out = Path(args.get("out", f"outputs/dead_ends_{part}.jsonl"))
     out.parent.mkdir(parents=True, exist_ok=True)
     print(f"{part}: {len(todo)} problems, {workers} workers", flush=True)

@@ -88,3 +88,33 @@ def test_reading_follows_the_rule_fixed_in_advance(tmp_path: Path) -> None:
     sees = {"finished": False, "end": "step limit", "positions": [[10, 12], [40, None]]}
     zero.write_text(json.dumps(sees) + "\n")
     assert DE.summarise(zero).endswith("False")
+
+
+def test_labels_give_planner_cost_then_the_failure_penalty() -> None:
+    path = ("a", "b", "c", "d")
+    positions = [(5.0, 12.0), (5.0, 9.0), (4.0, None), (3.0, None)]
+    got = DE.label(path, positions, 2.0)
+    assert got == [
+        ((), None, 12.0),
+        (("a",), None, 9.0),
+        (("a", "b"), None, 18.0),
+        (("a", "b", "c"), None, 18.0),
+    ]
+
+
+def test_label_records_load_as_value_targets(agent_path: str, tmp_path: Path) -> None:
+    sys.path.insert(0, str(ROOT / "scripts"))
+    import expert_iteration as ei
+    import imitation_check as ic
+
+    inst = TINY.instances[0]
+    opts = {"agent": agent_path, "seconds": 60.0, "sims": 4, "reward_scale": 0.01, "factor": 2.0}
+    rec = DE.run_label((inst.to_json(), opts))
+    assert rec["n_value"] > 0 and rec["n_policy"] == 0
+    demos = tmp_path / "dead.jsonl"
+    demos.write_text(json.dumps(rec) + "\n")
+    [(loaded, samples)] = ei.load_targets(demos)
+    store = ic.SearchTargets()
+    store.add_problem(DE.build_env(DE._cfg(), [loaded]), loaded, samples, 0.01)
+    assert len(store) == rec["n_value"]
+    assert all(p is None for p in store.pi)
