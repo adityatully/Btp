@@ -19,7 +19,7 @@ answer, how it was settled, and the evidence (IDs like E-22 point to `notes/pape
 - The first table lists only the open questions. Keep it in sync with the sections below.
 
 *Started 2026-10-27 from the paper log (D-1–D-35, E-1–E-28, F-1–F-16), the plan and the
-chats. Last updated 2026-10-30.*
+chats. Last updated 2026-10-31.*
 
 ---
 
@@ -45,9 +45,11 @@ chats. Last updated 2026-10-30.*
 | Q-60 | What hints do stages 3–5 need? | 3.3 |
 | Q-71 | Pure RL vs RL with a teacher on stages 3–5 | Waiting on the user (plan §5) |
 | Q-107 | Can the network learn the plans search finds (search as teacher), and beat the planner without it? | Round 1 partly (E-34); 4.2, round 2 (D-40) |
-| Q-108 | Can the value head learn to judge positions, so the planner leaves the search? | Small problems yes (E-35: 17/23); full size no (E-36: 48/99 unfinished); round 3 (D-45) |
-| Q-109 | Does the AlphaZero loop climb (each round's network better than the last)? | One turn, slightly (E-35); 4.2, round 3 |
+| Q-108 | Can the value head learn to judge positions, so the planner leaves the search? | Small problems yes (E-35, E-40: 17/23); full size no, more data did not help (E-40: 53/99 unfinished); next Q-115 |
+| Q-109 | Does the AlphaZero loop climb (each round's network better than the last)? | Small problems slightly (E-35, E-40); not on s3-s5 (E-40); loop stopped there (D-45 rule) |
 | Q-110 | Why did s2 drop to 47.5% when copying the search's plans? | Persists in round 2 (E-35: 45%); open, no step |
+| Q-115 | Does the value head get stuck because it never saw a dead end in training? | `scripts/dead_ends.py` (D-46), running |
+| Q-116 | On full-size s3-s5, is the planner weaker on mixtures than on dilutions, and does the network help there? | Split set C by fluid kind (E-36/E-39 records) |
 | Q-72 | Self-imitation if cost stalls near the teacher? | 4.3 |
 | Q-73 | Are the results stable across seeds? | 5.1 |
 | Q-78 | Root cause of the long-plan failures (s2, and s3–5 zero-shot) | 3.2, then 3.5 |
@@ -499,6 +501,10 @@ search saw, with a policy-only control; bar (a) in D-40.
 trained, the no-planner search is below the planner on 17 of 23 (policy-only control 7; held-out
 value error 269 vs 642 cost units), but fails to finish 9 of 13 MRCM problems. **Next: round 3**
 with the value head as judge; handling unfinished problems is to be decided.
+**Round 3 (E-40): not at full size, and more data of the same kind does not help.** With 2.5×
+the value data, mostly full-size s3-s5, the no-planner search on set C is below the planner on
+24 of 99 and fails to finish 53 (round 2: 29, 47); held-out value error stays ~180 cost units.
+Small problems hold (17 of 23). Next: Q-115 (the value data has almost no dead ends).
 
 **Q-109 Does the AlphaZero loop climb?** · **Open → plan 4.2, round 2** (D-40; user,
 2026-10-29)
@@ -507,6 +513,9 @@ a search that teaches it again. Bar (b) in D-40.
 **Round 2 (E-35): one turn, slightly.** The round 2 network alone solves 22 of 23 at 1.390 ×
 optimum (round 1: 21, 1.447); s3-s5 success 60.8% (59.2%). Bar met narrowly; more turns needed
 to call it a climb.
+**Round 3 (E-40): on small problems yes, on s3-s5 no.** The network alone is cheaper on set A
+(1.286 vs 1.390 × optimum) and solves more s2 greedily (65% vs 45%), but the judge on s3-s5 got
+worse; by D-45's rule the loop stops on s3-s5.
 
 **Q-110 Why did s2 drop to 47.5% when copying the search's plans?** · **Open, no step** (E-34)
 A guess, unchecked: a searched opening spliced onto the planner's finish is harder to copy
@@ -537,6 +546,25 @@ At 900 s the network adds no quality (E-36: 85 vs 83 of 99); the gain is lookahe
 remaining role as a guide is speed. D-43 races search with and without it at 10 s, 60 s, 900 s.
 **Closed (E-39): no on set C** (tied at 10 s and 60 s); **yes on the mixtures** (B: 0.591 vs
 0.675 of the planner at 60 s, still better at 900 s), where the planner's finish is weak.
+
+**Q-115 Does the value head get stuck because it never saw a dead end in training?** · **Open**
+(2026-10-31, from the user's question on a separate "can I finish?" head, after AlphaDev)
+`Search.samples` drops every position with no whole plan seen through it, and the practice
+searches finish with the planner, which almost always completes. So the value head's training
+data has close to no positions that cannot be finished, and it cannot tell them apart: E-36's
+no-planner search fails to finish 47 of 99, mostly not from time. Candidate fix without a
+second head: keep positions the search proved dead (the planner finish fails, or the step limit
+cannot be met) with the worst value. Check after round 3, only if D-45's bar fails.
+**Round 3 failed (E-40)**, and in the way this predicts: more data of the same kind made the
+judge worse at full size (53 unfinished, round 2 47). This is now the first thing to check.
+Correction (2026-10-31): the value data has *no* dead ends by construction, not "close to none";
+what was open is whether that is why the judge fails. D-46 checks it (`scripts/dead_ends.py`).
+
+**Q-116 On full-size s3-s5, is the planner weaker on mixtures than on dilutions, and does the
+network help there?** · **Open** (2026-10-31, user)
+Mixtures are about half of every s3-s5 val set (20/40, 20/40, 24/42). The planner's mixture
+weakness is measured on s2 only (lit-bench, set B), and E-39's "the network helps on mixtures"
+is from set B; on set C as a whole it tied. Split E-36 and E-39's set C records by fluid kind.
 
 **Q-111 Is the network itself what limits stages 4-5?** · **Parked** (user, 2026-10-29: for the proof of concept the network is unlikely to be the bottleneck; architecture and hyperparameters are tuning, after the training and search method is settled. Exception: if D-40's bar (a) fails, look at the value error on the training problems first)
 Never questioned since E-16 (fixed by input features, not architecture). E-34: copy agreement on

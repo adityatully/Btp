@@ -21,7 +21,7 @@ E-22 point there). This file says **what we are doing and why, in order**.
   -b nice -n 19`). Anything longer than ~10 minutes goes to the workstation (`~/code/Btp`,
   tmux; never reboot it during runs).
 
-*Last updated 2026-10-31 (D-45: round 3).*
+*Last updated 2026-10-31 (E-40: round 3 failed its bar; the loop stops on s3-s5).*
 
 ---
 
@@ -210,7 +210,7 @@ random restarts gains 1-2%; the search stays ~14% cheaper (79 of 99). *Race (D-4
 tied); on the mixtures (B) it is faster and better (0.591 vs 0.675 of the planner at 60 s). *Now (D-45, 2026-10-31): round 3*, practice
 mostly on full-size s3-s5, more value data, one copy arm on rounds 2 and 3; bar in D-45 (the
 no-planner search on set C: ≥ 33 of 99 below the planner, ≤ 24 unfinished). Planner speed (E-38): ~2× on s1-s3 with identical plans, nothing on s4-s5;
-depth 2 is 10-18× faster but 7-10% dearer, parked (D-44). Everything below 4.2 waits.
+depth 2 is 10-18× faster but 7-10% dearer, parked (D-44). *Round 3 done 2026-10-31 (E-40): bar not met, gate keeps round 2.* The no-planner search on C is below on 24 and fails to finish 53 (round 2: 29, 47); by D-45's rule the loop stops on s3-s5, and the method there is search with planner finishes (84 of 99, unchanged). *Now (D-46, 2026-10-31):* the dead-end check (Q-115, `scripts/dead_ends.py`) before any further round. Everything below 4.2 waits.
 **4.3 Self-imitation** if cost stalls near the teacher.
 
 ### Phase 5. Make it solid

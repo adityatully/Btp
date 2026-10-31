@@ -536,6 +536,21 @@ Format: date · decision · alternatives considered · why · evidence.
   does not come from this kind of data; stop the loop on s3-s5: the method is search with
   planner finishes, learning where the planner is weak (mixtures, E-39). Reported, no bar:
   val greedy success s1-s5 (watch s2), set B.
+- **D-46 (2026-10-31) Dead-end check before any further round (Q-115)** (user, after E-40).
+  Why: by construction the value data has no position that cannot be finished
+  (`Search.samples` drops every position with no whole plan seen through it), and the
+  no-planner search fails by walking into such positions. More data of the same kind made it
+  worse (E-40). Before changing the training, check that this is the cause. `scripts/dead_ends.py`:
+  (1) count what the practice search drops (56 fresh final-weight stage draws, round 2's V
+  prior, as round 3's generation); (2) replay round 3's no-planner games on set C and, at every
+  position, compare the value head's remaining cost with whether the planner can still finish.
+  **Reading, fixed in advance:** (2) the head does not see the cliff (median head estimate at the
+  first unfinishable position / at the position before ≤ 1.1) and (1) the practice search drops
+  ≥ 1% of its positions → keep dropped positions in the value data with the worst value. (2)
+  without (1) → take dead ends from the no-planner search's own failed games. Not (2) → the head
+  sees the cliff; the failures come from elsewhere, and Q-115 is not the cause. A first local
+  try (2 problems, flat prior, 16 simulations) dropped 155 of 610 positions on one of them, so
+  dropped positions are not rare; this is the check, not the measurement.
 
 ---
 
@@ -1317,6 +1332,51 @@ MRCM's intermediates on val_s2: 4 of 28 covered (chain D4), 5 of 28 (premix D3).
   (an exact lower bound on mixes left, or a constructive method's recipes, which is a planner
   again). (3) Built as SPEC 0.28 `hint_source: problem` (depth-4 chain in the recipe columns)
   for a copy-test comparison on stages 1–2 against the planner's hints.
+
+### E-40 (2026-10-31) Expert iteration round 3 (D-45): the value head still cannot judge full-size problems
+Code `982174b`, workstation, `outputs/expert/round3/` there. **Search** (`expert_iteration.py
+small=10 first=3000 stages=1000 upto=5 weights=final seed=2 agent=round2/copy_v samples=1
+value_cap=64 seconds=600 workers=28`): 1200 problems (200 small, 1000 stage draws, mostly
+s3-s5); search cheaper than the planner on **948** (small 97); mean search / planner cost
+0.871; 532 capped at 600 s; median 273 s; 91,521 value samples, 22,391 with visit counts
+(round 2: 37,220). **Copy** (`imitation_check.py stages=5 demos=round2+round3 arm=visits
+value_coef=0.5 init=round2/copy_v epochs=10 threads=16`, `round3/copy`), 3.2 h. A first
+attempt at `threads=1` (~3000 s per epoch) was stopped after 2 epochs (`round3/copy_1thread`);
+at 16 threads ~1010 s per epoch. A one-epoch GPU check (`device=cuda`, `outputs/scratch/
+gpu_speed`) took ~300 s per epoch with the same metrics. **Re-test** `search_check.py
+sets=A,B,C sims=1,256 uniform=0 workers=28`, `round3/search.{jsonl,log}`.
+
+| | R2 (V, E-35/E-36) | **R3** |
+|---|---|---|
+| **C zero 256: below planner / no plan (bar ≥ 33 / ≤ 24)** | 29 / 47 | **24 / 53** (C3 7/13, C4 5/22, C5 12/18) |
+| C zero 256, ratio to planner where finished | 0.891 | 0.921 |
+| C net 256: below, ratio, capped | 85, 0.842, 51 | 84, 0.840, 48 |
+| C network alone (zero 1): below / no plan | 9 / 48 | 13 / 52 |
+| **A zero 256: below (bar ≥ 14), at opt, × opt** | 17, 6, 1.077 | **17**, 6, 1.056 |
+| A net 256: below, at opt, × opt | 21, 10, 1.018 | 21, 11, 1.020 |
+| A network alone: below, solved, × opt | 3, 22/23, 1.390 | 5, 22/23, **1.286** |
+| B net 256: ratio, ≤ MRCM | 0.583, 6 | 0.600, 6 |
+| B zero 256: no plan | 9 of 13 | 10 of 13 |
+| val greedy success s1 / s2 / s3 / s4 / s5 (%) | 95 / 45 / 87.5 / 45 / 50 | 92.5 / **65** / 77.5 / 45 / 50 |
+| held-out value error (cost units), epochs 1 / 2 / 3 / 10 | – | 177 / 179 / 166 / 180 |
+
+Race on C (cost / planner at 1 / 10 / 60 / 300 / 900 s): net 256 0.943 / 0.890 / 0.857 / 0.846 /
+0.839; zero 256 0.990 / 0.970 / 0.964 / 0.956 / 0.956 (46 with a plan at 900 s).
+- **Pass bar (D-45): (a) not met, (b) met; the gate keeps R2.** (a) The no-planner search is
+  below the planner on 24 of 99 (bar 33, R2 29) and fails to finish 53 (bar 24, R2 47): worse
+  than round 2, not better. (b) On the small problems it holds (17 of 23, 1.056 × optimum).
+- **Reading (fixed in advance): unfinished 53 > 36 → judging full-size problems does not come
+  from this kind of data; stop the loop on s3-s5.** 2.5× the value data, mostly full-size, did
+  not help the judge there: the held-out value error stays at ~180 across epochs while the
+  training loss falls. The method on s3-s5 stays search with planner finishes (84 of 99, 16%
+  cheaper than the best planner, unchanged).
+- **Side results (no bar):** the network alone is cheaper on the small problems (1.286 vs
+  1.390 × optimum) and solves more s2 mixtures greedily (65% vs 45%), but fewer s3 (77.5% vs
+  87.5%). On the mixtures (B) nothing changed.
+- **A likely cause, unchecked (Q-115):** `Search.samples` keeps only positions with a whole
+  plan seen through them, and practice searches finish with the planner, so the value data has
+  almost no dead ends. The judge's failure is exactly walking into states it cannot finish. More
+  data of the same kind cannot teach that, which fits (a) getting worse rather than better.
 
 ### E-39 (2026-10-30) Cost-vs-time race (D-43): no speed gain on stages 3-5; a clear gain on mixtures
 `search_check.py sets=C,B sims=256 uniform=256 workers=28`, code `0a4b15d`, workstation, round
