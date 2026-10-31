@@ -551,6 +551,28 @@ Format: date · decision · alternatives considered · why · evidence.
   sees the cliff; the failures come from elsewhere, and Q-115 is not the cause. A first local
   try (2 problems, flat prior, 16 simulations) dropped 155 of 610 positions on one of them, so
   dropped positions are not rare; this is the check, not the measurement.
+- **D-47 (2026-11-01) Expert iteration round 4: teach the value head dead ends** (user, after
+  E-42). Why: E-42 shows the head scores positions the planner can no longer finish as no worse
+  than the move before (0.98), and the practice search almost never meets one (0.5%), so the
+  dead ends must come from the no-planner search's own games (D-46's rule). **Design.** (1)
+  *Labels* (`dead_ends.py part=label`): round 3's network plays 400 fresh stage draws (final
+  weights, seed 4, never a test problem) with the no-planner search (256 simulations, 600 s
+  cap); every position of each game is a value target: the planner's remaining cost where it
+  can still finish, else the env's failure penalty (`failure_penalty_factor` 2 × the planner's
+  remaining cost at the last finishable position, SPEC 5.8). These are also the positions the
+  network itself reaches, which rounds 2-3 never trained on. (2) *Copy* from round 3's network
+  on rounds 2 and 3 plus the labels (labels last, so the held-out 5% are its positions),
+  `arm=visits value_coef=0.5`, 10 epochs, on the GPU. (3) *Re-test* as round 3, plus
+  `dead_ends.py part=zero` on the new network. **Pass bar, fixed in advance** (as D-45, at
+  256): **(a)** `zero` on C below the best planner on ≥ 33 of 99 and unfinished on ≤ 24;
+  **(b)** `zero` on A below on ≥ 14 of 23; **(c, the mechanism)** the head sees the cliff:
+  median head estimate at the first unfinishable position / one move before > 1.1. Gate: R4
+  replaces R2 only if (a) and (b). **Readings:** (a) and (b) → the judge works at full size;
+  race `zero` against `net` on C. (c) without (a) → the head now sees dead ends but the
+  failures have another cause (14 of E-42's 53 stayed finishable to the end); report, and the
+  network stops on s3-s5. Not (c) → the labels did not teach it: a learning problem (Q-111:
+  the value head reads only the global token); the network stops on s3-s5 and the question goes
+  to the supervisor.
 
 ---
 
@@ -1332,6 +1354,54 @@ MRCM's intermediates on val_s2: 4 of 28 covered (chain D4), 5 of 28 (premix D3).
   (an exact lower bound on mixes left, or a constructive method's recipes, which is a planner
   again). (3) Built as SPEC 0.28 `hint_source: problem` (depth-4 chain in the recipe columns)
   for a copy-test comparison on stages 1–2 against the planner's hints.
+
+### E-42 (2026-11-01) Dead-end check (D-46): the value head is blind to dead ends
+`scripts/dead_ends.py`, code `eaa1c17`, workstation, `outputs/expert/round3/dead_{practice,
+zero}.{jsonl,log}` there, 14 workers each. "Unfinishable" = the planner's finish fails or does
+not fit the step limit (an approximation: the planner can miss a finish that exists).
+- **(1) Practice search** (56 fresh final-weight stage draws, seed 3, round 2's V prior, 256
+  simulations, 600 s, as round 3's generation): positions kept 111,195, dropped 598, ended 364;
+  **dropped share 0.535%** (bar 1%: not met). Guided by planner finishes, the practice search
+  almost never meets a dead end, so the value data could not get many from it.
+- **(2) No-planner games on set C** (round 3's network, 256 simulations): 53 of 99 failed
+  (31 at the step limit, 22 stopped before the end: cause not checked, likely the time cap).
+  39 of the 53 passed a point after which the planner could no longer finish, at a median 79%
+  of the game; the other 14 stayed finishable to the end (search failures, not dead ends).
+  The value head's remaining cost: at finishable positions a median 0.75 × the planner's
+  (optimistic); **finishable positions median 944 cost units, unfinishable median 472**; at the
+  cliff, head estimate / one move before **median 0.98** over 39 games (bar ≤ 1.1: met).
+- **Reading (D-46, fixed in advance): (2) without (1) → take dead ends from the no-planner
+  search's own failed games.** The value head scores a position the planner can no longer
+  finish as no worse than the move before it, and hopeless positions on average as *cheaper*
+  than finishable ones (they come late in the game, with fewer targets left). It has never been
+  shown one (the value data has none by construction), and the practice search cannot supply
+  them. **Q-115 confirmed** for 39 of the 53 failures.
+
+### E-41 (2026-10-31) Q-116: on full-size s3-s5 the network does not help on mixtures
+E-39's race records (`outputs/expert/round2/race.jsonl` on the workstation, round 2's V, 256
+simulations, 900 s cap) split by the problem's fluid kind (`cell`). Set C has 63 mixtures and
+36 dilutions. Mean cost / best planner if stopped at t:
+
+| fluids | search | n | 10 s | 60 s | 900 s |
+|---|---|---|---|---|---|
+| mixture | net | 63 | 0.896 | 0.858 | 0.832 |
+| mixture | uniform | 63 | **0.882** | **0.848** | **0.809** |
+| mixture | zero | 63 | 0.956 | 0.944 | 0.938 |
+| dilution | net | 36 | **0.887** | **0.872** | **0.855** |
+| dilution | uniform | 36 | 0.913 | 0.887 | 0.862 |
+| dilution | zero | 36 | 0.945 | 0.917 | 0.917 |
+
+- **Reading (D-43's rule per fluid kind, fixed before the split was run): no gain on s3-s5
+  mixtures.** The flat prior is ahead of the network at every budget (0.882 vs 0.896 at 10 s,
+  0.848 vs 0.858 at 60 s). The s2 result (E-39, set B: the network helps on mixtures) does not
+  carry over to full size.
+- **On dilutions the network is faster:** 0.887 vs 0.913 at 10 s (0.026, past the 0.02 bar),
+  0.872 vs 0.887 at 60 s. n = 36, one seed.
+- **The planner is weaker on mixtures at full size:** the search gains more there (0.809 vs
+  0.862 at 900 s), so the headroom is real; the network does not find it, lookahead does.
+- **For the claim:** the "learning wins where hand-made planning fails" story (Go side of the
+  chess-vs-Go framing) holds on s2 mixtures only. A guess, unchecked: the network practised
+  few full-size mixtures, or its mixture moves copy the planner's.
 
 ### E-40 (2026-10-31) Expert iteration round 3 (D-45): the value head still cannot judge full-size problems
 Code `982174b`, workstation, `outputs/expert/round3/` there. **Search** (`expert_iteration.py
