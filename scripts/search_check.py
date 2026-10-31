@@ -333,6 +333,7 @@ class Search:
                 node.best = min(node.best, later.best)
                 self._keep(node)
                 later = node
+        self.path = root.actions  # the moves played (`scripts/dead_ends.py` replays them)
         if self.best is None:  # `zero` reached no finished plan
             return {"plan": None, "tail": 0, "capped": capped, "played_to_end": root.terminal}
         return {
