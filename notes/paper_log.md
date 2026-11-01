@@ -573,6 +573,21 @@ Format: date · decision · alternatives considered · why · evidence.
   network stops on s3-s5. Not (c) → the labels did not teach it: a learning problem (Q-111:
   the value head reads only the global token); the network stops on s3-s5 and the question goes
   to the supervisor.
+- **D-48 (2026-11-01) Fit check before deciding (Q-111, user, after E-43).** Why: the guide and
+  the judge both fail on s4-s5, which points to one cause in the network, but the numbers so
+  far cannot say which: the copy log's training agreement (87.5%, the search's most visited
+  move on training positions) and its per-stage `val_agree` (~50% on s4-s5, the *sharing
+  pass's* move on the validation sets) measure different things, so comparing them
+  says nothing. `scripts/fit_check.py` measures one thing on both: per stage, top-move
+  agreement with the search's most visited move, value error, and **pair order** (at two
+  sibling positions of one problem with targets > 1% apart, how often the head says which is
+  cheaper: what the search needs from a judge), on sampled training problems and on the
+  held-out 5% the copy step kept out. Run on round 3's network (its held-out problems have
+  visit counts; round 4's are labels only) and on round 4's (value only). **Reading, fixed in
+  advance, on s4-s5:** guide: training agreement < 0.6 → cannot fit (the network: Q-111's
+  architecture branch); held-out < training - 0.15 → fits but does not generalise (data or what
+  it reads); else fits and generalises. Judge: the same with pair order (< 0.7; - 0.1);
+  held-out pair order < 0.6 → its ranking of alternatives is close to a coin flip.
 
 ---
 
@@ -1354,6 +1369,50 @@ MRCM's intermediates on val_s2: 4 of 28 covered (chain D4), 5 of 28 (premix D3).
   (an exact lower bound on mixes left, or a constructive method's recipes, which is a planner
   again). (3) Built as SPEC 0.28 `hint_source: problem` (depth-4 chain in the recipe columns)
   for a copy-test comparison on stages 1–2 against the planner's hints.
+
+### E-43 (2026-11-01) Expert iteration round 4 (D-47): dead-end labels move the head on average, not at the cliff
+Code `b86f761`, workstation, `outputs/expert/round4/` there. **Labels** (`dead_ends.py
+part=label`, round 3's network, 38 workers): 400 fresh final-weight stage draws, 184 failed
+(endings: done 194, step limit 56, stopped 150); **20,934 value samples, 1,042 unfinishable
+(5.0%)**. **Copy** from round 3 on rounds 2 + 3 + labels, `arm=visits value_coef=0.5`, 10
+epochs, GPU (logged 4,546 s). **Re-test** `search_check.py sets=A,B,C sims=1,256 workers=28`;
+the cliff check (`dead_ends.py part=zero`, 10 workers) ran at the same time, so the machine
+was shared (40 threads); the zero search hit no cap, the net search's cap count barely moved.
+
+| | R3 (E-40, E-42) | **R4** |
+|---|---|---|
+| **C zero 256: below planner / no plan (bar ≥ 33 / ≤ 24)** | 24 / 53 | **23 / 50** (C3 8/10, C4 4/22, C5 11/18) |
+| C zero 256, ratio to planner (race, 900 s, where finished) | 0.956 (46) | 0.946 (49) |
+| C net 256: below, ratio, capped | 84, 0.840, 48 | 82, 0.839, 50 |
+| C network alone (zero 1): below / no plan | 13 / 52 | 13 / 53 |
+| **A zero 256: below (bar ≥ 14), at opt, × opt** | 17, 6, 1.056 | **17**, 6, 1.064 |
+| A net 256: below, at opt, × opt | 21, 11, 1.020 | 21, 13, 1.017 |
+| A network alone: × opt | 1.286 | 1.398 |
+| B net 256: ratio, ≤ MRCM; B zero 256 no plan | 0.600, 6; 10 of 13 | 0.597, 6; 9 of 13 |
+| val greedy success s1 / s2 / s3 / s4 / s5 (%) | 92.5 / 65 / 77.5 / 45 / 50 | 92.5 / 50 / 80 / 37.5 / 50 |
+| **Cliff: head at first unfinishable / one before (bar > 1.1)** | 0.98 (39 games) | **1.03** (33 games) |
+| Head, finishable vs unfinishable positions (median cost) | 944 vs 472 | 1,197 vs 1,361 |
+| Head / planner remaining at finishable positions (median) | 0.75 | 0.91 |
+
+Held-out value error 324 (the held-out 5% are now label positions, the network's own games;
+not comparable with round 3's ~180).
+- **Pass bar (D-47): (a) not met, (b) met, (c) not met; the gate keeps R2.** Full size is
+  unchanged: below on 23 of 99, unfinished on 50.
+- **Reading (fixed in advance): not (c) → the labels did not teach the cliff; the network
+  stops on s3-s5 and the question goes to the supervisor.**
+- **What did change (no bar):** the head learned the average. Hopeless positions went from
+  half the finishable ones (472 vs 944) to dearer (1,361 vs 1,197), and the head is less
+  optimistic (0.91 vs 0.75 of the planner). It did not learn the step: one move into a dead end
+  it still scores about as the move before (1.03). It sees "late and failing" games as
+  expensive, not "this move made it unfinishable".
+- **Possible causes, unchecked:** dead ends were 5% of this round's labels and a smaller share
+  of all the value data (rounds 2-3 have none); the value head reads only the global token
+  (Q-111), so it may lack the detail that tells two neighbouring positions apart; and
+  "unfinishable" is the planner's verdict, which can be wrong near the cliff. 17 of the 50
+  failures stayed finishable to the end (search failures, not dead ends).
+- **Side results:** the network alone got worse on the small problems (1.398 vs 1.286 ×
+  optimum) and on s2 / s4 greedily (50 / 37.5% vs 65 / 45%): training on its own failing games
+  cost some of what round 3 had learned.
 
 ### E-42 (2026-11-01) Dead-end check (D-46): the value head is blind to dead ends
 `scripts/dead_ends.py`, code `eaa1c17`, workstation, `outputs/expert/round3/dead_{practice,

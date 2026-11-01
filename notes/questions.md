@@ -45,10 +45,10 @@ chats. Last updated 2026-10-31.*
 | Q-60 | What hints do stages 3–5 need? | 3.3 |
 | Q-71 | Pure RL vs RL with a teacher on stages 3–5 | Waiting on the user (plan §5) |
 | Q-107 | Can the network learn the plans search finds (search as teacher), and beat the planner without it? | Round 1 partly (E-34); 4.2, round 2 (D-40) |
-| Q-108 | Can the value head learn to judge positions, so the planner leaves the search? | Small problems yes (E-35, E-40: 17/23); full size no, more data did not help (E-40: 53/99 unfinished); next Q-115 |
+| Q-108 | Can the value head learn to judge positions, so the planner leaves the search? | Small problems yes (E-35, E-40, E-43: 17/23); full size no: neither more data (E-40) nor dead-end labels (E-43) helped; to the supervisor |
 | Q-109 | Does the AlphaZero loop climb (each round's network better than the last)? | Small problems slightly (E-35, E-40); not on s3-s5 (E-40); loop stopped there (D-45 rule) |
 | Q-110 | Why did s2 drop to 47.5% when copying the search's plans? | Persists in round 2 (E-35: 45%); open, no step |
-| Q-119 | Does training on dead ends from its own games teach the value head to judge full-size problems? | Round 4 (D-47) |
+| Q-119 | Does training on dead ends from its own games teach the value head to judge full-size problems? | No: closed (E-43; on average yes, at the cliff no, 50/99 unfinished) |
 | Q-72 | Self-imitation if cost stalls near the teacher? | 4.3 |
 | Q-73 | Are the results stable across seeds? | 5.1 |
 | Q-78 | Root cause of the long-plan failures (s2, and s3–5 zero-shot) | 3.2, then 3.5 |
@@ -574,12 +574,16 @@ dilutions), but the network does not help there:** the flat prior is ahead at 10
 On dilutions the network is faster at 10 s (0.887 vs 0.913).
 
 **Q-119 Does training on dead ends from its own games teach the value head to judge full-size
-problems?** · **Open → plan 4.2, round 4** (D-47; user, 2026-11-01)
+problems?** · **Closed → E-43: no** (D-47; user, 2026-11-01)
 E-42: the head is blind to dead ends, and the practice search cannot supply them. Round 4 labels
 every position of the no-planner search's own games (planner cost, or the failure penalty past
 the point of no return) and re-tests with D-45's bar plus a cliff check.
+*2026-11-01 (E-43):* bar not met (23 below, 50 unfinished; cliff 1.03). The head now scores
+hopeless positions as dearer on average (1,361 vs 1,197) but not the move into one. Candidate
+causes left: dead ends are a small share of the value data, and the value head reads only the
+global token (Q-111).
 
-**Q-111 Is the network itself what limits stages 4-5?** · **Parked** (user, 2026-10-29: for the proof of concept the network is unlikely to be the bottleneck; architecture and hyperparameters are tuning, after the training and search method is settled. Exception: if D-40's bar (a) fails, look at the value error on the training problems first)
+**Q-111 Is the network itself what limits stages 4-5?** · **Open → plan 4.2, fit check (D-48)** (parked 2026-10-29; reopened by the user 2026-11-01 after E-43: guide and judge both fail on s4-s5)
 Never questioned since E-16 (fixed by input features, not architecture). E-34: copy agreement on
 the val sets falls to 47% / 46% on s4 / s5 (s1-s3 68-79%). Three explanations fit: too little
 s4-s5 data (round 1 had no stage 3-5 draws), an inconsistent teacher, or a network that cannot
