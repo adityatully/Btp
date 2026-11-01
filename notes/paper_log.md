@@ -589,6 +589,32 @@ Format: date · decision · alternatives considered · why · evidence.
   it reads); else fits and generalises. Judge: the same with pair order (< 0.7; - 0.1);
   held-out pair order < 0.6 → its ranking of alternatives is close to a coin flip.
 
+- **D-49 (2026-11-01) AlphaZero loop pilot: train on the outcomes of its own play** (user,
+  after E-44: "learning the planner is fundamentally wrong"). Why: E-44 shows the network
+  copies what it is shown; what it was shown is the planner's view: visit counts of searches
+  judged by planner finishes (so the guide points where a flat prior plus the planner already
+  goes) and value targets that are the cheapest plan seen through a position, finished by the
+  planner (noisy: a rarely tried position gets a dearer target). AlphaZero trains on its own
+  games: visit counts at the positions it played, and as value the real outcome. **One change:
+  the training signal.** Hints stay as they are (planner tables, a later separate test); the
+  network starts from round 3's (a warm start, as AlphaGo's copied policy). `scripts/
+  zero_loop.py`. **Play:** the no-planner search (256 simulations, 120 s cap, Dirichlet root
+  noise α 0.3, ε 0.25) plays fresh problems: 10 per small E2 cell (indices 5000 + 100 × turn)
+  and 300 stage 1-3 draws (seed 1000 + turn), never a test problem (curriculum: where the
+  no-planner search finishes most; s4-s5 only if it climbs). Targets only on the positions
+  played: visit counts, and the remaining cost of the cheapest whole plan the search itself
+  reached through the position; where none, the failure penalty `failure_penalty_factor` (2) ×
+  the cheapest construction of the whole problem, raised to 2 × the dearest finish on the same
+  line if that is dearer, so giving up is never cheaper than finishing badly. No planner in
+  play or targets. **Train:** `imitation_check.py arm=visits value_coef=0.5`, 2 epochs, GPU, on
+  the last 3 turns' games, from the previous turn's network. **Eval:** the no-planner search on
+  A, B and C3 (66 problems, best planner known), 256 simulations, 300 s cap; turn 0 = round 3's
+  network. 8 turns. **Reading, fixed in advance, on all 66 at the last turn vs turn 0:**
+  *climbs* if below the best planner on ≥ max(5, 20% of turn 0's count) more problems and no
+  more unfinished → the targets held the network back; extend to s4-s5, race against planner
+  finishes. Unfinished falls without the cost gain → it learns to finish, not to economise.
+  Neither → own-outcome targets do not lift it at this scale either; stop, report.
+
 ---
 
 ## 4. Experiments and results

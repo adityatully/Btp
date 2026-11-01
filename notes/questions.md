@@ -49,6 +49,7 @@ chats. Last updated 2026-10-31.*
 | Q-109 | Does the AlphaZero loop climb (each round's network better than the last)? | Small problems slightly (E-35, E-40); not on s3-s5 (E-40); loop stopped there (D-45 rule) |
 | Q-110 | Why did s2 drop to 47.5% when copying the search's plans? | Persists in round 2 (E-35: 45%); open, no step |
 | Q-119 | Does training on dead ends from its own games teach the value head to judge full-size problems? | No: closed (E-43; on average yes, at the cliff no, 50/99 unfinished) |
+| Q-120 | Does training on the outcomes of its own no-planner play (AlphaZero targets) make the loop climb? | Pilot (D-49), plan 4.2 |
 | Q-72 | Self-imitation if cost stalls near the teacher? | 4.3 |
 | Q-73 | Are the results stable across seeds? | 5.1 |
 | Q-78 | Root cause of the long-plan failures (s2, and s3–5 zero-shot) | 3.2, then 3.5 |
@@ -582,6 +583,12 @@ the point of no return) and re-tests with D-45's bar plus a cliff check.
 hopeless positions as dearer on average (1,361 vs 1,197) but not the move into one. Candidate
 causes left: dead ends are a small share of the value data, and the value head reads only the
 global token (Q-111).
+
+**Q-120 Does training on the outcomes of its own no-planner play make the loop climb?** · **Open
+→ plan 4.2, pilot (D-49)** (user, 2026-11-01)
+E-44: the network copies what it is shown, and it was shown the planner's view. The pilot trains
+it, AlphaZero-style, on visit counts and own outcomes at the positions its no-planner search
+played, small problems and s1-s3, and checks whether that search improves turn over turn.
 
 **Q-111 Is the network itself what limits stages 4-5?** · **Closed → E-44: no** (parked 2026-10-29; reopened 2026-11-01 after E-43; the fit check: it fits s4-s5 and generalises, guide 0.84 → 0.78, judge pair order 0.73 → 0.67)
 Never questioned since E-16 (fixed by input features, not architecture). E-34: copy agreement on
