@@ -21,7 +21,7 @@ E-22 point there). This file says **what we are doing and why, in order**.
   -b nice -n 19`). Anything longer than ~10 minutes goes to the workstation (`~/code/Btp`,
   tmux; never reboot it during runs).
 
-*Last updated 2026-11-01 (E-43: round 4 failed its bar; the network stops on s3-s5, question to the supervisor).*
+*Last updated 2026-11-01 (E-44: fit check: the network copies what it is shown; the training targets, not the architecture, are the suspect).*
 
 ---
 
@@ -210,7 +210,7 @@ random restarts gains 1-2%; the search stays ~14% cheaper (79 of 99). *Race (D-4
 tied); on the mixtures (B) it is faster and better (0.591 vs 0.675 of the planner at 60 s). *Now (D-45, 2026-10-31): round 3*, practice
 mostly on full-size s3-s5, more value data, one copy arm on rounds 2 and 3; bar in D-45 (the
 no-planner search on set C: ≥ 33 of 99 below the planner, ≤ 24 unfinished). Planner speed (E-38): ~2× on s1-s3 with identical plans, nothing on s4-s5;
-depth 2 is 10-18× faster but 7-10% dearer, parked (D-44). *Round 3 done 2026-10-31 (E-40): bar not met, gate keeps round 2.* The no-planner search on C is below on 24 and fails to finish 53 (round 2: 29, 47); by D-45's rule the loop stops on s3-s5, and the method there is search with planner finishes (84 of 99, unchanged). *Dead-end check (D-46) done 2026-11-01 (E-42):* the value head is blind to dead ends (Q-115 confirmed); the practice search cannot supply them (0.5% dropped). E-41: on s3-s5 the network does not help as a guide on mixtures. *Round 4 (D-47) done 2026-11-01 (E-43): bar not met* ((a) 23 below / 50 unfinished, (b) 17 of 23, (c) cliff 1.03); the head learned that hopeless positions are dear on average but not the step into one. By D-47's rule the network stops on s3-s5 and the question goes to the supervisor; the method there stays search with planner finishes. *Next (D-48, user 2026-11-01): fit check* (`scripts/fit_check.py`, Q-111): can the network fit s4-s5 at all, or does it fit but not generalise; then the decision with the supervisor. Everything below 4.2 waits.
+depth 2 is 10-18× faster but 7-10% dearer, parked (D-44). *Round 3 done 2026-10-31 (E-40): bar not met, gate keeps round 2.* The no-planner search on C is below on 24 and fails to finish 53 (round 2: 29, 47); by D-45's rule the loop stops on s3-s5, and the method there is search with planner finishes (84 of 99, unchanged). *Dead-end check (D-46) done 2026-11-01 (E-42):* the value head is blind to dead ends (Q-115 confirmed); the practice search cannot supply them (0.5% dropped). E-41: on s3-s5 the network does not help as a guide on mixtures. *Round 4 (D-47) done 2026-11-01 (E-43): bar not met* ((a) 23 below / 50 unfinished, (b) 17 of 23, (c) cliff 1.03); the head learned that hopeless positions are dear on average but not the step into one. By D-47's rule the network stops on s3-s5 and the question goes to the supervisor; the method there stays search with planner finishes. *Fit check (D-48) done 2026-11-01 (E-44):* the network fits s4-s5 and carries it to new problems (guide 0.84 → 0.78, judge pair order 0.73 → 0.67); not the architecture. The guide is a good copy of a search that adds nothing over a flat prior; the judge ranks siblings poorly even on its training data, likely because its targets (cheapest plan seen, planner finishes) are noisy. *Next: the user's decision* (training targets from real outcomes, or write up), with the supervisor. Everything below 4.2 waits.
 **4.3 Self-imitation** if cost stalls near the teacher.
 
 ### Phase 5. Make it solid

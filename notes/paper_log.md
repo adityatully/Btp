@@ -1370,6 +1370,45 @@ MRCM's intermediates on val_s2: 4 of 28 covered (chain D4), 5 of 28 (premix D3).
   again). (3) Built as SPEC 0.28 `hint_source: problem` (depth-4 chain in the recipe columns)
   for a copy-test comparison on stages 1–2 against the planner's hints.
 
+### E-44 (2026-11-01) Fit check (D-48): the network copies what it is shown, also on new s4-s5 problems
+`scripts/fit_check.py`, code `68ef31e`, workstation, `outputs/expert/round4/fit_r{3,4}.{log,json}`
+there (`per_stage=150 workers=36`, ~90 s each). Round 3's network on rounds 2 + 3 (held out:
+the last 5%, 92 s4-s5 problems with visit counts). Agreement = top move vs the search's most
+visited; pair order = sibling positions, targets > 1% apart.
+
+| round 3 network | train agree | held agree | train pair order | held pair order | train value error (rel) | held value error (rel) |
+|---|---|---|---|---|---|---|
+| small | 0.902 | – | 0.778 | – | 31 (0.15) | – |
+| s1 | 0.866 | 0.768 | 0.717 | 0.604 | 45 (0.39) | 71 (0.47) |
+| s2 | 0.879 | 0.760 | 0.648 | 0.625 | 43 (0.35) | 75 (0.28) |
+| s3 | 0.855 | 0.804 | 0.717 | 0.722 | 47 (0.18) | 128 (0.39) |
+| **s4-s5** | **0.842** | **0.780** | **0.731** | **0.668** | 73 (0.08) | 202 (0.16) |
+
+- **Reading (D-48, fixed in advance): guide fits and generalises (0.84 → 0.78); judge fits and
+  generalises (0.73 → 0.67).** Neither branch of Q-111 holds: the network is not too weak to
+  represent s4-s5, and it does not merely memorise them.
+- **The guide is a good copy.** On new full-size problems it picks the search's move 78% of the
+  time (the copy log's ~50% `val_agree` is agreement with the sharing pass, a different
+  measure). Yet as a prior it adds nothing on set C (E-36, E-39, E-41). So the limit is not the
+  copy but what is copied: a search whose judge is the planner, whose moves a flat prior plus
+  the same planner already finds.
+- **The judge is a weak ranker everywhere, even on its own training data.** Pair order 0.65-0.78
+  on training positions of every stage, small problems included (0.78, where the no-planner
+  search does work, 17/23). It passed the 0.7 bar by 0.03. On new s4-s5 problems it orders
+  sibling moves right 2 times in 3; over a game of dozens of moves that is enough to walk into
+  dead ends (E-42, E-43). Its cost error triples on new problems (73 → 202) while its ranking
+  drops less (0.73 → 0.67).
+- **A caveat on the measure (and a likely cause):** a sibling's target is the cheapest whole
+  plan seen through it, so a rarely visited sibling gets a dearer target from fewer tries. The
+  targets themselves partly measure visits, not position quality: a hard, noisy thing to fit,
+  which would explain low pair order on training data too. Not checked.
+- **Round 4's network:** its held-out problems are dead-end labels (one path per game, no
+  visits, no siblings), so neither reading applies (the script prints "no data"). Its training
+  pair order is round 3's (0.732 vs 0.731): the dead-end labels did not change how it ranks.
+- **So:** the network learns what it is given; what it is given is the planner's view. This
+  points at the training targets (AlphaZero trains the value on the real outcome of its own
+  play to the end, not a hand-made estimate), not the architecture.
+
 ### E-43 (2026-11-01) Expert iteration round 4 (D-47): dead-end labels move the head on average, not at the cliff
 Code `b86f761`, workstation, `outputs/expert/round4/` there. **Labels** (`dead_ends.py
 part=label`, round 3's network, 38 workers): 400 fresh final-weight stage draws, 184 failed

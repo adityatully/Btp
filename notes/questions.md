@@ -583,7 +583,7 @@ hopeless positions as dearer on average (1,361 vs 1,197) but not the move into o
 causes left: dead ends are a small share of the value data, and the value head reads only the
 global token (Q-111).
 
-**Q-111 Is the network itself what limits stages 4-5?** · **Open → plan 4.2, fit check (D-48)** (parked 2026-10-29; reopened by the user 2026-11-01 after E-43: guide and judge both fail on s4-s5)
+**Q-111 Is the network itself what limits stages 4-5?** · **Closed → E-44: no** (parked 2026-10-29; reopened 2026-11-01 after E-43; the fit check: it fits s4-s5 and generalises, guide 0.84 → 0.78, judge pair order 0.73 → 0.67)
 Never questioned since E-16 (fixed by input features, not architecture). E-34: copy agreement on
 the val sets falls to 47% / 46% on s4 / s5 (s1-s3 68-79%). Three explanations fit: too little
 s4-s5 data (round 1 had no stage 3-5 draws), an inconsistent teacher, or a network that cannot
