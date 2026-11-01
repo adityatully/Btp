@@ -638,6 +638,24 @@ Format: date · decision · alternatives considered · why · evidence.
   cannot resolve the choice that matters; residual: median |target - planner| < half the
   median target → cost above the planner is the smaller quantity to learn.
 
+- **D-51 (2026-11-02) Value head on the cost above an exact bound: check first** (user, after
+  E-46). E-46: the head predicts the whole cost to finish (median 777 on s4-s5), is off by
+  ~142, and sibling moves differ by ~16, so it cannot rank them; and its targets are mostly the
+  planner's own finish. Proposal: keep the network, change what the value head predicts. The
+  conservation lower bound (`fluid_bound_heuristic`, SPEC 10.2, exact) gives the large fixed
+  part of the cost; the head predicts only the excess above it (target - bound), and a
+  position's value is bound + head. No planner needed at the leaves. The policy head is
+  unchanged: it is trained, as before, on the visit counts of searches judged by the new value.
+  Alternatives: excess above the planner's finish (keeps the planner at every leaf); a ranking
+  loss over siblings. **Before building it**, the resolution check gains bound columns (same
+  data, round 3's network): the bound and the excess at each position, how often bound alone
+  picks the best sibling, how often and by how much the search's target beats the planner
+  finish, and a projection of the head's error on the excess (its present relative error times
+  the median excess). **Reading, fixed in advance, held-out s4-s5:** median excess < half the
+  median target → the bound carries most of the cost (else it is loose and the change gains
+  little); projected error < runner-up gap → at its present relative error the head could
+  resolve sibling moves (a projection, not a measurement; the build decides).
+
 ---
 
 ## 4. Experiments and results
@@ -1418,6 +1436,48 @@ MRCM's intermediates on val_s2: 4 of 28 covered (chain D4), 5 of 28 (premix D3).
   (an exact lower bound on mixes left, or a constructive method's recipes, which is a planner
   again). (3) Built as SPEC 0.28 `hint_source: problem` (depth-4 chain in the recipe columns)
   for a copy-test comparison on stages 1–2 against the planner's hints.
+
+### E-46 (2026-11-01) Resolution check (D-50): the value head recomputes the planner's cost, ten times too coarsely
+`scripts/resolution_check.py`, code `024527b`, workstation, `outputs/expert/round4/
+resolution.{log,json}` there (`workers=36`, per_stage 50, 415 problems, 1,348 s). Round 3's
+network on the rounds 2 + 3 demos. Siblings = children of one position, compared on whole-plan
+cost (spent + remaining). Costs in cost units.
+
+| | candidates (median / p90) | share tried | sibling groups | runner-up gap | head error | gap > error | head picks best | planner picks best | chance | target (median) | median target - planner |
+|---|---|---|---|---|---|---|---|---|---|---|---|
+| train small | 38 / 110 | 0.06 | 342 | 1 | 24 | 0.14 | 0.59 | 0.91 | 0.45 | 136 | 0 |
+| held s1 | 29 / 202 | 0.37 | 53 | 2 | 36 | 0.25 | 0.47 | 0.87 | 0.28 | 76 | 0 |
+| held s2 | 413 / 662 | 0.05 | 85 | 8 | 70 | 0.06 | 0.35 | 0.88 | 0.42 | 206 | 0 |
+| held s3 | 165 / 689 | 0.18 | 216 | 3.5 | 115 | 0.09 | 0.42 | 0.84 | 0.35 | 246 | 0 |
+| **held s4-s5** | **85 / 513** | **0.10** | 1,040 | **16** | **142** | **0.13** | **0.43** | **0.77** | **0.35** | 777 | **0** |
+| train s4-s5 | 58 / 313 | 0.15 | 978 | 7 | 54 | 0.32 | 0.51 | 0.79 | 0.39 | 668 | 0 |
+
+- **Reading (D-50, fixed in advance), held-out s4-s5:** policy: **a prior has room** (median 85
+  candidates, 10% tried); value: **the head cannot resolve the choice that matters** (runner-up
+  gap 16 < head error 142); residual: |target - planner| 0 vs target 777, **the cost above the
+  planner is the smaller quantity.**
+- **The policy guess was wrong.** Positions have dozens to hundreds of moves (s2 mixtures
+  413) and the search tries a tenth of them, so a prior could steer. That a flat prior matched
+  the network (E-36, E-41) is not because there is nothing to steer.
+- **The value guess holds, strongly.** The best and the runner-up sibling differ by ~1-2% of
+  the cost (16 on 777); the head is off by ~9x that on new s4-s5 problems (2-3x even on its
+  training data). Only 13% of sibling choices are wider than its error. It picks the best
+  sibling 43% of the time against 35% by chance; the planner finish picks it 77%.
+- **Why: the targets are the planner's own finish.** At the median position the target equals
+  the planner's cost to finish exactly (residual 0, every stage). The search's "cheapest plan
+  seen" is, at most positions, the planner finish it evaluated there. So the value head has been
+  trained to recompute, from features, an exact cost the planner computes for free, and it
+  does so to about +/-15%, where the choice turns on 1-2%. (This also makes "planner picks best"
+  partly circular: the targets are mostly its own numbers.)
+- **What this means:** the cost is arithmetic the environment can do exactly (SPEC rule 1);
+  the network should not be asked to reproduce it. Its useful job is the part the planner
+  gets wrong: where, and by how much, a position can be finished more cheaply than the
+  planner's finish (the residual, zero at the median position). AlphaGo's analogue: the value
+  net was blended with rollouts, not used to recompute them. How often and how large the
+  residual is not measured (the median hides it).
+- **Caveats:** targets are the demos' cheapest-seen plans (noisy for rarely tried siblings);
+  round 3's network only; the share tried counts every position with visit counts, including
+  deep ones with few visits.
 
 ### E-45 (2026-11-01) AlphaZero loop pilot (D-49): own-outcome targets do not lift it
 `scripts/zero_loop.py`, code `c5f797c`, workstation, `outputs/zero/pilot/` and

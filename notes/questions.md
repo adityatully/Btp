@@ -50,7 +50,8 @@ chats. Last updated 2026-10-31.*
 | Q-110 | Why did s2 drop to 47.5% when copying the search's plans? | Persists in round 2 (E-35: 45%); open, no step |
 | Q-119 | Does training on dead ends from its own games teach the value head to judge full-size problems? | No: closed (E-43; on average yes, at the cliff no, 50/99 unfinished) |
 | Q-120 | Does training on the outcomes of its own no-planner play (AlphaZero targets) make the loop climb? | Closed → E-45: no (24/23 → 24/24 below/unfinished, 8 turns) |
-| Q-121 | Is there anything for the network to do: does the search try every move anyway, and are sibling gaps smaller than the head's error? | Resolution check (D-50), plan 4.2 |
+| Q-121 | Is there anything for the network to do: does the search try every move anyway, and are sibling gaps smaller than the head's error? | Closed → E-46: prior has room (85 moves, 10% tried); sibling gap 16 vs head error 142 |
+| Q-122 | Does the exact lower bound carry most of the cost to finish, so the value head can learn only the excess above it? | Bound columns of the resolution check (D-51), plan 4.2 |
 | Q-72 | Self-imitation if cost stalls near the teacher? | 4.3 |
 | Q-73 | Are the results stable across seeds? | 5.1 |
 | Q-78 | Root cause of the long-plan failures (s2, and s3–5 zero-shot) | 3.2, then 3.5 |
@@ -585,8 +586,15 @@ hopeless positions as dearer on average (1,361 vs 1,197) but not the move into o
 causes left: dead ends are a small share of the value data, and the value head reads only the
 global token (Q-111).
 
-**Q-121 Is there anything for the network to do?** · **Open → plan 4.2, resolution check
-(D-50)** (user, 2026-11-01)
+**Q-122 Does the bound carry most of the cost, so the head can learn only the excess?** · **Open
+→ plan 4.2, bound check (D-51)** (user, 2026-11-02)
+E-46: the head cannot rank sibling moves because it predicts the whole cost (error ~142 vs gaps
+~16). If the exact conservation bound accounts for most of that cost, the head predicts only the
+excess and its error should shrink with it.
+
+**Q-121 Is there anything for the network to do?** · **Closed → E-46** (user, 2026-11-01;
+resolution check D-50: the prior has room, median 85 candidates, 10% tried; the head cannot
+resolve siblings, gap 16 vs error 142; targets equal the planner's finish at the median position)
 After E-45 every change of teacher has failed. Two guesses independent of the teacher: positions
 have so few moves that the search tries them all (a prior cannot steer), and sibling moves
 differ by less than the value head's error (it cannot rank them whatever it is taught).
