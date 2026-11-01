@@ -615,6 +615,29 @@ Format: date · decision · alternatives considered · why · evidence.
   finishes. Unfinished falls without the cost gain → it learns to finish, not to economise.
   Neither → own-outcome targets do not lift it at this scale either; stop, report.
 
+- **D-50 (2026-11-01) Resolution check: is there anything for the network to do?** (user,
+  after E-45: "what are we missing?"). Five attempts changed what the network is taught
+  (planner copy, dead-end labels, own outcomes) and none helped, though it fits what it is shown
+  (E-44). Two guesses that do not depend on the teacher, measured on the searches' own data
+  before anything is built on them. **Policy:** in Go a position has ~250 moves and a search
+  without a prior drowns; if ours have only a few, 256 simulations try them all and no prior
+  can steer (a flat prior matched the network, E-36, E-41). **Value:** in Go one move shifts the
+  win chance a lot; our head predicts the whole cost to finish, and sibling moves may differ by
+  a few percent of it, less than the head's error (16% on new s4-s5, E-44); then no target
+  could make it rank them. If so, predict only what varies (cost above the planner's finish:
+  AlphaGo blended its value net with rollouts rather than replacing them). `scripts/
+  resolution_check.py`, on the rounds 2 + 3 demos and round 3's network, split as the fit
+  check. Per stage: candidates per position and the share tried; per sibling group (children
+  of one position, compared on whole-plan cost = spent + remaining, as the search compares
+  them): best vs runner-up gap, the head's error, how often the head and the planner finish
+  pick the best sibling against chance, and |target - planner finish|. (E-44's pair order
+  compared remaining cost only, without the move's own cost, and grouped by depth rather than
+  parent; this measure does not.) **Reading, fixed in advance, on held-out s4-s5:** policy:
+  median candidates <= 8 and median share tried >= 0.8 → the search tries nearly every move,
+  a prior has little to steer; value: median runner-up gap < median head error → the head
+  cannot resolve the choice that matters; residual: median |target - planner| < half the
+  median target → cost above the planner is the smaller quantity to learn.
+
 ---
 
 ## 4. Experiments and results
@@ -1395,6 +1418,54 @@ MRCM's intermediates on val_s2: 4 of 28 covered (chain D4), 5 of 28 (premix D3).
   (an exact lower bound on mixes left, or a constructive method's recipes, which is a planner
   again). (3) Built as SPEC 0.28 `hint_source: problem` (depth-4 chain in the recipe columns)
   for a copy-test comparison on stages 1–2 against the planner's hints.
+
+### E-45 (2026-11-01) AlphaZero loop pilot (D-49): own-outcome targets do not lift it
+`scripts/zero_loop.py`, code `c5f797c`, workstation, `outputs/zero/pilot/` and
+`outputs/zero/pilot.log` there (`turns=8 workers=36 device=cuda threads=16`, start = round 3's
+network). No-planner search, 256 simulations, on A (23), B (13), C3 (30); below = cheaper than
+the best planner; ratio = to the planner, where finished.
+
+| turn | A below / unf / ratio | B below / unf / ratio | C3 below / unf / ratio | **all below / unf** | all ratio |
+|---|---|---|---|---|---|
+| 0 | 17 / 0 / 0.816 | 0 / 10 / 1.000 | 7 / 13 / 0.952 | **24 / 23** | 0.882 |
+| 1 | 16 / 1 / 0.849 | 2 / 8 / 0.868 | 9 / 9 / 0.948 | 27 / 18 | 0.894 |
+| 2 | 14 / 1 / 0.849 | 2 / 8 / 1.032 | 7 / 11 / 1.011 | 23 / 20 | 0.936 |
+| 3 | 15 / 1 / 0.849 | 2 / 9 / 0.827 | 7 / 11 / 1.024 | 24 / 21 | 0.921 |
+| 4 | 14 / 1 / 0.870 | 1 / 10 / 0.891 | 9 / 11 / 0.901 | 24 / 22 | 0.885 |
+| 5 | 15 / 1 / 0.867 | 3 / 8 / 0.799 | 9 / 10 / 0.932 | 27 / 19 | 0.887 |
+| 6 | 14 / 1 / 0.869 | 0 / 11 / 1.000 | 6 / 15 / 0.940 | 20 / 27 | 0.903 |
+| 7 | 15 / 1 / 0.847 | 1 / 10 / 0.945 | 8 / 12 / 0.972 | 24 / 23 | 0.906 |
+| 8 | 14 / 2 / 0.874 | 0 / 11 / 1.098 | 10 / 11 / 0.942 | **24 / 24** | 0.916 |
+
+- **Reading (D-49, fixed in advance): does not climb.** Turn 8 vs turn 0: 24 → 24 below, 23 →
+  24 unfinished (bar: ≥ 29 below, ≤ 23 unfinished). By D-49 the loop stops and is reported.
+- **No trend, only noise.** Across turns "below" moves 20-27 and "unfinished" 18-27 with no
+  direction; turn 1 (27 / 18) is the best and is not held. A turn-to-turn swing of ±3-4 is
+  about the bar's size, so a gain of a few problems could not have shown at 66 problems
+  anyway; there is no sign of one.
+- **Small problems got slightly worse.** A: 17 → 14-16 below, ratio 0.816 → 0.874, one or two
+  unfinished from turn 1 (none at turn 0). Where the no-planner search already worked, its own
+  outcomes pulled it down a little rather than up.
+- **Mixtures (B) still mostly unfinished** (8-11 of 13 every turn): own play does not teach it
+  to finish them.
+- **What this rules out, at this scale:** that the planner-based targets alone (planner-judged
+  visit counts, cheapest-seen values) held the network back. Swapping them for its own
+  outcomes, with nothing else changed, did not help.
+- **Self-play got worse too, and failures took over the value data.** From `pilot.log`:
+
+  | play turn | 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 |
+  |---|---|---|---|---|---|---|---|---|
+  | finished | 420/500 | 410/500 | 395/500 | 398/499 | 399/500 | 399/500 | 391/500 | 391/500 |
+  | positions | 5,418 | 5,603 | 5,700 | 5,528 | 5,593 | 5,713 | 5,658 | 5,580 |
+  | with failure penalty | 1,921 (35%) | 1,872 (33%) | 2,261 (40%) | 2,113 (38%) | 2,279 (41%) | 2,259 (40%) | 2,396 (42%) | 2,448 (44%) |
+
+  Finish rate 84% → 78%. A failed game is long (turn 1: ~24 positions per failed game, ~8 per
+  finished one), so 16-22% failed games give 35-44% of the value targets, all the same
+  penalty number. The share grows each turn: the head is trained more and more on "this is a
+  failure" and less on what a good finish costs. A plausible drift (more failures → more
+  penalty targets → worse judge → more failures), **unverified** as the cause.
+- **What it does not rule out (unverified):** scale (500 games per turn, 4,000 in all, vs
+  millions in AlphaZero); the planner hints still in the input; the warm start from round 3.
 
 ### E-44 (2026-11-01) Fit check (D-48): the network copies what it is shown, also on new s4-s5 problems
 `scripts/fit_check.py`, code `68ef31e`, workstation, `outputs/expert/round4/fit_r{3,4}.{log,json}`

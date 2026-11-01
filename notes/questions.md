@@ -49,7 +49,8 @@ chats. Last updated 2026-10-31.*
 | Q-109 | Does the AlphaZero loop climb (each round's network better than the last)? | Small problems slightly (E-35, E-40); not on s3-s5 (E-40); loop stopped there (D-45 rule) |
 | Q-110 | Why did s2 drop to 47.5% when copying the search's plans? | Persists in round 2 (E-35: 45%); open, no step |
 | Q-119 | Does training on dead ends from its own games teach the value head to judge full-size problems? | No: closed (E-43; on average yes, at the cliff no, 50/99 unfinished) |
-| Q-120 | Does training on the outcomes of its own no-planner play (AlphaZero targets) make the loop climb? | Pilot (D-49), plan 4.2 |
+| Q-120 | Does training on the outcomes of its own no-planner play (AlphaZero targets) make the loop climb? | Closed → E-45: no (24/23 → 24/24 below/unfinished, 8 turns) |
+| Q-121 | Is there anything for the network to do: does the search try every move anyway, and are sibling gaps smaller than the head's error? | Resolution check (D-50), plan 4.2 |
 | Q-72 | Self-imitation if cost stalls near the teacher? | 4.3 |
 | Q-73 | Are the results stable across seeds? | 5.1 |
 | Q-78 | Root cause of the long-plan failures (s2, and s3–5 zero-shot) | 3.2, then 3.5 |
@@ -584,8 +585,15 @@ hopeless positions as dearer on average (1,361 vs 1,197) but not the move into o
 causes left: dead ends are a small share of the value data, and the value head reads only the
 global token (Q-111).
 
-**Q-120 Does training on the outcomes of its own no-planner play make the loop climb?** · **Open
-→ plan 4.2, pilot (D-49)** (user, 2026-11-01)
+**Q-121 Is there anything for the network to do?** · **Open → plan 4.2, resolution check
+(D-50)** (user, 2026-11-01)
+After E-45 every change of teacher has failed. Two guesses independent of the teacher: positions
+have so few moves that the search tries them all (a prior cannot steer), and sibling moves
+differ by less than the value head's error (it cannot rank them whatever it is taught).
+
+**Q-120 Does training on the outcomes of its own no-planner play make the loop climb?** · **Closed
+→ E-45: no, at this scale** (user, 2026-11-01; pilot D-49: turn 8 vs 0 on A+B+C3, 24 → 24 below,
+23 → 24 unfinished; small problems slightly worse)
 E-44: the network copies what it is shown, and it was shown the planner's view. The pilot trains
 it, AlphaZero-style, on visit counts and own outcomes at the positions its no-planner search
 played, small problems and s1-s3, and checks whether that search improves turn over turn.
