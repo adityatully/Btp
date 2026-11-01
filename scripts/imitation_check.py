@@ -33,7 +33,7 @@ from __future__ import annotations
 import json
 import sys
 import time
-from collections.abc import Sequence
+from collections.abc import Callable, Sequence
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
@@ -106,15 +106,22 @@ class SearchTargets:
     pi: list[npt.NDArray[np.float64] | None] = field(default_factory=list)
     value: list[float] = field(default_factory=list)
     depth: list[int] = field(default_factory=list)  # moves from the start
+    parent: list[int] = field(default_factory=list)  # nearest recorded ancestor (-1 at the top)
 
     def __len__(self) -> int:
         return len(self.obs)
 
     def add_problem(
-        self, env: Any, inst: Instance, samples: Sequence[Any], reward_scale: float
+        self,
+        env: Any,
+        inst: Instance,
+        samples: Sequence[Any],
+        reward_scale: float,
+        on_position: Callable[[Any], None] | None = None,
     ) -> None:
         """Replay each sample's moves from the start, along a prefix tree so every move is
-        played once; the env's candidate order is deterministic, so the visit counts line up."""
+        played once; the env's candidate order is deterministic, so the visit counts line up.
+        `on_position(env)` sees the env at each recorded position."""
         trie: dict[Any, Any] = {}
         for actions, visits, remaining in samples:
             node = trie
@@ -122,9 +129,10 @@ class SearchTargets:
                 node = node.setdefault(a, {})
             node[None] = (visits, remaining)
         obs, _ = env.reset(options={"instance": inst})
-        stack = [(trie, env.snapshot(), obs, 0)]
+        stack = [(trie, env.snapshot(), obs, 0, -1)]
         while stack:
-            node, snap, obs, depth = stack.pop()
+            node, snap, obs, depth, parent = stack.pop()
+            here = parent
             if None in node:
                 visits, remaining = node[None]
                 if visits is not None and len(visits) != len(snap.legal):
@@ -134,12 +142,17 @@ class SearchTargets:
                 self.pi.append(None if v is None else v / v.sum())
                 self.value.append(-remaining * reward_scale)
                 self.depth.append(depth)
+                self.parent.append(parent)
+                here = len(self.obs) - 1
+                if on_position is not None:
+                    env.restore(snap)
+                    on_position(env)
             for action, child in node.items():
                 if action is None:
                     continue
                 env.restore(snap)
                 nxt, _, _, _, _ = env.step(env.legal.index(action))
-                stack.append((child, env.snapshot(), nxt, depth + 1))
+                stack.append((child, env.snapshot(), nxt, depth + 1, here))
 
     def minibatch(
         self, index: npt.NDArray[np.int64]
