@@ -24,6 +24,15 @@ Reading, fixed in advance, on the held-out s4-s5 problems (new to the network, a
 - residual: median |target - planner finish| < half the median target → "cost above the
   planner" is a smaller quantity than the whole cost.
 
+Bound columns (D-51, after E-46): the conservation lower bound on the cost to finish
+(`fluid_bound_heuristic`, exact) at each position; `excess` = target - bound, what a head
+predicting "cost above the bound" would learn. `projected` = the head's present relative error
+(head error / median target) times the median excess: a crude guess at its error on the excess.
+`beats_planner` = share of positions whose target is below the planner finish, `beat_by` the
+median margin there. Reading, fixed in advance, held-out s4-s5: median excess < half the median
+target → the bound carries most of the cost; projected < runner-up gap → at its present relative
+error the head could resolve sibling moves on the excess (a projection, not a measurement).
+
     uv run python scripts/resolution_check.py agent=outputs/expert/round3/copy/imitation.pt \\
         demos=outputs/expert/round2/demos.jsonl,outputs/expert/round3/demos.jsonl workers=36
 
@@ -48,6 +57,7 @@ from meda.agents.ppo.policy import PPOAgent
 from meda.analysis.evaluate import build_env
 from meda.core.problem import Instance
 from meda.solvers.baselines.share import finish_from
+from meda.solvers.exact_search import fluid_bound_heuristic
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "scripts"))
@@ -60,23 +70,28 @@ DEFAULTS: dict[str, Any] = {**fc.DEFAULTS, "per_stage": 50}
 FEW_MOVES, MOST_TRIED, SMALLER = 8, 0.8, 0.5
 
 
-def replay(task: tuple[str, str, float]) -> tuple[ic.SearchTargets, list[float], list[float]]:
-    """The positions, and at each the cost spent so far and the planner's cost to finish (nan
-    where it does not finish within the step limit)."""
+def replay(
+    task: tuple[str, str, float],
+) -> tuple[ic.SearchTargets, list[float], list[float], list[float]]:
+    """The positions, and at each the cost spent so far, the planner's cost to finish (nan
+    where it does not finish within the step limit) and the lower bound on the cost to finish."""
     inst_json, samples, reward_scale = task
     inst = Instance.from_json(inst_json)
     store = ic.SearchTargets()
     spent: list[float] = []
     planner: list[float] = []
+    bound: list[float] = []
+    lower = fluid_bound_heuristic(sc.WEIGHTS)
 
     def at(env: Any) -> None:
         spent.append(float(env.snapshot().plan_cost))
         found = finish_from(env.state, inst, sc.WEIGHTS)
         ok = found is not None and env.state.step + len(found[0]) <= inst.step_limit
         planner.append(float(found[1]) if ok and found is not None else np.nan)
+        bound.append(float(lower(env.state, inst)))
 
     store.add_problem(build_env(fc._cfg(), [inst]), inst, ei._unpack(samples), reward_scale, at)
-    return store, spent, planner
+    return store, spent, planner, bound
 
 
 def _median(x: list[float] | npt.NDArray[Any]) -> float | None:
@@ -85,8 +100,8 @@ def _median(x: list[float] | npt.NDArray[Any]) -> float | None:
 
 def metrics(rows: dict[str, npt.NDArray[Any]]) -> dict[str, Any]:
     """`rows`: per position problem, parent (index in the rows, -1 at the top), n (candidates),
-    tried (share with visits; nan without visit counts), spent, target, pred and planner (costs
-    to finish, nan where none)."""
+    tried (share with visits; nan without visit counts), spent, target, pred, planner and bound
+    (costs to finish, nan where none)."""
     has_pi = ~np.isnan(rows["tried"])
     has_t = ~np.isnan(rows["target"])
     err = np.abs(rows["pred"] - rows["target"])[has_t]
@@ -94,7 +109,7 @@ def metrics(rows: dict[str, npt.NDArray[Any]]) -> dict[str, Any]:
     groups: dict[int, list[int]] = defaultdict(list)
     for i in np.flatnonzero(has_t & (rows["parent"] >= 0)):
         groups[int(rows["parent"][i])].append(int(i))
-    gaps, rel, head_best, planner_best, chance = [], [], [], [], []
+    gaps, rel, head_best, planner_best, bound_best, chance = [], [], [], [], [], []
     for kids in (g for g in groups.values() if len(g) >= 2):
         k = np.array(kids)
         total = rows["spent"][k] + rows["target"][k]
@@ -106,8 +121,13 @@ def metrics(rows: dict[str, npt.NDArray[Any]]) -> dict[str, Any]:
         plan = rows["spent"][k] + rows["planner"][k]
         if not np.isnan(plan).all():
             planner_best.append(bool(best[np.nanargmin(plan)]))
+        bound_best.append(bool(best[np.argmin(rows["spent"][k] + rows["bound"][k])]))
         chance.append(best.mean())
     head_err = _median(err)
+    target = _median(rows["target"][has_t])
+    excess = _median((rows["target"] - rows["bound"])[has_t])
+    pos = has_t & (rows["target"] > 0)
+    beaten = both & (rows["target"] < rows["planner"] - 1e-9)
     return {
         "positions": len(has_t),
         "with_visits": int(has_pi.sum()),
@@ -125,9 +145,18 @@ def metrics(rows: dict[str, npt.NDArray[Any]]) -> dict[str, Any]:
         "head_best": float(np.mean(head_best)) if head_best else None,
         "planner_best": float(np.mean(planner_best)) if planner_best else None,
         "chance_best": float(np.mean(chance)) if chance else None,
-        "target": _median(rows["target"][has_t]),
+        "target": target,
         "residual": _median(np.abs(rows["target"] - rows["planner"])[both]),
         "planner_missing": float(np.isnan(rows["planner"]).mean()) if len(has_t) else None,
+        "beats_planner": float(beaten.sum() / both.sum()) if both.any() else None,
+        "beat_by": _median((rows["planner"] - rows["target"])[beaten]),
+        "bound": _median(rows["bound"][has_t]),
+        "excess": excess,
+        "excess_rel": _median(((rows["target"] - rows["bound"]) / rows["target"])[pos]),
+        "bound_best": float(np.mean(bound_best)) if bound_best else None,
+        "projected": head_err / target * excess
+        if head_err is not None and target and excess is not None
+        else None,
     }
 
 
@@ -168,6 +197,19 @@ def reading(row: dict[str, Any]) -> list[str]:
                 else ": not smaller"
             )
         )
+    if row.get("excess") is not None and row["target"]:
+        carries = row["excess"] < SMALLER * row["target"]
+        out.append(
+            f"bound: excess {row['excess']:.1f} vs target {row['target']:.1f}"
+            + (": the bound carries most of the cost" if carries else ": the bound is loose")
+        )
+    if row.get("projected") is not None and row["runner_gap"] is not None:
+        fine = row["projected"] < row["runner_gap"]
+        out.append(
+            f"projection: head error on the excess ~{row['projected']:.1f} vs runner-up gap "
+            f"{row['runner_gap']:.1f}"
+            + (": could resolve sibling moves" if fine else ": still too coarse")
+        )
     return out
 
 
@@ -192,15 +234,20 @@ def main(argv: list[str]) -> None:
     chosen = fc.split(lines, args["per_stage"])
     cells = fc.stage_names()
     tasks = [(lines[i]["instance"], lines[i]["samples"], scale) for _, i in chosen]
+    replayed = []
     with Pool(args["workers"]) as pool:
-        replayed = pool.map(replay, tasks, chunksize=1)
+        for got in pool.imap(replay, tasks, chunksize=1):
+            replayed.append(got)
+            if len(replayed) % 25 == 0:
+                done = len(replayed)
+                print(f"{done}/{len(tasks)}  {time.perf_counter() - started:.0f}s", flush=True)
     print(f"replayed {len(replayed)} problems in {time.perf_counter() - started:.0f}s", flush=True)
 
     device = torch.device(args["device"])
     net = PPOAgent.load(args["agent"], device).net
     net.eval()
     groups: dict[tuple[str, str], dict[str, list[Any]]] = defaultdict(lambda: defaultdict(list))
-    for (part, i), (store, spent, planner) in zip(chosen, replayed, strict=True):
+    for (part, i), (store, spent, planner, bound) in zip(chosen, replayed, strict=True):
         if not len(store):
             continue
         _, value = fc.predict(net, store, device, args["max_chunk_rows"])
@@ -215,6 +262,7 @@ def main(argv: list[str]) -> None:
             g["target"].append(-np.array(store.value, dtype=np.float64) / scale)
             g["pred"].append(np.maximum(0.0, -value / scale))
             g["planner"].append(np.array(planner))
+            g["bound"].append(np.array(bound))
             g["problem"].append(np.full(len(store), i))
     table = {
         f"{part}/{key}": metrics({k: np.concatenate(v) for k, v in g.items()})
@@ -224,6 +272,7 @@ def main(argv: list[str]) -> None:
         ["positions", "with_visits", "candidates", "candidates_p90", "tried", "all_tried"],
         ["groups", "runner_gap", "runner_gap_rel", "head_err", "resolvable"],
         ["head_best", "planner_best", "chance_best", "target", "residual", "planner_missing"],
+        ["beats_planner", "beat_by", "bound", "excess", "excess_rel", "bound_best", "projected"],
     ):
         print("| problems | " + " | ".join(cols) + " |")
         print("|---" * (len(cols) + 1) + "|")

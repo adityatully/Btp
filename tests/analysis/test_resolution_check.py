@@ -47,10 +47,10 @@ def demos(tmp_path_factory: pytest.TempPathFactory) -> Path:
     return path
 
 
-def test_replay_records_parents_spent_and_planner(demos: Path) -> None:
+def test_replay_records_parents_spent_planner_and_bound(demos: Path) -> None:
     rec = json.loads(demos.read_text().split("\n")[0])
-    store, spent, planner = RC.replay((rec["instance"], rec["samples"], 0.01))
-    assert len(store) == len(spent) == len(planner) == len(store.parent)
+    store, spent, planner, bound = RC.replay((rec["instance"], rec["samples"], 0.01))
+    assert len(store) == len(spent) == len(planner) == len(bound) == len(store.parent)
     assert store.parent[0] == -1 and spent[0] == 0.0
     for i, p in enumerate(store.parent):
         assert p < i and (p == -1 or store.depth[p] < store.depth[i])
@@ -59,6 +59,9 @@ def test_replay_records_parents_spent_and_planner(demos: Path) -> None:
     assert not np.isnan(planner[0])
     # at the start the planner finish is the whole sharing-pass plan
     assert planner[0] == pytest.approx(rec["planner_cost"])
+    # a lower bound: never above any way to finish
+    for b, p, v in zip(bound, planner, store.value, strict=True):
+        assert b >= 0 and b <= -v / 0.01 + 1e-9 and (np.isnan(p) or b <= p + 1e-9)
 
 
 def rows(**kw: Any) -> dict[str, np.ndarray]:
@@ -71,6 +74,7 @@ def rows(**kw: Any) -> dict[str, np.ndarray]:
         "spent": np.zeros(n),
         "pred": np.zeros(n),
         "planner": np.full(n, np.nan),
+        "bound": np.zeros(n),
     }
     return {k: np.asarray(v, dtype=np.float64) for k, v in (base | kw).items()}
 
@@ -92,10 +96,32 @@ def test_siblings_compare_whole_plans() -> None:
     assert got["candidates"] == 3 and got["tried"] == 1.0
 
 
+def test_bound_and_planner_columns() -> None:
+    got = RC.metrics(
+        rows(
+            target=[20.0, 10.0, 12.0, 30.0],
+            spent=[0.0, 7.0, 2.0, 0.0],
+            pred=[20.0, 10.0, 13.0, 31.0],
+            planner=[20.0, 11.0, 12.0, 40.0],
+            bound=[16.0, 9.0, 8.0, 20.0],
+        )
+    )
+    assert got["beats_planner"] == 0.5 and got["beat_by"] == pytest.approx(5.5)
+    assert got["excess"] == pytest.approx(4.0)  # 4, 1, 4, 10
+    assert got["bound_best"] == 1.0  # spent + bound: 16, 10, 20
+    # head error median 0.5 (0, 0, 1, 1) over median target 16, times excess 4
+    assert got["projected"] == pytest.approx(0.125)
+
+
 def test_reading_follows_the_rule_fixed_in_advance() -> None:
     row = {"candidates": 5.0, "tried": 0.9, "runner_gap": 2.0, "head_err": 10.0}
     got = RC.reading(row | {"residual": 10.0, "target": 100.0})
     assert "little to steer" in got[0] and "cannot resolve" in got[1] and "smaller" in got[2]
+    assert len(got) == 3  # no bound columns: no bound lines
+    got = RC.reading(row | {"residual": 10.0, "target": 100.0, "excess": 20.0, "projected": 1.0})
+    assert "carries most" in got[3] and "could resolve" in got[4]
+    got = RC.reading(row | {"residual": 10.0, "target": 100.0, "excess": 60.0, "projected": 5.0})
+    assert "loose" in got[3] and "too coarse" in got[4]
     got = RC.reading(
         row | {"candidates": 20.0, "runner_gap": 20.0, "residual": 60.0, "target": 100.0}
     )
