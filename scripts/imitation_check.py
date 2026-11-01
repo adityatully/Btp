@@ -105,6 +105,7 @@ class SearchTargets:
     obs: list[dict[str, Any]] = field(default_factory=list)
     pi: list[npt.NDArray[np.float64] | None] = field(default_factory=list)
     value: list[float] = field(default_factory=list)
+    depth: list[int] = field(default_factory=list)  # moves from the start
 
     def __len__(self) -> int:
         return len(self.obs)
@@ -121,9 +122,9 @@ class SearchTargets:
                 node = node.setdefault(a, {})
             node[None] = (visits, remaining)
         obs, _ = env.reset(options={"instance": inst})
-        stack = [(trie, env.snapshot(), obs)]
+        stack = [(trie, env.snapshot(), obs, 0)]
         while stack:
-            node, snap, obs = stack.pop()
+            node, snap, obs, depth = stack.pop()
             if None in node:
                 visits, remaining = node[None]
                 if visits is not None and len(visits) != len(snap.legal):
@@ -132,12 +133,13 @@ class SearchTargets:
                 v = np.asarray(visits, dtype=np.float64) if visits is not None else None
                 self.pi.append(None if v is None else v / v.sum())
                 self.value.append(-remaining * reward_scale)
+                self.depth.append(depth)
             for action, child in node.items():
                 if action is None:
                     continue
                 env.restore(snap)
                 nxt, _, _, _, _ = env.step(env.legal.index(action))
-                stack.append((child, env.snapshot(), nxt))
+                stack.append((child, env.snapshot(), nxt, depth + 1))
 
     def minibatch(
         self, index: npt.NDArray[np.int64]
