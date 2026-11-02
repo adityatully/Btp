@@ -70,6 +70,14 @@ DEFAULTS: dict[str, Any] = {**fc.DEFAULTS, "per_stage": 50}
 FEW_MOVES, MOST_TRIED, SMALLER = 8, 0.8, 0.5
 
 
+def planner_finish(env: Any, inst: Instance) -> float:
+    """The planner's cost to finish from the env's state (nan if it does not finish within the
+    step limit), as the planner-leaf search computes it."""
+    found = finish_from(env.state, inst, sc.WEIGHTS)
+    ok = found is not None and env.state.step + len(found[0]) <= inst.step_limit
+    return float(found[1]) if ok and found is not None else np.nan
+
+
 def replay(
     task: tuple[str, str, float],
 ) -> tuple[ic.SearchTargets, list[float], list[float], list[float]]:
@@ -85,9 +93,7 @@ def replay(
 
     def at(env: Any) -> None:
         spent.append(float(env.snapshot().plan_cost))
-        found = finish_from(env.state, inst, sc.WEIGHTS)
-        ok = found is not None and env.state.step + len(found[0]) <= inst.step_limit
-        planner.append(float(found[1]) if ok and found is not None else np.nan)
+        planner.append(planner_finish(env, inst))
         bound.append(float(lower(env.state, inst)))
 
     store.add_problem(build_env(fc._cfg(), [inst]), inst, ei._unpack(samples), reward_scale, at)
