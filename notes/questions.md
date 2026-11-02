@@ -52,7 +52,8 @@ chats. Last updated 2026-10-31.*
 | Q-120 | Does training on the outcomes of its own no-planner play (AlphaZero targets) make the loop climb? | Closed → E-45: no (24/23 → 24/24 below/unfinished, 8 turns) |
 | Q-121 | Is there anything for the network to do: does the search try every move anyway, and are sibling gaps smaller than the head's error? | Closed → E-46: prior has room (85 moves, 10% tried); sibling gap 16 vs head error 142 |
 | Q-122 | Does the exact lower bound carry most of the cost to finish, so the value head can learn only the excess above it? | Closed → E-47: about half (excess 340 of 777); projected error 62 vs gap 16, still too coarse; head ranks no better than the bound |
-| Q-123 | Can the network learn where the planner's finish can be beaten (gain head), well enough to help the search? | Gain head steps (D-52), plan 4.2 |
+| Q-123 | Can the network learn where the planner's finish can be beaten (gain head), well enough to help the search? | Closed → E-48: no; weak signal (AUC 0.66), picks best sibling 0.74 vs planner 0.75 |
+| Q-124 | Is the value head held back by how much data it sees: with clean planner-finish labels, does its agreement with the planner's sibling choice rise from 10k to 300k positions? | Data scaling check (D-53), plan 4.2 |
 | Q-72 | Self-imitation if cost stalls near the teacher? | 4.3 |
 | Q-73 | Are the results stable across seeds? | 5.1 |
 | Q-78 | Root cause of the long-plan failures (s2, and s3–5 zero-shot) | 3.2, then 3.5 |
@@ -587,8 +588,16 @@ hopeless positions as dearer on average (1,361 vs 1,197) but not the move into o
 causes left: dead ends are a small share of the value data, and the value head reads only the
 global token (Q-111).
 
-**Q-123 Can the network learn where the planner's finish can be beaten?** · **Open → plan 4.2,
-gain head (D-52)** (user, 2026-11-02)
+**Q-124 Is the value head held back by how much data it sees?** · **Open → plan 4.2, data
+scaling check (D-53)** (user, 2026-11-02)
+After E-48 five value targets have failed on s4-s5, all noisy and from ~1,600 problems. With
+clean labels (the planner finish) on 10k-300k positions, does the head's agreement with the
+planner's sibling choice climb? Rises >= 0.05 per tripling → build bulk labels; < 0.02 overall →
+not data.
+
+**Q-123 Can the network learn where the planner's finish can be beaten?** · **Closed → E-48:
+no** (user, 2026-11-02; held-out s4-s5: AUC 0.66 < 0.7, gain picks the best sibling 0.74 vs the
+planner's 0.75; predicted gain 17 where the true gain is 65, 10 where there is none)
 E-47: at 24% of s4-s5 positions the search finds a finish cheaper than the planner's, by ~65 (4x
 the sibling gap). A head predicting that gain, on top of the planner finish, asks for a smaller
 and sparser number than the whole cost. Bars in D-52: sibling picks 0.77 → >= 0.82, AUC >= 0.7,

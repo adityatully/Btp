@@ -681,6 +681,28 @@ Format: date · decision · alternatives considered · why · evidence.
   the label file, then `part=check`); the label file keeps the held-out problems last so the
   copy step's held-out 5% is a subset of them, and the check runs on exactly those.
 
+- **D-53 (2026-11-02) Data scaling check: is the value head held back by how much it sees?**
+  (user, after E-48: "let us experiment and find out" whether a value head can replace the
+  planner on s3-s5, or the claim becomes search over a planner with learning where it is
+  weak). Every value target so far was noisy (what one search happened to find) and came from
+  ~1,600 problems; AlphaZero and AlphaTensor trained on millions of clean labels. Before
+  building bulk label generation (AlphaTensor's backward-generated problems, which give the
+  cost of a known plan, not an optimum), test whether more data helps at all. **Labels:** the
+  planner's own cost to finish at each position (clean, no search). **Positions:** round 3's
+  network plays fresh s4-s5 problems by sampling (a line stops at twice the planner's plan
+  length); at 8 random positions on the line, the position, the played move and 5 other random
+  legal moves are labelled, so siblings form groups (~50 positions per problem, so 300k
+  positions are ~6,000 problems). **Train:**
+  the value head alone (`imitation_check.py arm=visits value_coef=1`, no visit counts), from
+  round 3's network, on nested sets of 10k, 30k, 100k and 300k positions (epochs 40, 15, 6, 3,
+  so the small sets are trained to fit). **Measure** on 60 separate held-out problems: how
+  often the head's choice among siblings (spent + predicted finish) is the planner's. This is
+  the least a replacement must do. **Reading, fixed in advance:** agreement rises >= 0.05 at
+  every tripling → data is the bottleneck: build bulk labels; rises < 0.02 from 10k to 300k →
+  not data: stop trying to replace the planner on s3-s5 and change the claim; otherwise data
+  helps slowly (decide then). Bound and chance picks are reported alongside. *Built
+  2026-11-02:* `scripts/scaling_check.py` (`part=label`, the four copy runs, `part=check`).
+
 ---
 
 ## 4. Experiments and results
@@ -1461,6 +1483,40 @@ MRCM's intermediates on val_s2: 4 of 28 covered (chain D4), 5 of 28 (premix D3).
   (an exact lower bound on mixes left, or a constructive method's recipes, which is a planner
   again). (3) Built as SPEC 0.28 `hint_source: problem` (depth-4 chain in the recipe columns)
   for a copy-test comparison on stages 1–2 against the planner's hints.
+
+### E-48 (2026-11-02) Gain head (D-52): weak signal, does not help pick moves
+`scripts/gain_check.py` + `scripts/imitation_check.py`, code `d5e239b`, workstation,
+`outputs/gain/{labels.jsonl,copy/,check.json,run.log}` there. Labels: round 2 + 3 demos, up to
+300 training problems per stage + all held-out, 1,597 problems, 93,185 positions with a gain
+target, 17,891 above 0 (19%), 3,469 s. Copy: 10 epochs from round 3's network, value target =
+-gain x 0.01; last epoch held-out visit agreement 0.75, value error 26.6 cost units (25-31 from
+epoch 4 on). Check: the 79 held-out problems, 646 s replay. pred = predicted gain (median);
+planner / gain picks best: share of sibling groups where spent + planner (- predicted gain)
+picks the cheapest sibling.
+
+| held-out | positions | with gain | gain | pred if gain | pred if none | AUC | groups | planner picks best | gain picks best | chance |
+|---|---|---|---|---|---|---|---|---|---|---|
+| s1 | 296 | 0.10 | 65 | 9.5 | 3.1 | 0.79 | 39 | 0.85 | 0.74 | 0.27 |
+| s2 | 273 | 0.10 | 8.5 | 1.8 | 3.8 | 0.37 | 53 | 0.87 | 0.87 | 0.41 |
+| s3 | 701 | 0.22 | 2 | 7.5 | 6.8 | 0.57 | 118 | 0.84 | 0.76 | 0.35 |
+| **s4-s5** | **4,704** | **0.23** | **65** | **17.3** | **9.6** | **0.66** | **696** | **0.75** | **0.74** | **0.35** |
+| s4 | 2,965 | 0.25 | 70 | 23.2 | 13.7 | 0.67 | 435 | 0.74 | 0.75 | 0.35 |
+| s5 | 1,739 | 0.20 | 27 | 8.2 | 4.7 | 0.64 | 261 | 0.76 | 0.72 | 0.34 |
+
+- **Reading (D-52, fixed in advance), held-out s4-s5: fails both bars.** Gain picks the best
+  sibling 0.74 vs the planner's 0.75 (needs +0.05); AUC 0.66 < 0.7. Step 4 (search on C) is not
+  run.
+- **There is a signal, but it is weak and shrunk.** AUC 0.66 on s4-s5 (0.79 on s1) is above
+  chance: predictions are higher where a gain exists (17 vs 10). But where a gain exists the
+  head predicts 17 against a true 65, and it predicts ~10 where there is none. Subtracting it
+  moves siblings by noise about as often as it moves them right, so it does not beat the planner.
+- **On mixtures (s2) it is wrong-signed** (AUC 0.37), as the value head was in E-46/E-47.
+- **The planner alone picks the best sibling at 75% of s4-s5 groups.** Whatever ranks siblings
+  has to beat that, on a quarter of the groups.
+- **Caveat: the label depends on how much search the position got.** A gain is "this search
+  found a finish cheaper than the planner's from here", so positions the search visited more
+  have more chance of a gain, whatever the position is like. Part of what the head is asked to
+  learn is how hard the search looked, which is not in its input.
 
 ### E-47 (2026-11-02) Bound check (D-51): the bound covers about half the cost; the head ranks no better than the bound
 `scripts/resolution_check.py`, code `d95a913`, workstation, `outputs/expert/round4/bound.{log,json}`
