@@ -656,6 +656,31 @@ Format: date · decision · alternatives considered · why · evidence.
   little); projected error < runner-up gap → at its present relative error the head could
   resolve sibling moves (a projection, not a measurement; the build decides).
 
+- **D-52 (2026-11-02) Gain head: learn where the planner's finish can be beaten** (user, after
+  E-47). E-47: a head on the whole cost, or on the cost above the bound, is too coarse to rank
+  sibling moves (error ~142, projected ~62, gap ~16) and the trained head ranks no better than
+  the bound; but at 24% of s4-s5 positions the search found a finish cheaper than the planner's,
+  by a median 65. **Change: the value head's target.** At each position, gain = planner finish
+  - the cheapest finish the search saw from there (>= 0; zero at about three positions in four).
+  Same network, same policy target (visit counts); no new head. In the search a position is
+  worth spent + planner finish - predicted gain; the planner's own finish is still offered as a
+  plan, so the search can never return worse than with the planner alone. The planner stays at
+  every leaf: the method is a hybrid (the network corrects the planner), not planner-free.
+  **Steps, each with its bar, the next only if it passes:** (1) labels: replay up to 300
+  problems per stage of the rounds 2 + 3 demos, planner finish at every position, store gains
+  (~1.5 h on coe9 at E-46's rate). (2) copy: from round 3's network, value target = gain,
+  `arm=visits`, GPU, held-out = last 5% as before. (3) offline check on held-out s4-s5, the
+  sibling-pick test of E-46: planner - predicted gain must pick the best sibling >= 5 points
+  more often than the planner alone (0.77 → >= 0.82), and the head must rank positions with a
+  gain above those without (AUC >= 0.7). (4) only then the search on set C at equal time vs
+  today's planner-finish search (84 of 99 below the planner, E-36): more below, or a lower cost
+  ratio on the same problems. Caveats: a gain is only what the search happened to find (a lower
+  estimate of the true one); targets are cheapest-seen, so "planner picks best" is partly
+  circular (E-46). *Built 2026-11-02:* `scripts/gain_check.py` (`part=label`, then the
+  copy step `imitation_check.py arm=visits value_coef=0.5 epochs=10` from round 3's network on
+  the label file, then `part=check`); the label file keeps the held-out problems last so the
+  copy step's held-out 5% is a subset of them, and the check runs on exactly those.
+
 ---
 
 ## 4. Experiments and results
@@ -1436,6 +1461,45 @@ MRCM's intermediates on val_s2: 4 of 28 covered (chain D4), 5 of 28 (premix D3).
   (an exact lower bound on mixes left, or a constructive method's recipes, which is a planner
   again). (3) Built as SPEC 0.28 `hint_source: problem` (depth-4 chain in the recipe columns)
   for a copy-test comparison on stages 1–2 against the planner's hints.
+
+### E-47 (2026-11-02) Bound check (D-51): the bound covers about half the cost; the head ranks no better than the bound
+`scripts/resolution_check.py`, code `d95a913`, workstation, `outputs/expert/round4/bound.{log,json}`
+there (same data and network as E-46, 1,355 s). Excess = target - bound; projected = head
+error / median target x median excess; beats planner = share of positions whose target is
+below the planner finish, beat by = median margin there. Picks-best columns: share of sibling
+groups where that measure picks the cheapest sibling.
+
+| | target | bound | excess (median / rel) | projected | runner-up gap | beats planner / by | head picks best | bound picks best | planner picks best | chance |
+|---|---|---|---|---|---|---|---|---|---|---|
+| train small | 136 | 130 | 3 / 0.02 | 0.5 | 1 | 0.17 / 3 | 0.59 | 0.64 | 0.91 | 0.45 |
+| held s1 | 76 | 6 | 71 / 0.84 | 34 | 2 | 0.10 / 65 | 0.47 | 0.43 | 0.87 | 0.28 |
+| held s2 | 206 | 40 | 138 / 0.78 | 47 | 8 | 0.10 / 12 | 0.35 | 0.65 | 0.88 | 0.42 |
+| held s3 | 246 | 108 | 70 / 0.28 | 33 | 3.5 | 0.24 / 10 | 0.42 | 0.54 | 0.84 | 0.35 |
+| **held s4-s5** | **777** | **339** | **340 / 0.46** | **62** | **16** | **0.24 / 65** | **0.43** | **0.46** | **0.77** | **0.35** |
+| train s4-s5 | 668 | 324 | 195 / 0.43 | 16 | 7 | 0.25 / 66 | 0.51 | 0.55 | 0.79 | 0.39 |
+
+- **Reading (D-51, fixed in advance), held-out s4-s5: the bound carries most of the cost**
+  (excess 340 < half of 777, just), **but the projected error on the excess is still too
+  coarse** (62 vs runner-up gap 16). On this projection a head on the excess above the bound
+  would still not rank sibling moves on full-size problems.
+- **The trained head ranks no better than the free bound.** Picking the cheapest sibling: head
+  0.43, bound 0.46, chance 0.35 on held-out s4-s5; on mixtures (s2) head 0.35 (below chance),
+  bound 0.65. On no stage does the head beat the bound by more than noise; it learned nothing
+  a two-line conservation formula does not already give.
+- **The bound explains where the no-planner search works.** On the small problems the bound is
+  within 2% of the target (excess 3 on 136, projected error 0.5 vs gap 1): the no-planner
+  search does well there (17 of 23, E-35-E-45). On s1-s5 the bound is 28-84% short of the
+  target and the no-planner search fails. The value it needs is mostly "how far above the
+  bound", and that is what no one gives it.
+- **Where the planner can be beaten: a quarter of positions, by a lot.** At 24% of held-out
+  s4-s5 positions the search found a finish cheaper than the planner's, by a median 65 (8% of
+  the cost, 4x the runner-up gap). Elsewhere the planner's finish is the best seen (residual 0
+  at the median, E-46). So "cost above the planner" is zero at three positions in four and
+  large at the fourth: a learnable "is the planner beatable here, and by how much", which a
+  head on top of the planner finish would learn (option A of D-51), not measured.
+- **Caveats:** the projection assumes the head's relative error stays as now on a smaller
+  quantity, which a head trained for it may beat; targets are cheapest-seen (noisy); "beats
+  planner" counts positions inside search trees, which overlap; held s1 (53 groups) is small.
 
 ### E-46 (2026-11-01) Resolution check (D-50): the value head recomputes the planner's cost, ten times too coarsely
 `scripts/resolution_check.py`, code `024527b`, workstation, `outputs/expert/round4/

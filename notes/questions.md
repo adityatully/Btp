@@ -51,7 +51,8 @@ chats. Last updated 2026-10-31.*
 | Q-119 | Does training on dead ends from its own games teach the value head to judge full-size problems? | No: closed (E-43; on average yes, at the cliff no, 50/99 unfinished) |
 | Q-120 | Does training on the outcomes of its own no-planner play (AlphaZero targets) make the loop climb? | Closed → E-45: no (24/23 → 24/24 below/unfinished, 8 turns) |
 | Q-121 | Is there anything for the network to do: does the search try every move anyway, and are sibling gaps smaller than the head's error? | Closed → E-46: prior has room (85 moves, 10% tried); sibling gap 16 vs head error 142 |
-| Q-122 | Does the exact lower bound carry most of the cost to finish, so the value head can learn only the excess above it? | Bound columns of the resolution check (D-51), plan 4.2 |
+| Q-122 | Does the exact lower bound carry most of the cost to finish, so the value head can learn only the excess above it? | Closed → E-47: about half (excess 340 of 777); projected error 62 vs gap 16, still too coarse; head ranks no better than the bound |
+| Q-123 | Can the network learn where the planner's finish can be beaten (gain head), well enough to help the search? | Gain head steps (D-52), plan 4.2 |
 | Q-72 | Self-imitation if cost stalls near the teacher? | 4.3 |
 | Q-73 | Are the results stable across seeds? | 5.1 |
 | Q-78 | Root cause of the long-plan failures (s2, and s3–5 zero-shot) | 3.2, then 3.5 |
@@ -586,8 +587,17 @@ hopeless positions as dearer on average (1,361 vs 1,197) but not the move into o
 causes left: dead ends are a small share of the value data, and the value head reads only the
 global token (Q-111).
 
-**Q-122 Does the bound carry most of the cost, so the head can learn only the excess?** · **Open
-→ plan 4.2, bound check (D-51)** (user, 2026-11-02)
+**Q-123 Can the network learn where the planner's finish can be beaten?** · **Open → plan 4.2,
+gain head (D-52)** (user, 2026-11-02)
+E-47: at 24% of s4-s5 positions the search finds a finish cheaper than the planner's, by ~65 (4x
+the sibling gap). A head predicting that gain, on top of the planner finish, asks for a smaller
+and sparser number than the whole cost. Bars in D-52: sibling picks 0.77 → >= 0.82, AUC >= 0.7,
+then the search on set C.
+
+**Q-122 Does the bound carry most of the cost, so the head can learn only the excess?** · **Closed
+→ E-47** (user, 2026-11-02; about half on s4-s5, excess 340 of 777; projected head error on the
+excess 62 vs sibling gap 16, still too coarse; the trained head picks the best sibling no more
+often than the bound alone, 0.43 vs 0.46; on small problems the bound is within 2%)
 E-46: the head cannot rank sibling moves because it predicts the whole cost (error ~142 vs gaps
 ~16). If the exact conservation bound accounts for most of that cost, the head predicts only the
 excess and its error should shrink with it.
