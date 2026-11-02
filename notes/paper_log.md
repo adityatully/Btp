@@ -701,7 +701,12 @@ Format: date · decision · alternatives considered · why · evidence.
   every tripling → data is the bottleneck: build bulk labels; rises < 0.02 from 10k to 300k →
   not data: stop trying to replace the planner on s3-s5 and change the claim; otherwise data
   helps slowly (decide then). Bound and chance picks are reported alongside. *Built
-  2026-11-02:* `scripts/scaling_check.py` (`part=label`, the four copy runs, `part=check`).
+  2026-11-02:* `scripts/scaling_check.py` (`part=label`, the four copy runs, `part=check`). *Changed
+  2026-11-02, before any result (user: "do whatever feels right"):* labelling ran at ~2
+  positions/s on coe9 (workers waited on batches; fixed: problems stream, a stopped run
+  resumes), and even fixed 300k would take ~21 h more, so the sizes are 3k, 10k, 30k, 100k
+  (epochs 100, 40, 15, 6). The bar is unchanged: +0.05 at every tripling, or under +0.02 from
+  the first to the last.
 
 ---
 

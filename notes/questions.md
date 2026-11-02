@@ -53,7 +53,7 @@ chats. Last updated 2026-10-31.*
 | Q-121 | Is there anything for the network to do: does the search try every move anyway, and are sibling gaps smaller than the head's error? | Closed → E-46: prior has room (85 moves, 10% tried); sibling gap 16 vs head error 142 |
 | Q-122 | Does the exact lower bound carry most of the cost to finish, so the value head can learn only the excess above it? | Closed → E-47: about half (excess 340 of 777); projected error 62 vs gap 16, still too coarse; head ranks no better than the bound |
 | Q-123 | Can the network learn where the planner's finish can be beaten (gain head), well enough to help the search? | Closed → E-48: no; weak signal (AUC 0.66), picks best sibling 0.74 vs planner 0.75 |
-| Q-124 | Is the value head held back by how much data it sees: with clean planner-finish labels, does its agreement with the planner's sibling choice rise from 10k to 300k positions? | Data scaling check (D-53), plan 4.2 |
+| Q-124 | Is the value head held back by how much data it sees: with clean planner-finish labels, does its agreement with the planner's sibling choice rise from 3k to 100k positions? | Data scaling check (D-53), plan 4.2 |
 | Q-72 | Self-imitation if cost stalls near the teacher? | 4.3 |
 | Q-73 | Are the results stable across seeds? | 5.1 |
 | Q-78 | Root cause of the long-plan failures (s2, and s3–5 zero-shot) | 3.2, then 3.5 |
@@ -591,7 +591,7 @@ global token (Q-111).
 **Q-124 Is the value head held back by how much data it sees?** · **Open → plan 4.2, data
 scaling check (D-53)** (user, 2026-11-02)
 After E-48 five value targets have failed on s4-s5, all noisy and from ~1,600 problems. With
-clean labels (the planner finish) on 10k-300k positions, does the head's agreement with the
+clean labels (the planner finish) on 3k-100k positions, does the head's agreement with the
 planner's sibling choice climb? Rises >= 0.05 per tripling → build bulk labels; < 0.02 overall →
 not data.
 
