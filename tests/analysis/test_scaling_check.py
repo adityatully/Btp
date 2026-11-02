@@ -65,7 +65,6 @@ def labelled(agent: Path, tmp_path_factory: pytest.TempPathFactory) -> Path:
     out = tmp_path_factory.mktemp("labels")
     with pytest.MonkeyPatch.context() as mp:
         mp.setattr(SC, "problems", tiny)
-        mp.setattr(SC, "BATCH", 4)
         SC.main(
             ["part=label", f"agent={agent}", f"out={out}", "held=3", "sizes=20,60", "workers=2"]
         )
@@ -101,6 +100,20 @@ def test_training_files_are_nested_and_load_as_targets(labelled: Path) -> None:
     held = [json.loads(x) for x in (labelled / "held.jsonl").read_text().split("\n") if x]
     assert len(held) == 3 and all(r["id"].startswith("scale-1-") for r in held)
     assert len(SC.ei.load_targets(labelled / "train_60.jsonl")) == len(big)
+
+
+def test_a_stopped_run_resumes_where_it_stopped(
+    labelled: Path, agent: Path, tmp_path: Path
+) -> None:
+    lines = (labelled / "train_60.jsonl").read_text().split("\n")
+    (tmp_path / "held.jsonl").write_text((labelled / "held.jsonl").read_text())
+    (tmp_path / "train_60.jsonl").write_text("\n".join(lines[:2]) + "\n" + lines[2][:30])
+    with pytest.MonkeyPatch.context() as mp:
+        mp.setattr(SC, "problems", tiny)
+        SC.main(["part=label", f"agent={agent}", f"out={tmp_path}", "sizes=20,60", "workers=2"])
+    for n in (20, 60):
+        got = (tmp_path / f"train_{n}.jsonl").read_text()
+        assert got == (labelled / f"train_{n}.jsonl").read_text()
 
 
 def rows(pred: list[float]) -> dict[str, np.ndarray]:

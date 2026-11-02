@@ -4,7 +4,8 @@ Five value targets have failed to give the network an edge on stages 4-5 (E-40-E
 noisy (whatever one search happened to find) and came from ~1,600 problems. This check removes
 the noise and varies only the amount: the label at every position is the planner's own cost to
 finish from there (`finish_from`, exact for what it is, no search, no luck), and the value head
-is trained on 10k, 30k, 100k and 300k such positions. The question is the least a replacement
+is trained on 3k, 10k, 30k and 100k such positions (10k-300k planned; 300k would take
+~1 day of labelling on coe9). The question is the least a replacement
 for the planner must do: rank sibling moves as the planner ranks them.
 - `part=label`: the round-3 network plays fresh stage 4-5 problems (never a validation, held-out
   or search-test problem) by sampling its own move probabilities, up to twice the planner's
@@ -28,7 +29,7 @@ planner on s3-s5; otherwise it helps, slowly.
     uv run python scripts/scaling_check.py part=label \\
         agent=outputs/expert/round3/copy/imitation.pt out=outputs/scaling workers=36
     uv run python scripts/scaling_check.py part=check held=outputs/scaling/held.jsonl \\
-        agents=outputs/scaling/n10000/imitation.pt,...,outputs/scaling/n300000/imitation.pt
+        agents=outputs/scaling/n3000/imitation.pt,...,outputs/scaling/n100000/imitation.pt
 
 Arguments are key=value: `part`, `agent`, `agents`, `held` (problems for part=label, the file
 for part=check), `sizes`, `groups` (positions per problem, default 8), `kids` (default 6),
@@ -73,7 +74,7 @@ DEFAULTS: dict[str, Any] = {
     "agent": "",
     "agents": "",
     "held": "60",
-    "sizes": "10000,30000,100000,300000",
+    "sizes": "3000,10000,30000,100000",
     "groups": 8,
     "kids": 6,
     "workers": 8,
@@ -86,7 +87,6 @@ DEFAULTS: dict[str, Any] = {
 STAGES = ("s4_targets", "s5_storage")
 STEP, FLAT = 0.05, 0.02  # fixed in advance (D-53)
 MAX_PROBLEMS = 20000  # a draw that never reaches the largest size is an error, not a hang
-BATCH = 72  # problems per round of the pool
 LONGER = 2  # a line of play stops at this many times the planner's plan length
 
 
@@ -171,41 +171,72 @@ def play(task: tuple[str, str, int, int, int]) -> dict[str, Any]:
     }
 
 
+def resume(out: Path) -> list[dict[str, Any]]:
+    """The training problems already labelled (whole lines of the largest training file; a
+    stopped run is picked up where it stopped, as the draw is the same)."""
+    best: list[dict[str, Any]] = []
+    for path in out.glob("train_*.jsonl"):
+        recs = []
+        for line in path.read_text().split("\n"):
+            try:
+                recs.append(json.loads(line))
+            except json.JSONDecodeError:
+                break  # an empty or cut-off last line
+        best = max(best, recs, key=len)
+    return best
+
+
 def label(args: dict[str, Any]) -> None:
     started = time.perf_counter()
     out = Path(args["out"])
     out.mkdir(parents=True, exist_ok=True)
     sizes = sorted(int(x) for x in args["sizes"].split(","))
-    gen = problems(1)
-    held = [
-        (next(gen).to_json(), args["agent"], args["groups"], args["kids"], 1)
-        for _ in range(int(args["held"]))
-    ]
     with Pool(args["workers"]) as pool:
-        recs = pool.map(play, held, chunksize=1)
-        (out / "held.jsonl").write_text("".join(json.dumps(r) + "\n" for r in recs))
-        print(
-            f"held: {len(recs)} problems, {sum(r['positions'] for r in recs)} positions", flush=True
-        )
-        gen = problems(0)
+        if not (out / "held.jsonl").exists():
+            gen = problems(1)
+            held = [
+                (next(gen).to_json(), args["agent"], args["groups"], args["kids"], 1)
+                for _ in range(int(args["held"]))
+            ]
+            recs = pool.map(play, held, chunksize=1)
+            (out / "held.jsonl").write_text("".join(json.dumps(r) + "\n" for r in recs))
+            print(f"held: {len(recs)} problems, {sum(r['positions'] for r in recs)} positions")
+        done = resume(out)
         files = {n: (out / f"train_{n}.jsonl").open("w") for n in sizes}
         k = total = 0
-        while total < sizes[-1]:
-            if k >= MAX_PROBLEMS:
-                raise RuntimeError(f"{k} problems gave {total} positions < {sizes[-1]}")
-            batch = [
-                (next(gen).to_json(), args["agent"], args["groups"], args["kids"], 0)
-                for _ in range(BATCH)
-            ]
-            for rec in pool.map(play, batch, chunksize=1):
-                for n, f in files.items():
-                    if total < n:
-                        f.write(json.dumps(rec) + "\n")
-                total += rec["positions"]
-                k += 1
-            print(
-                f"{k} problems, {total} positions  {time.perf_counter() - started:.0f}s", flush=True
-            )
+
+        def add(rec: dict[str, Any]) -> None:
+            nonlocal k, total
+            for n, f in files.items():
+                if total < n:
+                    f.write(json.dumps(rec) + "\n")
+                    f.flush()
+            total += rec["positions"]
+            k += 1
+
+        for rec in done:
+            add(rec)
+        print(f"resumed {k} problems, {total} positions", flush=True)
+        gen = problems(0)
+        for _ in range(k):
+            next(gen)
+        todo = (
+            (next(gen).to_json(), args["agent"], args["groups"], args["kids"], 0)
+            for _ in range(MAX_PROBLEMS - k)
+        )
+        for rec in (
+            pool.imap(play, todo, chunksize=1) if total < sizes[-1] else ()
+        ):  # in draw order, no waiting on batches
+            if total >= sizes[-1]:
+                break
+            add(rec)
+            if k % 50 == 0:
+                print(
+                    f"{k} problems, {total} positions  {time.perf_counter() - started:.0f}s",
+                    flush=True,
+                )
+        if total < sizes[-1]:
+            raise RuntimeError(f"{k} problems gave {total} positions < {sizes[-1]}")
         for f in files.values():
             f.close()
     print(
