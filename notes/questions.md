@@ -19,7 +19,7 @@ answer, how it was settled, and the evidence (IDs like E-22 point to `notes/pape
 - The first table lists only the open questions. Keep it in sync with the sections below.
 
 *Started 2026-10-27 from the paper log (D-1–D-35, E-1–E-28, F-1–F-16), the plan and the
-chats. Last updated 2026-10-31.*
+chats. Last updated 2026-11-03.*
 
 ---
 
@@ -53,7 +53,10 @@ chats. Last updated 2026-10-31.*
 | Q-121 | Is there anything for the network to do: does the search try every move anyway, and are sibling gaps smaller than the head's error? | Closed → E-46: prior has room (85 moves, 10% tried); sibling gap 16 vs head error 142 |
 | Q-122 | Does the exact lower bound carry most of the cost to finish, so the value head can learn only the excess above it? | Closed → E-47: about half (excess 340 of 777); projected error 62 vs gap 16, still too coarse; head ranks no better than the bound |
 | Q-123 | Can the network learn where the planner's finish can be beaten (gain head), well enough to help the search? | Closed → E-48: no; weak signal (AUC 0.66), picks best sibling 0.74 vs planner 0.75 |
-| Q-124 | Is the value head held back by how much data it sees: with clean planner-finish labels, does its agreement with the planner's sibling choice rise from 3k to 100k positions? | Data scaling check (D-53), plan 4.2 |
+| Q-124 | Is the value head held back by how much data it sees: with clean planner-finish labels, does its agreement with the planner's sibling choice rise from 3k to 100k positions? | Closed → E-49: helps slowly (0.34 → 0.39); error ~N^-0.10, far from the gap |
+| Q-125 | Change the claim to "search over a planner, with learning where the planner is weak", and stop trying to replace the planner on s3-s5? | Open, waiting on the user; after D-54 (plan 4.2) |
+| Q-126 | Can a value head rank sibling moves if it reads the candidate moves (and hints), or is trained to rank instead of to hit the cost? | Head check (D-54), plan 4.2 |
+| Q-127 | Does the search build intermediate droplets the planner never makes, reused later to cut cost (the "unexpected moves")? | Plan check after D-54, plan 4.2 |
 | Q-72 | Self-imitation if cost stalls near the teacher? | 4.3 |
 | Q-73 | Are the results stable across seeds? | 5.1 |
 | Q-78 | Root cause of the long-plan failures (s2, and s3–5 zero-shot) | 3.2, then 3.5 |
@@ -588,8 +591,30 @@ hopeless positions as dearer on average (1,361 vs 1,197) but not the move into o
 causes left: dead ends are a small share of the value data, and the value head reads only the
 global token (Q-111).
 
-**Q-124 Is the value head held back by how much data it sees?** · **Open → plan 4.2, data
-scaling check (D-53)** (user, 2026-11-02)
+**Q-127 Does the search build intermediate droplets the planner never makes?** · **Open → plan
+4.2, plan check after D-54** (user, 2026-11-03)
+The search beats the best planner on 85 of 99 full-size problems (E-36) and reaches proved optima
+the planner misses, where the optimum builds two intermediates and blends them (E-17, E-33).
+The search records keep costs, not plans, so which droplets it makes has never been looked at.
+Save the plans on set A and part of C; list droplets the planner's plan never makes, and those
+a later step (e.g. 4 moves on) reuses.
+
+**Q-126 Can a value head rank sibling moves with the moves in view, or trained to rank?** ·
+**Open → plan 4.2, head check (D-54)** (user, 2026-11-03)
+E-49: the head picks the planner's cheapest sibling 0.39 (bound 0.36). The head reads only the
+global token, never the candidates or hints, and was always trained to hit the cost. Arms:
+moves-reading, ranking loss, both, and the control; useful at >= 0.55.
+
+**Q-125 Change the claim to search over a planner, with learning where it is weak?** · **Open,
+waiting on the user (plan 4.2)** (2026-11-03, after E-49)
+Six value-head attempts (E-40, E-43, E-45, E-46-E-49) show the head cannot replace the planner's
+finish on s4-s5: the gap between sibling moves is ~1% of the cost, and neither the target, the
+data nor the amount closes it. Search with planner finishes beats the best planner on 85 of 99
+(E-36, 14% at equal time, E-37); the network helps as a guide on mixtures (E-39).
+
+**Q-124 Is the value head held back by how much data it sees?** · **Closed → E-49: helps,
+far too slowly** (2026-11-03; agreement with the planner's sibling choice 0.34 → 0.38 → 0.37 →
+0.39 over 3k-100k; error 194 → 139, ~N^-0.10, vs a sibling gap of 7) (user, 2026-11-02)
 After E-48 five value targets have failed on s4-s5, all noisy and from ~1,600 problems. With
 clean labels (the planner finish) on 3k-100k positions, does the head's agreement with the
 planner's sibling choice climb? Rises >= 0.05 per tripling → build bulk labels; < 0.02 overall →

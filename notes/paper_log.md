@@ -707,6 +707,27 @@ Format: date · decision · alternatives considered · why · evidence.
   resumes), and even fixed 300k would take ~21 h more, so the sizes are 3k, 10k, 30k, 100k
   (epochs 100, 40, 15, 6). The bar is unchanged: +0.05 at every tripling, or under +0.02 from
   the first to the last.
+- **D-54 (2026-11-03) Two new value heads, offline: one that reads the moves, one trained to
+  rank** (user, after E-49: "we try these"). E-49 leaves two changes never tried. (1) The value
+  head reads only the global token, which never sees the candidate moves or the hint columns
+  (they enter only the policy's scorer, `networks.py`): it estimates the cost to finish blind
+  to which droplet is one mix from a target, the blindness the hints fixed for the policy
+  (E-16). (2) Every head so far was trained to hit the cost; the search needs only the order
+  of siblings, whose gap is ~1% of the cost. **Arms** (`scripts/head_check.py`), all from round
+  3's network, whole network trained, E-49's data (`train_100000.jsonl`, graded on its 60
+  held-out problems), 6 epochs: `global` (today's head, squared error: the control, expected
+  near E-49's 0.39), `moves` (attention + mean pooling over the scorer's last hidden layer of
+  the legal candidates, with the global token, into a new MLP; squared error), `rank` (today's
+  head; per sibling group, cross-entropy between softmax(-(spent + predicted finish) / 10) and
+  the cheapest sibling), `moves_rank` (both). `SetEncoderNet.candidate_inputs` split out of
+  `forward` (outputs unchanged). **Measure:** as E-49, how often spent + predicted finish picks
+  the planner's cheapest sibling; also `top2` (cheapest among the head's two best: what pruning
+  children before planner finishes would need). **Reading, fixed in advance:** an arm is
+  useful if it picks the cheapest sibling >= 0.55 on the held-out problems; then it goes into
+  the search (pruning which children get a planner finish, a speed-up). None useful → the head
+  cannot rank siblings even seeing the moves and trained to rank; Q-125 (the claim) is next.
+  Limit stated up front: trained on planner labels, a head can at best rank as the planner
+  does; its use is speed, not quality.
 
 ---
 
@@ -1488,6 +1509,39 @@ MRCM's intermediates on val_s2: 4 of 28 covered (chain D4), 5 of 28 (premix D3).
   (an exact lower bound on mixes left, or a constructive method's recipes, which is a planner
   again). (3) Built as SPEC 0.28 `hint_source: problem` (depth-4 chain in the recipe columns)
   for a copy-test comparison on stages 1–2 against the planner's hints.
+
+### E-49 (2026-11-03) Data scaling check (D-53): more clean data helps, far too slowly
+`scripts/scaling_check.py` + `scripts/imitation_check.py`, code `f9320c1`, workstation,
+`outputs/scaling/{held.jsonl,train_*.jsonl,n*/,check.json,run.log}` there. Labels: round 3's
+network plays fresh s4-s5 problems by sampling; at 8 positions per line, the position and 6
+children labelled with the planner finish (clean, no search). Copy: value head only
+(`arm=visits value_coef=1`, no visit counts), from round 3's network, on nested sets of 3k, 10k,
+30k and 100k positions (epochs 100, 40, 15, 6; the 100k set gave 95,108 training steps). Check:
+60 separate held-out problems, 3,015 positions, 445 sibling groups. head / bound picks best =
+share of sibling groups where spent + predicted (bound) finish picks the planner's cheapest
+sibling; errors in cost units, medians.
+
+| network | head error | runner-up gap | head picks best | bound picks best | chance |
+|---|---|---|---|---|---|
+| n3000 | 194.3 | 7 | 0.344 | 0.355 | 0.208 |
+| n10000 | 181.4 | 7 | 0.380 | 0.355 | 0.208 |
+| n30000 | 161.0 | 7 | 0.373 | 0.355 | 0.208 |
+| n100000 | 138.9 | 7 | 0.387 | 0.355 | 0.208 |
+
+Median cost to finish (target) 741 on every row.
+- **Reading (D-53, fixed in advance): data helps, slowly** (0.34 → 0.38 → 0.37 → 0.39). Not
+  +0.05 at every tripling (+0.036, -0.007, +0.014); +0.043 overall, above the 0.02 "not data"
+  line. D-53 leaves this case to a decision.
+- **The error falls, but as a weak power law.** 33x the data cuts the head's error by 28% (194
+  → 139), about N^-0.10. To reach the runner-up gap (7) the error must fall ~20x more; at this
+  rate that needs on the order of 10^13 times the data. **Extrapolation, unverified**, but no
+  feasible amount of bulk labels closes it.
+- **The trained head barely beats the free bound.** At 100k it picks the planner's sibling 39%
+  of the time vs the bound's 36% (chance 21%); at 3k it was below the bound.
+- **What it means:** with clean labels and 33x more of them, the head still cannot rank sibling
+  moves the way the planner does, which is the least a replacement for the planner must do.
+  Lack of data is not the main obstacle: predicting the whole cost to within ~1% (gap 7 of 741)
+  is.
 
 ### E-48 (2026-11-02) Gain head (D-52): weak signal, does not help pick moves
 `scripts/gain_check.py` + `scripts/imitation_check.py`, code `d5e239b`, workstation,
