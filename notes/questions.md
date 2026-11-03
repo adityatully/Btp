@@ -56,6 +56,7 @@ chats. Last updated 2026-11-03.*
 | Q-124 | Is the value head held back by how much data it sees: with clean planner-finish labels, does its agreement with the planner's sibling choice rise from 3k to 100k positions? | Closed → E-49: helps slowly (0.34 → 0.39); error ~N^-0.10, far from the gap |
 | Q-125 | Change the claim to "search over a planner, with learning where the planner is weak", and stop trying to replace the planner on s3-s5? | Open, waiting on the user; after D-54 (plan 4.2) |
 | Q-126 | Can a value head rank sibling moves if it reads the candidate moves (and hints), or is trained to rank instead of to hit the cost? | Head check (D-54), plan 4.2 |
+| Q-128 | Does the search improve a published planner (MRCM) put at its leaves, as it improves ours? | Finisher test (D-55), plan 4.2 |
 | Q-127 | Does the search build intermediate droplets the planner never makes, reused later to cut cost (the "unexpected moves")? | Plan check after D-54, plan 4.2 |
 | Q-117 | Does our e-MRCM reproduce the paper's Table III (its gain over MRCM on 2-5 targets)? | No, not under our Eq. 11 reading; closed: e-MRCM is reported as "our reading" (L-7) |
 | Q-118 | What time limit per ILP solve for NFSP on s3-s5 (3 of 20 s3 dilutions hit 60 s)? | Closed: 600 s on the workstation (user, L-8) |
@@ -607,6 +608,12 @@ the point of no return) and re-tests with D-45's bar plus a cliff check.
 hopeless positions as dearer on average (1,361 vs 1,197) but not the move into one. Candidate
 causes left: dead ends are a small share of the value data, and the value head reads only the
 global token (Q-111).
+
+**Q-128 Does the search improve a published planner put at its leaves?** · **Open → plan 4.2,
+finisher test (D-55)** (user, 2026-11-03; an experiment, Q-125 stays open)
+The search is never dearer than the planner at its leaves (its first leaf is that planner's own
+plan). With our sharing pass there it is cheaper on 85 of 99 (E-36). Put MRCM there instead, on
+the 13 mixtures where MRCM beats our planner (set B): below MRCM on >= 5 of 13 → it improves MRCM.
 
 **Q-127 Does the search build intermediate droplets the planner never makes?** · **Open → plan
 4.2, plan check after D-54** (user, 2026-11-03)

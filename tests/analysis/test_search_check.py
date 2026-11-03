@@ -135,3 +135,17 @@ def test_race_reading_follows_the_rule_fixed_in_advance() -> None:
     assert SC.race_verdict(slow, fast).endswith("no speed gain at these budgets")
     near = [rec(i, [(5.0, 99.0)]) for i in range(10)]  # cheaper, but by less than 0.02
     assert SC.race_verdict(near, slow).endswith("no speed gain at these budgets")
+
+
+def test_search_with_mrcm_finishes_is_never_dearer_than_mrcm() -> None:
+    """D-55: the root's first leaf is MRCM's own plan, so the answer is at most MRCM's cost."""
+    task = next(t for t in SC.tasks({"B"}, None) if t["id"] == "val_s2-036")
+    rec = SC.run_task(task, "uniform", 8, OPTS, "mrcm")
+    assert rec["finisher"] == "mrcm"
+    assert rec["search_cost"] is not None and rec["search_cost"] <= task["mrcm"] + 1e-9
+
+
+def test_finisher_reading_follows_the_rule_fixed_in_advance() -> None:
+    assert SC.finisher_verdict({"n": 13, "below_mrcm": 5}).endswith("improves MRCM")
+    assert SC.finisher_verdict({"n": 13, "below_mrcm": 4}).endswith("a weak gain")
+    assert SC.finisher_verdict({"n": 13, "below_mrcm": 0}).endswith("its own finishes")

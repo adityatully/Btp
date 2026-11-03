@@ -728,6 +728,27 @@ Format: date · decision · alternatives considered · why · evidence.
   cannot rank siblings even seeing the moves and trained to rank; Q-125 (the claim) is next.
   Limit stated up front: trained on planner labels, a head can at best rank as the planner
   does; its use is speed, not quality.
+- **D-55 (2026-11-03) Finisher test: does the search improve a published planner put at its
+  leaves?** (user: "start working on this insight"; an experiment, not a claim change: Q-125
+  stays open). The search returns the cheapest whole plan it sees and its root's first leaf is
+  the finisher's own plan from the empty chip, so it is never dearer than its finisher (the
+  "fortified rollout" of Bertsekas, Tsitsiklis & Wu 1997); whether it is *cheaper* is
+  empirical. So far only our sharing pass sat at the leaves. **Finisher:** MRCM from the
+  current chip (`meda/solvers/baselines/paper_finish.py`, `MrcmFinish`): droplets on chip are
+  offered as e-MRCM offers droplets an earlier target made (an exact child match costs nothing),
+  e-MRCM's target order, demand 1 only; built through the sharing pass's builder (leftovers
+  discarded only for room, exact cost). On an empty chip it is MRCM's own plan (equal cost on
+  the 5 fast B problems, tested). MRCM's mixing models per (composition, volume) are cached
+  across leaves: same trees, 10-30× faster on repeat calls (first call up to 23 s on B).
+  Known limit: a droplet left part-way through an n-input mix is not reused (MRCM never names
+  it). **Run** (coe9): set B (13 `val_s2_v2` single-target mixtures where MRCM beats our best
+  planner), flat prior, 256 sims, 900 s cap, finishers `share` and `mrcm`
+  (`search_check.py sets=B finishers=share,mrcm sims=256`). **Reading, fixed in advance:**
+  `uniform/mrcm` below MRCM on >= 1/3 of B (>= 5 of 13) → the search improves MRCM; 1-4 → a
+  weak gain; 0 → MRCM's misses are not reachable by lookahead with its own finishes at this
+  budget. A plan dearer than MRCM is a bug (raised). Reported, no bar: the `share` finisher on
+  the same problems. Smoke run (Mac, 2 problems, 16 sims, 60 s, not a result): val_s2-000
+  176 vs MRCM 234 (one searched move, then MRCM's finish), val_s2-003 equal.
 
 ---
 

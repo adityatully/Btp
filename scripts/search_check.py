@@ -55,7 +55,21 @@ Arguments are key=value: `sets` (A,B; C on request), `limit=N` problems per set,
 (budgets, default 64,256), `uniform` (budget for the flat prior, default the largest of `sims`;
 0 = off), `seconds` (cap per problem and search, default 900), `hints` (the env's
 `hint_source`; must be the one the agent was trained with, default planner), `reward_scale`
-(the agent's PPO reward scale, for `zero`; default 0.01 as E-22), `workers`.
+(the agent's PPO reward scale, for `zero`; default 0.01 as E-22), `workers`,
+`finishers` (leaf finishers, default share).
+
+Finisher test (D-55): the leaf finisher is a parameter. `finishers=share,mrcm` runs each search
+once per finisher: `share` is the sharing pass (`finish_from`), `mrcm` is MRCM finishing from the
+current chip (`MrcmFinish`, chip droplets offered as e-MRCM offers shared ones). The root's first
+leaf is the finisher's own whole plan from the empty chip, and the answer is the cheapest plan
+seen, so the search is never dearer than its finisher (checked: a dearer plan is a bug). Reading
+on B, fixed in advance, `uniform` at the largest budget with `mrcm`: **the search improves MRCM**
+if it is below MRCM on >= 1/3 of B; below on some but fewer: a weak gain; on none: MRCM's misses
+are not reachable by lookahead with its own finishes at this budget. Reported, no bar: the same
+against the `share` finisher (which finisher the search does better with).
+
+    uv run python scripts/search_check.py sets=B finishers=share,mrcm sims=256 workers=26 \
+        out=notes/search/finish_b.jsonl
 """
 
 from __future__ import annotations
@@ -78,6 +92,7 @@ from meda.core.actions import Action
 from meda.core.problem import Instance
 from meda.envs.sample_prep_env import EnvSnapshot, SamplePrepEnv
 from meda.generators.benchmark_io import BenchmarkSet
+from meda.solvers.baselines.paper_finish import MrcmFinish
 from meda.solvers.baselines.share import finish_from
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -204,8 +219,11 @@ class Search:
         reward_scale: float = 0.01,
         rng: np.random.Generator | None = None,
         collect: int | None = None,
+        finish: Any = None,
     ) -> None:
         self.env, self.inst, self.agent, self.deadline = env, inst, agent, deadline
+        # the leaf finisher (D-55): state -> (actions, cost) or None; the sharing pass by default
+        self.finish = finish or (lambda state: finish_from(state, inst, WEIGHTS))
         self.planner_leaf, self.reward_scale = planner_leaf, reward_scale
         self.rng = rng  # breaks ties at random; without it ties go in candidate order (E-33)
         self.best: tuple[float, tuple[Action, ...], int] | None = None  # cost, plan, tail
@@ -253,7 +271,7 @@ class Search:
         prior, estimate = self.net(obs, len(env.legal))
         if not self.planner_leaf:
             return Node(snap, actions, prior, self.score(float(snap.plan_cost) + estimate), False)
-        found = finish_from(env.state, self.inst, WEIGHTS)
+        found = self.finish(env.state)
         best = math.inf
         if found is None:
             value = -1.0
@@ -378,7 +396,9 @@ class Search:
 _AGENT: dict[str, Any] = {}
 
 
-def run_task(task: dict[str, Any], kind: str, sims: int, opts: dict[str, Any]) -> dict[str, Any]:
+def run_task(
+    task: dict[str, Any], kind: str, sims: int, opts: dict[str, Any], finisher: str = "share"
+) -> dict[str, Any]:
     inst = Instance.from_json(task["instance"])
     agent = None
     if kind in ("net", "zero"):
@@ -394,12 +414,18 @@ def run_task(task: dict[str, Any], kind: str, sims: int, opts: dict[str, Any]) -
     cfg["env"]["hint_source"] = opts["hints"]
     env = build_env(cfg, [inst])
     t0 = time.perf_counter()
-    search = Search(env, inst, agent, t0 + opts["seconds"], kind != "zero", opts["reward_scale"])
+    finish = MrcmFinish(inst, WEIGHTS) if finisher == "mrcm" else None
+    search = Search(
+        env, inst, agent, t0 + opts["seconds"], kind != "zero", opts["reward_scale"], finish=finish
+    )
     out = search.run(sims)
     stats = hs.plan_stats(inst, f"search_{kind}", out["plan"], time.perf_counter() - t0)
     opt, cost = task["optimum"], stats["cost"]
     if opt is not None and cost is not None and cost < opt - 1e-9:  # a bug (rule 9)
         raise RuntimeError(f"{inst.instance_id}: search plan {stats['cost']} < optimum")
+    ref = task["mrcm"]
+    if finisher == "mrcm" and ref is not None and (cost is None or cost > ref + 1e-9):
+        raise RuntimeError(f"{inst.instance_id}: search with MRCM finishes dearer than MRCM")
     rec = {k: v for k, v in task.items() if k != "instance"}
     rec.update(
         kind=kind,
@@ -409,12 +435,14 @@ def run_task(task: dict[str, Any], kind: str, sims: int, opts: dict[str, Any]) -
         played_to_end=out["played_to_end"],
         planner_tail=out["tail"],
         trace=search.trace,
+        finisher=finisher,
+        finish_fails=finish.fails if finish is not None else {},
         **{f"search_{k}": v for k, v in stats.items()},
     )
     return rec
 
 
-def _star(args: tuple[dict[str, Any], str, int, dict[str, Any]]) -> dict[str, Any]:
+def _star(args: tuple[dict[str, Any], str, int, dict[str, Any], str]) -> dict[str, Any]:
     return run_task(*args)
 
 
@@ -430,6 +458,8 @@ def group_stats(rs: list[dict[str, Any]]) -> dict[str, Any]:
     ratio_opt = [r["search_cost"] / r["optimum"] for r in opt]
     ratio_plan = [r["search_cost"] / r["planner"] for r in rs]
     beats_mrcm = [r for r in rs if r["mrcm"] is not None and r["search_cost"] <= r["mrcm"] + 1e-9]
+    below_mrcm = [r for r in rs if r["mrcm"] is not None and r["search_cost"] < r["mrcm"] - 1e-9]
+    ratio_mrcm = [r["search_cost"] / r["mrcm"] for r in rs if r["mrcm"] is not None]
     return {
         "n": len(rs) + len(failed),
         "failed": len(failed),
@@ -440,6 +470,8 @@ def group_stats(rs: list[dict[str, Any]]) -> dict[str, Any]:
         "ratio_opt": float(np.mean(ratio_opt)) if ratio_opt else None,
         "ratio_plan": float(np.mean(ratio_plan)) if ratio_plan else None,
         "mrcm": len(beats_mrcm),
+        "below_mrcm": len(below_mrcm),
+        "ratio_mrcm": float(np.mean(ratio_mrcm)) if ratio_mrcm else None,
         "capped": sum(r["capped"] for r in rs),
         "seconds": float(np.median([r["search_seconds"] for r in rs])) if rs else 0.0,
     }
@@ -556,7 +588,9 @@ def summarise(path: Path) -> str:
     recs = [json.loads(x) for x in path.read_text().splitlines()]
     groups: dict[tuple[str, str, int], list[dict[str, Any]]] = defaultdict(list)
     for r in recs:
-        groups[(r["set"], r["kind"], r["sims"])].append(r)
+        fin = r.get("finisher", "share")
+        kind = r["kind"] if fin == "share" else f"{r['kind']}/{fin}"
+        groups[(r["set"], kind, r["sims"])].append(r)
     lines = [
         "below = cheaper than the best planner; ratio = mean cost / optimum (A) or / best "
         "planner; MRCM = at or below MRCM's cost (B).",
@@ -599,8 +633,29 @@ def summarise(path: Path) -> str:
             )
         net, uni, zero = (pooled.get(kind) for kind in ("net", "uniform", "zero"))
         lines += [f"Reading on C at {top} sims (fixed in advance, D-41): {verdict(net, uni, zero)}"]
+    b = {k: group_stats(rs) for k, rs in groups.items() if k[0] == "B"}
+    if b:
+        lines += ["", "B against MRCM (D-55): below MRCM, ratio to MRCM"]
+        for k in sorted(b):
+            st = b[k]
+            lines.append(f"  {k[1]} {k[2]}: {st['below_mrcm']}/{st['n']}, {_r(st['ratio_mrcm'])}")
+        top = max(k[2] for k in b)
+        st = b.get(("B", "uniform/mrcm", top))
+        if st is not None:
+            lines.append(
+                f"Reading on B at {top} sims (fixed in advance, D-55): {finisher_verdict(st)}"
+            )
     lines += race(groups)
     return "\n".join(lines)
+
+
+def finisher_verdict(st: dict[str, Any]) -> str:
+    n, k = st["n"], st["below_mrcm"]
+    if k >= FOUND_SHARE * n:
+        return f"below MRCM on {k} of {n}: the search improves MRCM"
+    if k > 0:
+        return f"below MRCM on {k} of {n}: a weak gain"
+    return "below MRCM on none: its misses are not reachable by lookahead with its own finishes"
 
 
 def main(argv: list[str]) -> None:
@@ -618,13 +673,22 @@ def main(argv: list[str]) -> None:
     }
     limit = int(args["limit"]) if "limit" in args else None
     found = tasks(set(args.get("sets", "A,B").split(",")), limit)
+    finishers = args.get("finishers", "share").split(",")
     runs = [(kind, s) for kind in ("net", "zero") for s in sims] if opts["agent"] else []
     runs += [("uniform", uniform)] if uniform else []
-    todo = [(t, kind, s, opts) for t in found for kind, s in runs]
+    todo = [
+        (t, kind, s, opts, fin)
+        for t in found
+        for kind, s in runs
+        for fin in (finishers if kind != "zero" else ["share"])
+    ]
     out = Path(args.get("out", "notes/search/records.jsonl"))
     out.parent.mkdir(parents=True, exist_ok=True)
     workers = int(args.get("workers", 1))
-    print(f"{len(found)} problems x {runs} = {len(todo)} searches, {workers} workers", flush=True)
+    print(
+        f"{len(found)} problems x {runs} x {finishers} = {len(todo)} searches, {workers} workers",
+        flush=True,
+    )
     t0, done = time.perf_counter(), 0
     with out.open("w") as fh:
         results = map(_star, todo) if workers == 1 else Pool(workers).imap_unordered(_star, todo)
