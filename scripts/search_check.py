@@ -9,6 +9,10 @@ Problems where a cheaper plan than our best planner is known:
 - **C (D-41):** `val_s3_v2`, `val_s4_v2`, `val_s5_v2` at full size, without the problems where
   the best planner is within 2% of the lower bound (it is already optimal there), from
   `notes/headroom/records.jsonl`. Reported per stage as C3, C4, C5.
+- **D (D-56):** B at full size: `val_s3_v2`, `val_s4_v2`, `val_s5_v2` problems on which a
+  published method (e-MRCM or NFSP) is cheaper than the best planner
+  (`notes/lit_bench/runs/full/records.jsonl`, from `lit_bench_full.py`); the cheaper of the two
+  is the reference in the `mrcm` field.
 
 Searches, all from the same env and observations as the agent (AlphaZero-style MCTS, one tree
 per real move, kept across moves; value (C0 - total) / C0, total = cost so far + estimated cost
@@ -51,7 +55,10 @@ the largest budget: **the network makes search faster** if at 10 s or at 60 s `n
 / planner is at least 0.02 below `uniform`'s and `net` is cheaper than `uniform` on more
 problems than the reverse; otherwise no speed gain at these budgets. B is reported the same way.
 
-Arguments are key=value: `sets` (A,B; C on request), `limit=N` problems per set, `sims`
+Race on D, fixed in advance (D-56): the same rule as D-43, on D at the largest budget; with
+fewer than 10 problems in D it is reported only.
+
+Arguments are key=value: `sets` (A,B; C and D on request), `limit=N` problems per set, `sims`
 (budgets, default 64,256), `uniform` (budget for the flat prior, default the largest of `sims`;
 0 = off), `seconds` (cap per problem and search, default 900), `hints` (the env's
 `hint_source`; must be the one the agent was trained with, default planner), `reward_scale`
@@ -105,6 +112,8 @@ PLANNERS = ("share", "share_look3", "share_orders")
 C_PUCT = 1.5
 # Fixed in advance (module docstring).
 FOUND_SHARE, MISS = 1 / 3, 0.02
+D_MIN = 10
+LIT_FULL = ROOT / "notes/lit_bench/runs/full/records.jsonl"
 RACE_AT, RACE_GAP = (1, 10, 60, 300, 900), 0.02
 
 
@@ -162,6 +171,28 @@ def tasks(sets: set[str], limit: int | None) -> list[dict[str, Any]]:
             insts = [i for i in BenchmarkSet.read(src).instances if i.instance_id in want]
             out += [
                 _task(f"C{stage}", i, want[i.instance_id]["cell"], want[i.instance_id], None)
+                for i in insts[:limit]
+            ]
+    if "D" in sets:
+        recs = [json.loads(x) for x in (ROOT / "notes/headroom/records.jsonl").open()]
+        lit = {}
+        for r in map(json.loads, LIT_FULL.open()):
+            costs = [r[k]["cost"] for k in ("emrcm", "nfsp") if r[k].get("cost") is not None]
+            if costs:
+                lit[(r["source"], r["id"])] = min(costs)
+        for stage in (3, 4, 5):
+            src = f"val_s{stage}_v2"
+            want = {
+                r["id"]: r
+                for r in recs
+                if r.get("source") == src
+                and (src, r["id"]) in lit
+                and lit[(src, r["id"])] < best_planner(r) - 1e-9
+            }
+            insts = [i for i in BenchmarkSet.read(src).instances if i.instance_id in want]
+            out += [
+                _task("D", i, want[i.instance_id]["cell"], want[i.instance_id], None)
+                | {"mrcm": lit[(src, i.instance_id)]}
                 for i in insts[:limit]
             ]
     return out
@@ -556,8 +587,15 @@ def race(groups: dict[tuple[str, str, int], list[dict[str, Any]]]) -> list[str]:
         top = max(k[2] for k in pools if k[0] == s)
         net, uni = pools.get((s, "net", top)), pools.get((s, "uniform", top))
         if net and uni:
+            rule = "D-56" if s == "D" else "D-43"
+            few = (
+                f"only {len(net)} problems, reported only (D-56); "
+                if s == "D" and len(net) < D_MIN
+                else ""
+            )
             lines.append(
-                f"Race reading on {s} at {top} sims (fixed in advance, D-43): "
+                f"Race reading on {s} at {top} sims (fixed in advance, {rule}): "
+                + few
                 + race_verdict(net, uni)
             )
     return lines
