@@ -1,0 +1,10 @@
+# Waste first, then fluid (D-57): the literature's "waste" objective family (STWM, MTWM, NFSP-W;
+# notes/lit_bench/objectives.md) as weights. One wasted unit costs more than any plan's fluid and
+# mixes on the problems it is used on (goal_check.py raises if not); geometric.yaml's fluid
+# weights break ties.
+w_fluid:
+  SAMPLE: 64
+  REAGENT: 8
+  BUFFER: 1
+w_mix: 1
+w_waste: 65536

@@ -114,6 +114,7 @@ C_PUCT = 1.5
 FOUND_SHARE, MISS = 1 / 3, 0.02
 D_MIN = 10
 LIT_FULL = ROOT / "notes/lit_bench/runs/full/records.jsonl"
+COSTS = "costs/geometric.yaml"  # the env's costs; must match WEIGHTS
 RACE_AT, RACE_GAP = (1, 10, 60, 300, 900), 0.02
 
 
@@ -441,7 +442,7 @@ def run_task(
             torch.set_num_threads(1)
             _AGENT[opts["agent"]] = PPOAgent.load(opts["agent"])
         agent = _AGENT[opts["agent"]]
-    cfg = {"costs": _load("costs/geometric.yaml"), "env": _load("env/sample_prep.yaml")}
+    cfg = {"costs": _load(COSTS), "env": _load("env/sample_prep.yaml")}
     cfg["env"]["hint_source"] = opts["hints"]
     env = build_env(cfg, [inst])
     t0 = time.perf_counter()

@@ -1,0 +1,10 @@
+# Steps first, then fluid (D-57): the literature's "steps" objective family (DFM, Generic, MTMD,
+# DDMT; notes/lit_bench/objectives.md) as weights. One mix costs more than any plan's fluid and
+# waste on the problems it is used on (goal_check.py raises if not), so plans are ranked by mix
+# count first; geometric.yaml's fluid weights break ties.
+w_fluid:
+  SAMPLE: 64
+  REAGENT: 8
+  BUFFER: 1
+w_mix: 65536
+w_waste: 1
