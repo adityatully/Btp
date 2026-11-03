@@ -79,8 +79,12 @@ def _emit(tree: _Tree, nodes: list[tuple[In, ...]]) -> int:
 
 
 class _Search:
-    def __init__(self, w: tuple[Rational, ...], lo: int, m: int) -> None:
+    def __init__(self, w: tuple[Rational, ...], lo: int, m: int, narrow: bool = False) -> None:
         self.w, self.lo, self.m = w, lo, m
+        # e-MRCM's narrower search (its Eq. 11, the first term of Eq. 10 set to 1): a mix of T
+        # units for a node of denominator D needs T | D, and its intermediate children's
+        # denominators must divide D / T together.
+        self.narrow = narrow
         self.memo: dict[tuple[Composition, int], _Tree | None] = {}
         self.budget = SEARCH_BUDGET
 
@@ -106,6 +110,8 @@ class _Search:
         children with the least total concentration-vector sum (the paper's ILP), as
         (T, pure units per reactant, intermediate children)."""
         for t in range(max(v, self.lo), self.m + 1):
+            if self.narrow and c.den % t:
+                continue
             caps = [t * n // c.den for n in c.num]
             for parts in _partitions(t, t):
                 if len(parts) < 2:
@@ -136,12 +142,13 @@ class _Search:
                         total = len(pure_parts)
                     elif k == 1:
                         one = self.child(r, inter[0] * c.den, c)
-                        if one is None:
+                        if one is None or (self.narrow and (c.den // t) % one.den):
                             continue
                         kids, total = ((inter[0], one),), len(pure_parts) + one.den
                     else:
                         room = None if best is None else best[0] - len(pure_parts)
-                        two = self.split(r, inter[0], inter[1], c.den, c, room)
+                        quota = c.den // t if self.narrow else None
+                        two = self.split(r, inter[0], inter[1], c.den, c, room, quota)
                         if two is None:
                             continue
                         kids = two
@@ -161,17 +168,25 @@ class _Search:
         return comp
 
     def split(
-        self, r: list[int], sa: int, sb: int, d: int, parent: Composition, room: int | None
+        self,
+        r: list[int],
+        sa: int,
+        sb: int,
+        d: int,
+        parent: Composition,
+        room: int | None,
+        quota: int | None = None,
     ) -> tuple[tuple[int, Composition], tuple[int, Composition]] | None:
         """Two intermediate children of sa and sb units with the least total denominator,
-        below `room` when given."""
+        below `room` when given; with `quota` (the narrow search) their denominators divide it
+        together."""
         best: tuple[int, Composition, Composition] | None = None
         scale = sa * d
         for da in sorted(x for x in range(2, parent.den) if scale % x == 0):
             limit = room if best is None else best[0]
             if limit is not None and da + 2 > limit:
                 break
-            if not smooth(da, self.m):
+            if not smooth(da, self.m) or (quota is not None and quota % da):
                 continue
             unit = scale // da  # r_a = unit * q, sum(q) = da
             caps = [x // unit for x in r]
@@ -181,7 +196,7 @@ class _Search:
                     continue
                 rb = [x - unit * y for x, y in zip(r, q, strict=True)]
                 cb = self.child(rb, sb * d, parent)
-                if cb is None:
+                if cb is None or (quota is not None and (quota // da) % cb.den):
                     continue
                 ca = Composition.from_ints(tuple(q), da)
                 if ca == cb:

@@ -1,6 +1,12 @@
 # MEDA Design Automation — Codebase Specification
 
-Version 0.29 · 2026-10-27
+Version 0.30 · 2026-10-31
+
+Changes in 0.30 (multi-target literature baselines, 10.4; plan 6.3, L-6 to L-8): e-MRCM
+(`emrcm.py`) and NFSP (`nfsp.py`) join the published methods. `PaperGraph` gains `roots`: the
+node each delivered droplet comes from, so a method can make several targets and droplets;
+`emit` turns a chip-rule break into `NotApplicable`. MRCM's search takes `narrow` (off by
+default; e-MRCM's Eq. 11 reading). New dependency `scipy` (HiGHS) for NFSP's ILP (section 3).
 
 Changes in 0.29 (literature baselines, 10.4; plan 2.4, D-36; numbered 0.28 on branch
 `claude/lit-bench-b3e8e4` before the merge): five published single-target methods are implemented from their papers, each reproducing a worked example or table of its
@@ -406,6 +412,7 @@ Python 3.11 or newer. Use the latest stable releases at setup time; pin them in 
 | Experiment tracking | `wandb` | Optional, off by default |
 | Results | `pandas`, `pyarrow` | Results tables as Parquet |
 | Plots | `matplotlib` | |
+| Integer programs | `scipy` (`optimize.milp`, HiGHS) | Literature baselines whose paper solves an ILP (NFSP, 10.4). Never in `meda.core` or the env |
 | DAG utilities | `networkx` | Validation, topological order, critical path. Not used in the env hot path |
 | Console | `rich`, `tqdm` | |
 | Tests | `pytest`, `hypothesis` | Property-based tests for conservation and exactness |

@@ -2275,6 +2275,64 @@ independent reference (oracle, optimum, bound, validator) catches it.**
   (search instead of demonstrations), AlphaTensor (synthetic demonstrations + search; our
   failure-penalty idea), DD-PPO (Wijmans et al. 2020) for the collector, PPG (Cobbe et al. 2021)
   and PopArt if value interference matters.
+- **L-6 (2026-10-31) Objectives of every published method; e-MRCM reimplemented** (benchmarking
+  side session; uncommitted at writing). Read from the PDFs in `~/Downloads/sample prepration/`
+  (e-MRCM, NFSP, MTMD, DDMT and robust aliquot newly added; closes most of L-4):
+  `notes/lit_bench/objectives.md`. Three objective families: steps (DFM, Generic, MTMD, DDMT),
+  priced fluid (FacDA, WSPM, MRCM, **e-MRCM**, **NFSP**), waste (STWM, MTWM, robust aliquot).
+  e-MRCM prices reactants geometrically 1 to 64 like our 64/8/1, so it is the closest
+  competitor; NFSP is optimal within 1:1 mixing; DDMT trades sample for fewer steps.
+  **e-MRCM reimplemented** (`src/meda/solvers/baselines/emrcm.py`, tests
+  `tests/solvers/test_emrcm.py`): targets in order of largest denominator, each an MRCM search
+  in which a droplet an earlier tree left over is a free child. It reproduces Fig. 11(c)
+  exactly: 4 mixes, R1 4 / R2 2 / R3 6, waste 4, cost 28 (separate MRCM trees: 46 in the paper;
+  our MRCM finds 19 + 25 = 44, as for Fig. 3(b)). The paper prints the second target as
+  <3, 6, 44>, which its own tree does not make; the tree makes <75, 6, 44>/125. **Coverage on our
+  val sets** (exact targets, demand 1): s2 17 of 40, s3 0 of 40 (all demand > 1), s4 5 of 40,
+  s5 8 of 42; the rest is a denominator with a prime above M (tolerant targets; 18 / 0 / 12 /
+  12), demand > 1 (0 / 40 / 20 / 18), the search budget (3 / 0 / 0 / 2), no exact tree (2 / 0 /
+  3 / 0) or, on s5, a plan over the storage limit (2). **Not yet reproduced: Table III** (N 2-5,
+  2-5 targets, P = 1/512, 50 random sets each): our MRCM search exceeds its budget on 4-5
+  reactants at 1/512 (6 of 6 draws), where the paper uses a narrower search (its Eq. 11).
+  Table III's e-MRCM gain over MRCM is small: reactant cost -0.0% to -8.1% (N 2, 5 targets).
+- **L-7 (2026-10-31) e-MRCM's Table III does not reproduce under our reading** (benchmarking
+  session; `scripts/emrcm_table3.py`, uncommitted at writing). Eq. 11 ("the first term of Eq. 10
+  set to 1") read as: a mix of T units for a node of denominator D needs T | D, and the
+  intermediate children's denominators divide D / T together (`mrcm._Search(narrow=True)`,
+  off by default). Every tree the paper draws meets it (Fig. 3(a), Fig. 11(c), tests), and it is
+  fast at 1/512 (N 2: 0.03 s, N 3: 0.14 s median per target). But on random targets it leaves
+  many with no tree: N 3 5 of 30, **N 4 18 of 30**, and on N 5 it still exceeds the search
+  budget; the paper reports every set. So it is not the paper's search. Table III protocol on
+  N 2-3 (20 sets each, seed 7; our draws, weights 1-64 geometric, 4X targets, 8-unit mixes):
+  mix counts close to the paper (N 2: MRCM 10.3 / 16.5 / 19.5 / 24.4 vs 10.8 / 16.8 / 22.1 /
+  27.3 for 2-5 targets), but reactant cost 1.5-2.4x the paper's and **our e-MRCM saves far more
+  over MRCM at N 2** (-12% to -21% vs the paper's -2% to -8%); at N 3 the gains agree (-2.5% to
+  -4.6% vs -0.8% to -3.4%), with 5-11 of 20 sets failing. The paper does not give its target
+  draw, weights per N or cost units, so absolute numbers cannot be pinned down. Consequence:
+  every e-MRCM number we publish is "e-MRCM, our reading", checked on the worked example only.
+  *Decision (user, 2026-10-31):* accepted; e-MRCM is reported as "our reading" and the
+  benchmarking moves on to NFSP (closes Q-117).
+- **L-8 (2026-10-31) NFSP reimplemented; slow on HiGHS** (benchmarking session; uncommitted at
+  writing; `src/meda/solvers/baselines/nfsp.py`, tests `tests/solvers/test_nfsp.py`). Dinh,
+  Yamashita and Ho (ASP-DAC 2014): min-cost flow with equal-flow pairs over d levels of 1:1
+  dilutions, optimal within 1:1 mixing at precision 2^-d, any number of targets and droplets.
+  New dependency scipy (HiGHS, `optimize.milp`; user, 2026-10-31; SPEC 3) instead of the paper's
+  CPLEX. Reproduces Fig. 2 exactly (3/8 x 4, 5/8 x 6, cost_s 2, cost_b 1: sample 6, buffer 5,
+  F 17), plan replays and validates. Our MEDA reading: n parallel dilutions of a pair are one n:n
+  mix (2n <= M); a target droplet of v units comes from one mix (extra ILP variables); tolerant
+  targets move to the nearest c/2^d with the smallest d; ties to fewest mixes then least waste.
+  **Speed:** HiGHS needs 3-20 s for one single-droplet target at d = 7 and did not finish d = 10
+  in 10 min, so the paper's Table I (d = 10, all 1023 targets) cannot be checked on the Mac; a
+  level-free model is fast but wrong (cycles make 1/128 from one sample and one buffer).
+  **Probe on val_s3_v2 dilutions** (20; 60 s per solve, Mac): 11 solved (0.1-45 s), 4 exact
+  targets off the 2^d grid, 2 droplets of 3 units at M 3 (a 1:1 mix is even), 3 over the time
+  limit (two at d = 9). Against our planner (`share`) on the 11: mean ratio 0.951, cheaper on 3
+  (0.54, 0.79, 0.80), within 3% on 7, dearer on 1 (1.23).
+  *Decision (user, 2026-10-31; closes Q-118):* 600 s per ILP solve, run on the workstation, so
+  NFSP is judged on its plans, not its solve time; a solve over 600 s is reported as "not
+  solved in 600 s". Runner `scripts/lit_bench_full.py`: NFSP and e-MRCM on all of val_s3-s5_v2
+  (122) against the best planner, set C marked, E-36's search optional; tried on 9 problems at
+  60 s on the Mac (runs end to end). Numbers when the workstation run is back.
 
 ---
 

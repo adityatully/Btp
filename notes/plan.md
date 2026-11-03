@@ -232,7 +232,11 @@ depth 2 is 10-18× faster but 7-10% dearer, parked (D-44). *Round 3 done 2026-10
 - **6.2 Tier 2:** DMFB sanity sweep (`dmfb_sweep_v1`).
 - **6.3 Tier 3:** published baselines, one set per paper (WSPM, FacDA, MRCM, e-MRCM, MTWM, and
   single-target MEDA dilution methods such as Dong 2024 for stage 1), plus the plan
-  translator. Needs the PDFs; SPEC 10.4 forbids rebuilding methods from memory.
+  translator. Needs the PDFs; SPEC 10.4 forbids rebuilding methods from memory. *Started
+  2026-10-31 (L-6, L-7):* all PDFs now on disk; e-MRCM built and matches its worked example;
+  its Table III does not reproduce under our reading (Q-117); reported as "our reading" (user). NFSP built 2026-10-31 (L-8):
+  matches its Fig. 2; 600 s per solve on the workstation (user, Q-118 closed, L-8); runner
+  `scripts/lit_bench_full.py` ready, run on coe9 pending.
 - **6.4 Tier 4:** generalisation probes (with 5.2).
 - **6.5 Tier 5:** frontier set `frontier_v1`.
 - **6.6 Tier 6:** assay ratios from real protocols.

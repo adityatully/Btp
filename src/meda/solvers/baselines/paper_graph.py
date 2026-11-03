@@ -25,7 +25,7 @@ from meda.core.costs import CostWeights
 from meda.core.dag import MixingDAG
 from meda.core.fluids import FluidKind
 from meda.core.problem import Instance
-from meda.core.rules import replay
+from meda.core.rules import IllegalActionError, replay
 from meda.solvers.base import PlanBuilder, SolveBudget, SolveResult
 
 
@@ -44,10 +44,16 @@ class In:
 
 @dataclass(frozen=True, slots=True)
 class PaperGraph:
-    """Nodes in topological order; the last is the root, which holds the target."""
+    """Nodes in topological order; the last is the root, which holds the target. A
+    multi-target method (e-MRCM, NFSP) gives `roots` instead: the node each delivered droplet
+    comes from, target by target in the instance's order, `demand` entries per target."""
 
     num_fluids: int
     nodes: tuple[tuple[In, ...], ...]
+    roots: tuple[int, ...] | None = None
+
+    def root_nodes(self) -> tuple[int, ...]:
+        return self.roots if self.roots is not None else (len(self.nodes) - 1,)
 
     def volume(self, i: int) -> int:
         return sum(x.units for x in self.nodes[i])
@@ -71,9 +77,10 @@ class PaperGraph:
         return out
 
     def used(self) -> list[bool]:
-        """Nodes the root depends on (a node no one takes from is never built)."""
+        """Nodes the roots depend on (a node no one takes from is never built)."""
         keep = [False] * len(self.nodes)
-        keep[-1] = True
+        for r in self.root_nodes():
+            keep[r] = True
         for i in range(len(self.nodes) - 1, -1, -1):
             if keep[i]:
                 for x in self.nodes[i]:
@@ -123,25 +130,41 @@ def single_target(instance: Instance) -> None:
 
 
 def emit(instance: Instance, graph: PaperGraph) -> tuple[Action, ...]:
-    """Engine actions that build `graph` and output its root to the instance's one target.
+    """Engine actions that build `graph` and output each root to its target (a single-target
+    graph's root is its last node; with `roots`, one per delivered droplet).
 
     Inputs of a node are merged by source and folded into a running droplet one at a time, in
     the first order whose every intermediate mix is legal (a result equal to one of its sources,
-    or a denominator above the chip's limit, is not). Leftovers stay on chip and go to waste at
-    the end (storage is loose on stages 1-2). A plan longer than the instance's step limit,
-    which binds every producer, is not applicable."""
-    single_target(instance)
-    target = instance.targets[0]
+    or a denominator above the chip's limit, is not). Outputs come last; leftovers stay on chip
+    and go to waste at the end. A plan longer than the instance's step limit, which binds
+    every producer, is not applicable; so is one that breaks a chip rule on the way, such as a
+    storage limit the method does not model (SPEC 12: the share of plans that fit is reported)."""
+    roots = graph.root_nodes()
+    if graph.roots is None:
+        single_target(instance)
+    wanted = [t for t in instance.targets for _ in range(t.demand)]
+    if graph.roots is not None and len(roots) != len(wanted):
+        raise NotApplicable(
+            f"the method makes {len(roots)} droplets, the targets need {len(wanted)}"
+        )
     if graph.num_fluids != instance.num_fluids:
         raise ValueError("graph and instance disagree on the number of fluids")
-    if graph.volume(len(graph.nodes) - 1) < target.droplet_volume:
-        raise NotApplicable(
-            f"the method's last mix makes {graph.volume(len(graph.nodes) - 1)} units, "
-            f"the target droplet is {target.droplet_volume}"
-        )
-    comps = graph.compositions()
     keep = graph.used()
-    steps = 1 + sum(
+    taken = [0] * len(graph.nodes)
+    for i, node in enumerate(graph.nodes):
+        for x in node:
+            if keep[i] and x.node is not None:
+                taken[x.node] += x.units
+    for r, target in zip(roots, wanted, strict=True):
+        taken[r] += target.droplet_volume
+    for r in set(roots):
+        if graph.volume(r) < taken[r]:
+            last = "the method's last mix" if graph.roots is None else f"node {r}"
+            raise NotApplicable(
+                f"{last} makes {graph.volume(r)} units, its uses and deliveries need {taken[r]}"
+            )
+    comps = graph.compositions()
+    steps = len(roots) + sum(
         len({(x.fluid, x.node) for x in node if x.units}) - 1
         for i, node in enumerate(graph.nodes)
         if keep[i]
@@ -152,10 +175,14 @@ def emit(instance: Instance, graph: PaperGraph) -> tuple[Action, ...]:
         )
     b = PlanBuilder.start(instance)
     uid: dict[int, int] = {}
-    for i, node in enumerate(graph.nodes):
-        if keep[i]:
-            uid[i] = _fold(b, _merged(node, uid, comps), instance, i)
-    b.do(Output(Source.droplet(uid[len(graph.nodes) - 1]), target.id))
+    try:
+        for i, node in enumerate(graph.nodes):
+            if keep[i]:
+                uid[i] = _fold(b, _merged(node, uid, comps), instance, i)
+        for r, target in zip(roots, wanted, strict=True):
+            b.do(Output(Source.droplet(uid[r]), target.id))
+    except IllegalActionError as e:  # a method that ignores storage overfills a limited chip
+        raise NotApplicable(f"the plan breaks a chip rule: {e}") from e
     return tuple(b.actions)
 
 

@@ -57,6 +57,8 @@ chats. Last updated 2026-11-03.*
 | Q-125 | Change the claim to "search over a planner, with learning where the planner is weak", and stop trying to replace the planner on s3-s5? | Open, waiting on the user; after D-54 (plan 4.2) |
 | Q-126 | Can a value head rank sibling moves if it reads the candidate moves (and hints), or is trained to rank instead of to hit the cost? | Head check (D-54), plan 4.2 |
 | Q-127 | Does the search build intermediate droplets the planner never makes, reused later to cut cost (the "unexpected moves")? | Plan check after D-54, plan 4.2 |
+| Q-117 | Does our e-MRCM reproduce the paper's Table III (its gain over MRCM on 2-5 targets)? | No, not under our Eq. 11 reading; closed: e-MRCM is reported as "our reading" (L-7) |
+| Q-118 | What time limit per ILP solve for NFSP on s3-s5 (3 of 20 s3 dilutions hit 60 s)? | Closed: 600 s on the workstation (user, L-8) |
 | Q-72 | Self-imitation if cost stalls near the teacher? | 4.3 |
 | Q-73 | Are the results stable across seeds? | 5.1 |
 | Q-78 | Root cause of the long-plan failures (s2, and s3–5 zero-shot) | 3.2, then 3.5 |
@@ -580,6 +582,21 @@ is from set B; on set C as a whole it tied. Split E-36 and E-39's set C records 
 **Closed (E-41): the planner is weaker on mixtures (the search gains 19% there, 14% on
 dilutions), but the network does not help there:** the flat prior is ahead at 10, 60 and 900 s.
 On dilutions the network is faster at 10 s (0.887 vs 0.913).
+
+**Q-118 What time limit per NFSP solve?** · **Closed** (2026-10-31, benchmarking session;
+user: 600 s per solve on the workstation → L-8)
+NFSP's ILP is NP-hard and HiGHS is slower than the paper's CPLEX: at 60 s per solve, 3 of the 20
+val_s3 dilutions are not solved (L-8). A longer limit on the workstation, or report "not solved
+in T s" as a reason the method declines.
+
+**Q-117 Does our e-MRCM reproduce the paper's Table III?** · **Closed** (2026-10-31, benchmarking
+session; user: label it "our reading" and move on → L-7)
+Our reading reproduces the worked example (Fig. 11(c), cost 28; L-6). Table III averages 50
+random sets per (reactants N 2-5, targets 2-5) at P = 1/512; e-MRCM saves 0-8% of reactant cost
+over MRCM there. Our MRCM search runs out of budget on 4-5 reactants at 1/512, where the paper
+narrows it (Eq. 11). Until it reproduces, e-MRCM results stay "our reading".
+*2026-10-31 (L-7):* our reading of Eq. 11 matches every drawn tree but leaves most 4-reactant
+targets with no tree; on N 2-3 mix counts are close, costs and e-MRCM's gain at N 2 are not.
 
 **Q-119 Does training on dead ends from its own games teach the value head to judge full-size
 problems?** · **Closed → E-43: no** (D-47; user, 2026-11-01)

@@ -17,6 +17,7 @@ dependencies = [
     "networkx",
     "rich",
     "tqdm",
+    "scipy",
 ]
 
 [project.optional-dependencies]
@@ -80,7 +81,7 @@ check_untyped_defs = true
 
 # pandas ships no type information (pandas-stubs is not a dependency).
 [[tool.mypy.overrides]]
-module = "pandas"
+module = ["pandas", "scipy.*"]
 ignore_missing_imports = true
 
 # Strict on the exact rules engine (SPEC section 18).
