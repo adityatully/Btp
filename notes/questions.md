@@ -55,8 +55,9 @@ chats. Last updated 2026-11-03.*
 | Q-123 | Can the network learn where the planner's finish can be beaten (gain head), well enough to help the search? | Closed → E-48: no; weak signal (AUC 0.66), picks best sibling 0.74 vs planner 0.75 |
 | Q-124 | Is the value head held back by how much data it sees: with clean planner-finish labels, does its agreement with the planner's sibling choice rise from 3k to 100k positions? | Closed → E-49: helps slowly (0.34 → 0.39); error ~N^-0.10, far from the gap |
 | Q-125 | Change the claim to "search over a planner, with learning where the planner is weak", and stop trying to replace the planner on s3-s5? | Open, waiting on the user; after D-54 (plan 4.2) |
-| Q-126 | Can a value head rank sibling moves if it reads the candidate moves (and hints), or is trained to rank instead of to hit the cost? | Head check (D-54), plan 4.2 |
+| Q-126 | Can a value head rank sibling moves if it reads the candidate moves (and hints), or is trained to rank instead of to hit the cost? | Closed → E-50: ranking helps (0.38 → 0.52), below the 0.55 bar |
 | Q-128 | Does the search improve a published planner (MRCM) put at its leaves, as it improves ours? | Finisher test (D-55), plan 4.2 |
+| Q-129 | Does the network guide the search where our planner is weak at full size (s3-s5 problems where e-MRCM or NFSP beats it)? | Set D race (D-56), plan 4.2 |
 | Q-127 | Does the search build intermediate droplets the planner never makes, reused later to cut cost (the "unexpected moves")? | Plan check after D-54, plan 4.2 |
 | Q-117 | Does our e-MRCM reproduce the paper's Table III (its gain over MRCM on 2-5 targets)? | No, not under our Eq. 11 reading; closed: e-MRCM is reported as "our reading" (L-7) |
 | Q-118 | What time limit per ILP solve for NFSP on s3-s5 (3 of 20 s3 dilutions hit 60 s)? | Closed: 600 s on the workstation (user, L-8) |
@@ -609,6 +610,12 @@ hopeless positions as dearer on average (1,361 vs 1,197) but not the move into o
 causes left: dead ends are a small share of the value data, and the value head reads only the
 global token (Q-111).
 
+**Q-129 Does the network guide the search where our planner is weak, at full size?** · **Open →
+plan 4.2, set D race (D-56)** (user, 2026-11-03)
+The network helped the search only on s2 mixtures where MRCM beats our planner (set B, E-39);
+set C was never chosen as "planner weak". Set D: s3-s5 problems where e-MRCM or NFSP beats our
+planner; net vs flat prior, D-43's race rule.
+
 **Q-128 Does the search improve a published planner put at its leaves?** · **Open → plan 4.2,
 finisher test (D-55)** (user, 2026-11-03; an experiment, Q-125 stays open)
 The search is never dearer than the planner at its leaves (its first leaf is that planner's own
@@ -624,7 +631,8 @@ Save the plans on set A and part of C; list droplets the planner's plan never ma
 a later step (e.g. 4 moves on) reuses.
 
 **Q-126 Can a value head rank sibling moves with the moves in view, or trained to rank?** ·
-**Open → plan 4.2, head check (D-54)** (user, 2026-11-03)
+**Closed → E-50: closer, not enough** (user, 2026-11-03; closed 2026-11-03: the ranking loss
+lifts it 0.38 → 0.49, reading the moves adds 0.03 more, 0.52 < 0.55; top2 0.68)
 E-49: the head picks the planner's cheapest sibling 0.39 (bound 0.36). The head reads only the
 global token, never the candidates or hints, and was always trained to hit the cost. Arms:
 moves-reading, ranking loss, both, and the control; useful at >= 0.55.

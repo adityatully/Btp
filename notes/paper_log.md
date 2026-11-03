@@ -749,6 +749,19 @@ Format: date · decision · alternatives considered · why · evidence.
   budget. A plan dearer than MRCM is a bug (raised). Reported, no bar: the `share` finisher on
   the same problems. Smoke run (Mac, 2 problems, 16 sims, 60 s, not a result): val_s2-000
   176 vs MRCM 234 (one searched move, then MRCM's finish), val_s2-003 equal.
+- **D-56 (2026-11-03) Does the network guide the search where our planner is weak, at full
+  size?** (user: "we test this first"; an experiment, Q-125 stays open). The network helped the
+  search only on set B (E-39: 13 s2 mixtures where MRCM beats our planner, 0.59 vs 0.68 of the
+  planner at 60 s) and not on set C (E-36, E-41), which was chosen as "planner above the bound",
+  not "planner weak". No full-size counterpart of B was ever tested. **Set D**
+  (`search_check.py sets=D`): the `val_s3-s5_v2` problems on which e-MRCM or NFSP (from
+  `lit_bench_full.py`, L-8, run first) is cheaper than our best planner; chosen by outside
+  methods, so neither search is favoured. **Run** (coe9): round 2's V network (the one the gate
+  keeps, E-40), `net` vs `uniform` at 256 sims, 900 s cap, as E-39. **Reading, fixed in
+  advance:** D-43's race rule on D: the network helps if at 10 s or 60 s `net`'s mean cost /
+  planner is >= 0.02 below `uniform`'s and `net` is cheaper on more problems than the reverse;
+  otherwise it does not. With fewer than 10 problems in D, reported only (no reading).
+  Reported, no bar: how many of D the search brings below the published method.
 
 ---
 
@@ -1530,6 +1543,39 @@ MRCM's intermediates on val_s2: 4 of 28 covered (chain D4), 5 of 28 (premix D3).
   (an exact lower bound on mixes left, or a constructive method's recipes, which is a planner
   again). (3) Built as SPEC 0.28 `hint_source: problem` (depth-4 chain in the recipe columns)
   for a copy-test comparison on stages 1–2 against the planner's hints.
+
+### E-50 (2026-11-03) Head check (D-54): ranking loss helps a lot, still below the bar
+`scripts/head_check.py`, code `c45e0dc`, workstation (cuda), `outputs/heads/{run.log,
+metrics.jsonl,table.json,*.pt}` there. E-49's data: `train_100000.jsonl`, graded on its 60
+held-out problems (445 sibling groups); each arm from round 3's network, whole network trained,
+6 epochs; 8,287 s for all four. head_best = share of sibling groups where spent + predicted
+finish picks the planner's cheapest sibling; top2 = the cheapest is among the head's two best;
+error in cost units, median.
+
+| arm | head_best | top2 | bound_best | chance | head error |
+|---|---|---|---|---|---|
+| global (control) | 0.378 | 0.589 | 0.355 | 0.208 | 144 |
+| moves | 0.382 | 0.557 | 0.355 | 0.208 | 127 |
+| rank | 0.488 | 0.661 | 0.355 | 0.208 | 830 |
+| moves_rank | **0.519** | **0.679** | 0.355 | 0.208 | 987 |
+
+Runner-up gap 7 on every row.
+- **Reading (D-54, fixed in advance): no arm reaches 0.55**, so the head cannot rank siblings
+  well enough to go into the search; Q-125 (the claim) is next.
+- **The ranking loss is the change that matters:** +0.11 over the control (0.378 → 0.488), more
+  than 33x the data gave in E-49 (+0.04). Training on the order, not the cost, was the right
+  idea; the cost error (830, 987) is meaningless for those arms, as the loss ignores an offset.
+- **Reading the moves adds little on its own** (+0.004, though its cost error falls 144 → 127),
+  and +0.03 on top of the ranking loss.
+- **The control reproduces E-49** (0.378 vs 0.387), so the setup is sound.
+- **More epochs would not help.** Per epoch (held-out head_best), rank: 0.45, 0.49, 0.48, 0.50,
+  0.46, 0.49; moves_rank: 0.48, 0.48, 0.51, 0.50, 0.49, 0.52, while the training loss keeps
+  falling (2.2 → 1.8 / 1.75). Flat from epoch 1-2 on, around 0.49-0.50; the swings (±0.03) are
+  the noise of 445 groups (one standard error ≈ 0.024). The 0.52 is the best epoch, not a trend.
+- **Closest so far, still short:** 0.52 means the head misses the planner's cheapest sibling
+  about half the time; top2 0.68 means pruning to two children before planner finishes would
+  lose it a third of the time. Trained on planner labels it can at best rank as the planner
+  does (D-54), so even at the bar its use would be speed, not quality.
 
 ### E-49 (2026-11-03) Data scaling check (D-53): more clean data helps, far too slowly
 `scripts/scaling_check.py` + `scripts/imitation_check.py`, code `f9320c1`, workstation,
