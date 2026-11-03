@@ -211,6 +211,11 @@ class SetEncoderNet(nn.Module):
 
     def forward(self, obs: TensorObs) -> tuple[Tensor, Tensor]:
         """Raw candidate logits [B, L] (unmasked) and values [B]."""
+        z, g = self.candidate_inputs(obs)
+        return self.scorer(z).squeeze(-1), self.value_head(g).squeeze(-1)
+
+    def candidate_inputs(self, obs: TensorObs) -> tuple[Tensor, Tensor]:
+        """The scorer's input per candidate [B, L, D_CAND + 5d] and the global token [B, d]."""
         x, g, hf, hd, ht = self.encode(obs)
         b, nf, d = hf.shape
         nd, nt = hd.shape[1], ht.shape[1]
@@ -241,9 +246,7 @@ class SetEncoderNet(nn.Module):
         h_a = operand(index[..., 1], index[..., 2])
         h_b = operand(index[..., 3], index[..., 4])
         g_rep = g.unsqueeze(1).expand_as(h_a)
-        z = torch.cat([obs["candidates"], c_res, r, h_a, h_b, g_rep], dim=-1)
-        logits = self.scorer(z).squeeze(-1)
-        return logits, self.value_head(g).squeeze(-1)
+        return torch.cat([obs["candidates"], c_res, r, h_a, h_b, g_rep], dim=-1), g
 
 
 def _gather_rows(rows: Tensor, index: Tensor) -> Tensor:
