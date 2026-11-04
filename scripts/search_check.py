@@ -58,6 +58,16 @@ problems than the reverse; otherwise no speed gain at these budgets. B is report
 Race on D, fixed in advance (D-56): the same rule as D-43, on D at the largest budget; with
 fewer than 10 problems in D it is reported only.
 
+- **T (D-59):** the scale check's 10 probes with 40 targets (`scale_check.problems("t40", 10,
+  0)`, E-53: one planner finish takes a median 26 s there). No planner records exist; the
+  reference `planner` is the sharing pass from the empty chip (`finish_from`), computed before
+  the search's clock starts. The env's `T_pad` is raised to the target count (a memory setting).
+Race on T, fixed in advance (D-59): D-43's rule for `net` and for `zero`, each at every budget
+run, against `uniform`; **the network makes search faster at 40 targets** if any of them passes.
+
+    uv run python scripts/search_check.py sets=T agent=outputs/expert/round2/copy_v/imitation.pt \
+        sims=1,16,256 uniform=256 workers=30 out=outputs/scale/search_t.jsonl
+
 Arguments are key=value: `sets` (A,B; C and D on request), `limit=N` problems per set, `sims`
 (budgets, default 64,256), `uniform` (budget for the flat prior, default the largest of `sims`;
 0 = off), `seconds` (cap per problem and search, default 900), `hints` (the env's
@@ -97,6 +107,7 @@ from omegaconf import OmegaConf
 from meda.analysis.evaluate import build_env
 from meda.core.actions import Action
 from meda.core.problem import Instance
+from meda.core.state import PrepState
 from meda.envs.sample_prep_env import EnvSnapshot, SamplePrepEnv
 from meda.generators.benchmark_io import BenchmarkSet
 from meda.solvers.baselines.paper_finish import MrcmFinish
@@ -114,6 +125,7 @@ C_PUCT = 1.5
 FOUND_SHARE, MISS = 1 / 3, 0.02
 D_MIN = 10
 LIT_FULL = ROOT / "notes/lit_bench/runs/full/records.jsonl"
+T_SIZE, T_N = "t40", 10  # D-59: the scale check's probes
 COSTS = "costs/geometric.yaml"  # the env's costs; must match WEIGHTS
 RACE_AT, RACE_GAP = (1, 10, 60, 300, 900), 0.02
 
@@ -196,6 +208,11 @@ def tasks(sets: set[str], limit: int | None) -> list[dict[str, Any]]:
                 | {"mrcm": lit[(src, i.instance_id)]}
                 for i in insts[:limit]
             ]
+    if "T" in sets:
+        import scale_check
+
+        for inst in scale_check.problems(T_SIZE, T_N, 0)[:limit]:
+            out.append(_task("T", inst, inst.metadata["cell"], {}, None) | {"planner": None})
     return out
 
 
@@ -209,7 +226,7 @@ def _task(
         "cell": cell,
         "instance": inst.to_json(),
         "optimum": optimum,
-        "planner": best_planner(rec),
+        "planner": best_planner(rec) if rec else None,
         "mrcm": (rec.get("mrcm") or {}).get("cost"),
         "greedy": agent.get("cost"),
     }
@@ -444,7 +461,15 @@ def run_task(
         agent = _AGENT[opts["agent"]]
     cfg = {"costs": _load(COSTS), "env": _load("env/sample_prep.yaml")}
     cfg["env"]["hint_source"] = opts["hints"]
+    cfg["env"]["T_pad"] = max(cfg["env"]["T_pad"], len(inst.targets))
     env = build_env(cfg, [inst])
+    task = dict(task)
+    if task["planner"] is None:  # set T: the sharing pass from the empty chip, off the clock
+        t0 = time.perf_counter()
+        start = finish_from(PrepState.initial(inst), inst, WEIGHTS)
+        if start is None:
+            raise RuntimeError(f"{inst.instance_id}: the sharing pass does not finish")
+        task["planner"], task["planner_seconds"] = float(start[1]), time.perf_counter() - t0
     t0 = time.perf_counter()
     finish = MrcmFinish(inst, WEIGHTS) if finisher == "mrcm" else None
     search = Search(
@@ -585,6 +610,9 @@ def race(groups: dict[tuple[str, str, int], list[dict[str, Any]]]) -> list[str]:
             cells.append(f"{ratio:.3f} ({have})")
         lines.append(f"| {key[0]} | {key[1]} | {key[2]} | {len(rs)} | {' | '.join(cells)} |")
     for s in sorted({k[0] for k in pools}):
+        if s == "T":
+            lines += race_t(pools)
+            continue
         top = max(k[2] for k in pools if k[0] == s)
         net, uni = pools.get((s, "net", top)), pools.get((s, "uniform", top))
         if net and uni:
@@ -602,7 +630,26 @@ def race(groups: dict[tuple[str, str, int], list[dict[str, Any]]]) -> list[str]:
     return lines
 
 
-def race_verdict(net: list[dict[str, Any]], uni: list[dict[str, Any]]) -> str:
+def race_t(pools: dict[tuple[str, str, int], list[dict[str, Any]]]) -> list[str]:
+    """D-59: `net` and `zero` at every budget against `uniform` at its largest; the network
+    makes search faster at 40 targets if any of them passes D-43's rule."""
+    unis = [k for k in pools if k[0] == "T" and k[1] == "uniform"]
+    if not unis:
+        return []
+    uni = pools[max(unis, key=lambda k: k[2])]
+    keys = sorted(k for k in pools if k[0] == "T" and k[1] in ("net", "zero"))
+    if not keys:
+        return []
+    lines, faster = [], False
+    for key in keys:
+        found = race_verdict(pools[key], uni, key[1])
+        faster |= found.endswith("the network makes search faster")
+        lines.append(f"Race on T, {key[1]} at {key[2]} sims: {found}")
+    verdict = "the network makes search faster at 40 targets" if faster else "no speed gain"
+    return [*lines, f"Race reading on T (fixed in advance, D-59): {verdict}"]
+
+
+def race_verdict(net: list[dict[str, Any]], uni: list[dict[str, Any]], name: str = "net") -> str:
     by_id = {r["id"]: r for r in uni}
     pairs = [(r, by_id[r["id"]]) for r in net if r["id"] in by_id]
     out, faster = [], False
@@ -613,7 +660,7 @@ def race_verdict(net: list[dict[str, Any]], uni: list[dict[str, Any]]) -> str:
         losses = sum(cost_at(n, t) > cost_at(u, t) + 1e-9 for n, u in pairs)
         faster |= a <= b - RACE_GAP and wins > losses
         out.append(
-            f"at {t} s net {a:.3f} vs uniform {b:.3f}, net cheaper on {wins}, dearer {losses}"
+            f"at {t} s {name} {a:.3f} vs uniform {b:.3f}, {name} cheaper on {wins}, dearer {losses}"
         )
     verdict = "the network makes search faster" if faster else "no speed gain at these budgets"
     return "; ".join(out) + f": {verdict}"

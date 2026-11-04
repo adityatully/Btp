@@ -201,3 +201,33 @@ def test_race_on_d_is_reported_only_below_ten_problems() -> None:
         line = next(x for x in SC.race(groups) if x.startswith("Race reading on D"))
         assert ("reported only" in line) == few
         assert "D-56" in line and line.endswith("the network makes search faster")
+
+
+def test_set_t_is_the_forty_target_probes_with_the_planner_computed_in_the_run() -> None:
+    """D-59: T has no planner records; the reference is the sharing pass, computed before the
+    search's clock starts."""
+    found = SC.tasks({"T"}, None)
+    assert [t["id"] for t in found] == [f"t40-{i:02d}" for i in range(10)]
+    assert all(t["planner"] is None and t["set"] == "T" for t in found)
+    instance = TINY.instances[0]
+    start = finish_from(PrepState.initial(instance), instance, SC.WEIGHTS)
+    assert start is not None
+    task = {"set": "T", "id": instance.instance_id, "cell": "", "instance": instance.to_json()}
+    task |= {"optimum": None, "planner": None, "mrcm": None, "greedy": None}
+    rec = SC.run_task(task, "uniform", 4, OPTS)
+    assert rec["planner"] == float(start[1]) and rec["planner_seconds"] >= 0
+    assert rec["search_cost"] <= rec["planner"] + 1e-9
+
+
+def test_race_on_t_counts_net_or_zero_at_any_budget() -> None:
+    def rec(i: int, trace: list[tuple[float, float]]) -> dict[str, Any]:
+        return {"id": str(i), "planner": 100.0, "trace": trace}
+
+    slow = [rec(i, [(100.0, 90.0)]) for i in range(10)]
+    fast = [rec(i, [(5.0, 90.0)]) for i in range(10)]
+    groups = {("T", "uniform", 256): slow, ("T", "net", 256): slow, ("T", "zero", 256): slow}
+    assert SC.race(groups)[-1].endswith("D-59): no speed gain")
+    groups[("T", "zero", 1)] = fast
+    lines = SC.race(groups)
+    assert lines[-1].endswith("the network makes search faster at 40 targets")
+    assert any(x.startswith("Race on T, zero at 1 sims") for x in lines)
