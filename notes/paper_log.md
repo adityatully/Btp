@@ -804,6 +804,26 @@ Format: date · decision · alternatives considered · why · evidence.
   and `zero`) against the flat prior at that size, D-43's race rule. The network was trained
   on s1-s5 sizes, so a loss there may be generalisation rather than the idea; reported as
   such. Reported, no bar: finish time against target count, demand and D.
+- **D-59 (2026-11-04) Race at 40 targets (D-58 step 2; user: "Yes, build step 2").** E-53:
+  one planner finish takes a median 26 s at 40 targets, so search with planner finishes gets
+  about 2 leaves by 60 s. **Set T** (`search_check.py sets=T`): the scale check's 10 probes
+  with 40 targets (`scale_check.problems("t40", 10, 0)`, the same problems as E-53). No
+  planner records exist at this size, so the reference `planner` is the sharing pass from the
+  empty chip, computed before the search's clock starts (on C and D it was the best of three
+  planners). The env's `T_pad` is raised to 40 for these problems (a memory setting; the
+  network is a set encoder and stores no padding). **Run** (coe9): round 2's V network
+  (`outputs/expert/round2/copy_v/imitation.pt`), `net` and `zero` at 1, 16 and 256 sims,
+  `uniform` at 256, 900 s cap. `zero` at 1 sim is the network alone, playing its top move: the
+  cheapest use of a network at any size. **Reading, fixed in advance:** D-43's rule for each
+  of the six network arms against `uniform` (at 10 s or 60 s, mean cost / planner >= 0.02
+  below `uniform`'s, and cheaper on more problems than the reverse); **the network makes
+  search faster at 40 targets** if any arm passes; otherwise no gain even where the planner
+  is too slow. Six arms against one control: a single passing arm is reported with that
+  caveat. The network never saw more than 10 targets, so a loss may be generalisation; and
+  a `zero` plan must beat the planner's own cost, which the race gives every arm at t = 0.
+  Smoke run (Mac, random-weight network, one problem, 16 sims, 180 s; not a result): `zero`
+  scores about 40 leaves a second and plays 16 sims a move, but did not finish a plan in
+  180 s; `uniform` scores 4 leaves in 120 s.
 
 ---
 
@@ -1585,6 +1605,26 @@ MRCM's intermediates on val_s2: 4 of 28 covered (chain D4), 5 of 28 (premix D3).
   (an exact lower bound on mixes left, or a constructive method's recipes, which is a planner
   again). (3) Built as SPEC 0.28 `hint_source: problem` (depth-4 chain in the recipe columns)
   for a copy-test comparison on stages 1–2 against the planner's hints.
+
+### E-53 (2026-11-04) Scale check (D-58): at 40 targets one planner finish takes a median 26 s
+`scripts/scale_check.py workers=30`, code `179f7ac`, coe9, `outputs/scale/{records.jsonl,run.log}`
+there. 10 problems per size over s5's three many-target cells; one finish from the start and one
+from halfway along its plan; cap 1800 s.
+
+| size | n | targets (median) | median s | start median | midpoint median | max | over cap |
+|---|---|---|---|---|---|---|---|
+| s5 (val_s5_v2) | 10 | 8.5 | 2.05 | 2.87 | 1.24 | 8.28 | 0 |
+| t20 (probe) | 10 | 20 | 5.02 | 7.90 | 4.49 | 36.60 | 0 |
+| t40 (probe) | 10 | 40 | 25.63 | 45.24 | 21.24 | 185.68 | 0 |
+
+- **Reading (D-58, fixed in advance): the finish is unaffordable at t40** (median 25.6 s >= 10 s):
+  in the race's 60 s the search with planner finishes gets about 2 leaves. s5 and t20 stay
+  affordable (2.1 s, 5.0 s). Step 2 (race the network at t40) waits for the user's go-ahead.
+- Finish time grows faster than the target count: ×2.4 from s5 to 20 targets, ×5.1 from 20 to
+  40. The midpoint is cheaper than the start (fewer targets left), so leaves deep in the tree
+  cost less than the root's.
+- Limits: 10 problems per size, one seed; t20 and t40 lie outside SPEC 1.3's training ranges,
+  and the network was trained on s1-s5 sizes.
 
 ### E-52 (2026-11-04) Goal check (D-57): under steps-first and waste-first the search still reaches the optimum
 `scripts/goal_check.py workers=36`, code `d750638`, coe9, `outputs/goals/records.jsonl` there.

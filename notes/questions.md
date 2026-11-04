@@ -57,7 +57,7 @@ chats. Last updated 2026-11-03.*
 | Q-125 | Change the claim to "search over a planner, with learning where the planner is weak", and stop trying to replace the planner on s3-s5? | Open, waiting on the user; after D-54 (plan 4.2) |
 | Q-126 | Can a value head rank sibling moves if it reads the candidate moves (and hints), or is trained to rank instead of to hit the cost? | Closed → E-50: ranking helps (0.38 → 0.52), below the 0.55 bar |
 | Q-128 | Does the search improve a published planner (MRCM) put at its leaves, as it improves ours? | Finisher test (D-55), plan 4.2 |
-| Q-131 | On bigger problems, does one planner finish get so slow (median >= 10 s) that the search affords only a few leaves, leaving room for a network? | Scale check (D-58), plan 4.2 |
+| Q-131 | On bigger problems, does one planner finish get so slow (median >= 10 s) that the search affords only a few leaves, leaving room for a network? | Step 1 → E-53: yes at 40 targets (median 25.6 s; s5 2.1 s, 20 targets 5.0 s); step 2: race at 40 targets (D-59), plan 4.2 |
 | Q-130 | Under the literature's other goals (steps first, waste first), do the planner and the search over it fall short of the optimum, leaving room for a network? | Closed → E-52: no (after the search at most 2.2% of proved problems > 2% above, mean gap <= 2.1%) |
 | Q-129 | Does the network guide the search where our planner is weak at full size (s3-s5 problems where e-MRCM or NFSP beats it)? | Closed → E-51: no (0.754 vs 0.755 at 60 s, 13 problems) |
 | Q-127 | Does the search build intermediate droplets the planner never makes, reused later to cut cost (the "unexpected moves")? | Plan check after D-54, plan 4.2 |
@@ -613,7 +613,8 @@ causes left: dead ends are a small share of the value data, and the value head r
 global token (Q-111).
 
 **Q-131 On bigger problems, is the planner finish too slow to search with?** ·
-**Open → plan 4.2, scale check (D-58)** (user, 2026-11-04)
+**Open → plan 4.2, scale check step 2 (D-58)** (user, 2026-11-04; step 1 E-53: one finish takes a
+median 25.6 s at 40 targets, 5.0 s at 20, 2.1 s on s5)
 A network costs the same at any size; a planner finish grows with the problem. On set D one
 finish took about 1 s and the network still added nothing (E-51). Time one finish on s5 and on
 probes with 20 and 40 targets; unaffordable if the median is >= 10 s, then race the network.
