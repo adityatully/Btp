@@ -57,7 +57,9 @@ chats. Last updated 2026-11-03.*
 | Q-125 | Change the claim to "search over a planner, with learning where the planner is weak", and stop trying to replace the planner on s3-s5? | Open, waiting on the user; after D-54 (plan 4.2) |
 | Q-126 | Can a value head rank sibling moves if it reads the candidate moves (and hints), or is trained to rank instead of to hit the cost? | Closed → E-50: ranking helps (0.38 → 0.52), below the 0.55 bar |
 | Q-128 | Does the search improve a published planner (MRCM) put at its leaves, as it improves ours? | Finisher test (D-55), plan 4.2 |
-| Q-129 | Does the network guide the search where our planner is weak at full size (s3-s5 problems where e-MRCM or NFSP beats it)? | Set D race (D-56), plan 4.2 |
+| Q-131 | On bigger problems, does one planner finish get so slow (median >= 10 s) that the search affords only a few leaves, leaving room for a network? | Scale check (D-58), plan 4.2 |
+| Q-130 | Under the literature's other goals (steps first, waste first), do the planner and the search over it fall short of the optimum, leaving room for a network? | Closed → E-52: no (after the search at most 2.2% of proved problems > 2% above, mean gap <= 2.1%) |
+| Q-129 | Does the network guide the search where our planner is weak at full size (s3-s5 problems where e-MRCM or NFSP beats it)? | Closed → E-51: no (0.754 vs 0.755 at 60 s, 13 problems) |
 | Q-127 | Does the search build intermediate droplets the planner never makes, reused later to cut cost (the "unexpected moves")? | Plan check after D-54, plan 4.2 |
 | Q-117 | Does our e-MRCM reproduce the paper's Table III (its gain over MRCM on 2-5 targets)? | No, not under our Eq. 11 reading; closed: e-MRCM is reported as "our reading" (L-7) |
 | Q-118 | What time limit per ILP solve for NFSP on s3-s5 (3 of 20 s3 dilutions hit 60 s)? | Closed: 600 s on the workstation (user, L-8) |
@@ -610,8 +612,24 @@ hopeless positions as dearer on average (1,361 vs 1,197) but not the move into o
 causes left: dead ends are a small share of the value data, and the value head reads only the
 global token (Q-111).
 
-**Q-129 Does the network guide the search where our planner is weak, at full size?** · **Open →
-plan 4.2, set D race (D-56)** (user, 2026-11-03)
+**Q-131 On bigger problems, is the planner finish too slow to search with?** ·
+**Open → plan 4.2, scale check (D-58)** (user, 2026-11-04)
+A network costs the same at any size; a planner finish grows with the problem. On set D one
+finish took about 1 s and the network still added nothing (E-51). Time one finish on s5 and on
+probes with 20 and 40 targets; unaffordable if the median is >= 10 s, then race the network.
+
+**Q-130 Under the literature's other goals, does the search over the planner fall short?** ·
+**Closed → E-52: no** (user, 2026-11-03; closed 2026-11-04: steps 0.3% mean gap, 1.3% of problems
+> 2% above after the search; waste 2.1%, 2.2%; the planner alone misses 9.2% and 18.9%)
+E-51: where planner finishes aim at the right goal, the search fixes the planner and the network
+adds nothing. The literature also optimises steps (mixes) and waste first. On E2's small problems,
+per goal: the planner's gap to the optimum, and what is left after the flat-prior search; room
+if >= 1/4 of proved problems stay > 2% above, or the mean gap >= 5%.
+
+**Q-129 Does the network guide the search where our planner is weak, at full size?** ·
+**Closed → E-51: no** (user, 2026-11-03; closed 2026-11-03: on the 13 s3-s5 problems where
+e-MRCM or NFSP beats our planner, net 0.785 / 0.754 vs flat prior 0.790 / 0.755 at 10 / 60 s;
+the search is at or below the published methods on 11 of 13)
 The network helped the search only on s2 mixtures where MRCM beats our planner (set B, E-39);
 set C was never chosen as "planner weak". Set D: s3-s5 problems where e-MRCM or NFSP beats our
 planner; net vs flat prior, D-43's race rule.

@@ -762,6 +762,48 @@ Format: date · decision · alternatives considered · why · evidence.
   planner is >= 0.02 below `uniform`'s and `net` is cheaper on more problems than the reverse;
   otherwise it does not. With fewer than 10 problems in D, reported only (no reading).
   Reported, no bar: how many of D the search brings below the published method.
+- **D-57 (2026-11-03) Goal check: does the planner, and the search over it, fall short under the
+  literature's other goals?** (user: "the cost change ... is the property of the literature";
+  an experiment, Q-125 stays open). E-51: wherever planner finishes aim at the right goal, the
+  search fixes the planner's misses and the network adds nothing. A network can only matter where
+  planner finishes mislead. Our planner was built for priced fluid; the literature's other two
+  objective families (L-6, `notes/lit_bench/objectives.md`) are **steps** (mix operations first:
+  DFM, Generic, MTMD, DDMT) and **waste** (STWM, MTWM, NFSP-W). Each is written "this first,
+  then fluid"; here as weights (`configs/costs/steps_first.yaml`, `waste_first.yaml`): one mix
+  (or one wasted unit) costs 65,536, the 64/8/1 fluid weights break ties. The run raises if any
+  plan's remaining cost reaches 65,536 (then the weights would not be lexicographic). **Run**
+  (`scripts/goal_check.py`, coe9): E2's 399 small problems, goals `fluid` (today's, optima on
+  record), `steps`, `waste`; per problem the three planners (share, share_look3, share_orders),
+  exact search seeded with the cheapest (600 s) where no optimum is on record, and, where the
+  optimum is proved and the best planner is > 2% above it, the flat-prior search with planner
+  finishes (256 sims, 900 s; elsewhere the search can be at most 2% better, so it is not run).
+  No network: step 1 only asks whether room is left. **Reading, fixed in advance, per goal, on
+  its proved problems** (plan 2.0's thresholds): the search leaves room if after it the share of
+  problems > 2% above the optimum is >= 1/4, or the mean gap is >= 5%; then step 2 trains a
+  network on that goal and asks whether it closes the gap. No room under either new goal → the
+  search over a planner suffices when the goal changes, and the network has no role there.
+  Fewer than 20 proved problems for a goal → that goal is inconclusive. Reported, no bar: the
+  planner's own gap per goal, and how many problems were proved.
+- **D-58 (2026-11-04) Scale check: does the planner finish become too slow to search with?**
+  (user, 2026-11-04; an experiment, Q-125 stays open). The second place a network could
+  matter (D-57 tests the first): where each planner finish at a leaf costs so much time that
+  the search affords only a few leaves, while a network costs the same at any size. On set D
+  this was already partly true (E-51: the flat-prior search took a mean 247 s for 256 sims,
+  about 1 s a leaf, so roughly 60 leaves by the race's 60 s) and the network still added
+  nothing; so the bar sits well above that. **Step 1, timing only, no training, no
+  network:** one `finish_from` per position, at the root and halfway along the root finish's
+  own plan (the same finish the search calls), 10 problems per size: `val_s5_v2`'s many-target problems (inside SPEC 1.3's
+  ranges), then probes outside them, the same s5 cells with 20 and 40 targets and demand up to
+  8 (generator settings in the script; configs and 1.3 unchanged). One finish is capped at
+  1800 s and recorded as over the cap, never dropped (rule 9). **Reading, fixed in advance:**
+  the finish is unaffordable at a size if the median finish there (start and midpoint
+  together; over the cap, or a midpoint skipped for it, counts as over) takes >= 10 s (then
+  the race's 60 s holds at most 6 leaves). Script `scripts/scale_check.py`. No size reaches
+  it → this second place is closed too: the planner finish stays affordable as far as we probe, and the network has no role on this problem type at these
+  sizes. A size reaches it → step 2, only on the user's go-ahead: round 2's network (`net`
+  and `zero`) against the flat prior at that size, D-43's race rule. The network was trained
+  on s1-s5 sizes, so a loss there may be generalisation rather than the idea; reported as
+  such. Reported, no bar: finish time against target count, demand and D.
 
 ---
 
@@ -1543,6 +1585,68 @@ MRCM's intermediates on val_s2: 4 of 28 covered (chain D4), 5 of 28 (premix D3).
   (an exact lower bound on mixes left, or a constructive method's recipes, which is a planner
   again). (3) Built as SPEC 0.28 `hint_source: problem` (depth-4 chain in the recipe columns)
   for a copy-test comparison on stages 1–2 against the planner's hints.
+
+### E-52 (2026-11-04) Goal check (D-57): under steps-first and waste-first the search still reaches the optimum
+`scripts/goal_check.py workers=36`, code `d750638`, coe9, `outputs/goals/records.jsonl` there.
+E2's 399 small problems × 3 goals, all 1197 done. Gap = cost / optimum - 1 on proved problems.
+
+| goal | problems | proved | searched | planner gap | planner over 2% | after search gap | after search over 2% |
+|---|---|---|---|---|---|---|---|
+| fluid | 399 | 65 | 3 | 2.5% | 4.6% | 0.1% | 0.0% |
+| steps | 399 | 238 | 22 | 2.8% | 9.2% | 0.3% | 1.3% |
+| waste | 399 | 228 | 43 | 296.4% | 18.9% | 2.1% | 2.2% |
+
+- **Reading (D-57, fixed in advance): no room under any goal.** After the flat-prior search
+  with planner finishes, at most 2.2% of proved problems stay > 2% above the optimum (bar
+  1/4) and the mean gap is at most 2.1% (bar 5%). Step 2 (a network trained on a new goal) is
+  not run.
+- The planner itself misses more under the new goals (steps 9.2%, waste 18.9% of problems
+  > 2% above; waste's mean 296% is a few problems where the planner wastes units and the
+  optimum wastes none, each wasted unit costing 65,536), and the search closes nearly all of
+  it. Same pattern as E-51: where planner finishes exist, lookahead over them fixes the
+  planner's misses without learning.
+- Limits: small problems only (where optima can be proved); `fluid` uses the optima on record
+  (65 proved), so its row is a check, not new evidence. No lexicographic violation was raised.
+
+### E-51 (2026-11-03) Set D (D-56): where published methods beat our planner, the network still does not help
+Code `41ab788`, workstation. Step 1: `lit_bench_full.py seconds=600 workers=36`, all 122
+`val_s3-s5_v2` problems, records `notes/lit_bench/runs/full/records.jsonl` there. Step 2:
+`search_check.py sets=D agent=round2/copy_v sims=256 uniform=256 workers=28`, 900 s cap,
+`outputs/setd/{records.jsonl,run.log}` there.
+
+**Published methods at full size** (ratio = cost / best planner, where they apply):
+
+| | NFSP accepted | NFSP < / = / > | e-MRCM accepted | e-MRCM < / = / > |
+|---|---|---|---|---|
+| s3 (40) | 12 | 3 / 1 / 8 | 0 | - |
+| s4 (40) | 1 | 0 / 0 / 1 | 5 | 2 / 0 / 3 |
+| s5 (42) | 4 | 2 / 0 / 2 | 8 | 6 / 1 / 1 |
+
+They apply to few problems: NFSP 17 of 122 (two fluids only, targets on the 1/2^d grid), e-MRCM
+13 of 122 (demand 1 only, M-smooth denominators). Where they apply they beat our best planner on
+13 (NFSP 5, e-MRCM 8): set D. NFSP median 0 s, max 1,592 s per problem.
+
+**Search on D** (13 problems; "<= lit" = at or below the cheaper published method):
+
+| search | below planner | ratio to planner | <= lit | no plan | capped | median s |
+|---|---|---|---|---|---|---|
+| net 256 (prior + planner finish) | 13 | 0.754 | 11 | 0 | 0 | 56 |
+| uniform 256 (flat prior) | 12 | 0.750 | 10 | 0 | 2 | 247 |
+| zero 256 (no planner) | 8 | 0.848 | 5 | 2 | 0 | 13 |
+
+Race, mean cost / planner if stopped at t: net 0.858 / 0.785 / 0.754 at 1 / 10 / 60 s, uniform
+0.843 / 0.790 / 0.755, zero 0.961 / 0.947 / 0.897.
+- **Reading (D-56, fixed in advance; 13 >= 10 so it counts): no speed gain.** At 10 s net 0.785
+  vs uniform 0.790 (cheaper on 3, dearer 1); at 60 s 0.754 vs 0.755 (5 / 2). The network does
+  not help the search where our planner is weak at full size. Q-129 closed: no. The s2 result
+  (set B, E-39) does not carry to full size, as E-41 found for mixtures. n = 13, one seed.
+- **The search beats the published methods where they beat our planner:** at or below them on
+  11 of 13 with the network, 10 with the flat prior, at ~25% under our planner. The gain comes
+  from lookahead with planner finishes.
+- **The network finishes its simulations ~4x sooner** (median 56 s vs 247 s, none capped vs 2),
+  but the cost by any time is the same: it reaches the same plans no earlier.
+- **No-planner search does better here than on C** (0.848 vs 0.891 on finished plans, E-36; 2 of
+  13 unfinished) but stays well behind planner finishes (0.750).
 
 ### E-50 (2026-11-03) Head check (D-54): ranking loss helps a lot, still below the bar
 `scripts/head_check.py`, code `c45e0dc`, workstation (cuda), `outputs/heads/{run.log,
