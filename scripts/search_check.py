@@ -68,12 +68,12 @@ run, against `uniform`; **the network makes search faster at 40 targets** if any
     uv run python scripts/search_check.py sets=T agent=outputs/expert/round2/copy_v/imitation.pt \
         sims=1,16,256 uniform=256 workers=30 out=outputs/scale/search_t.jsonl
 
-Arguments are key=value: `sets` (A,B; C and D on request), `limit=N` problems per set, `sims`
+Arguments are key=value: `sets` (A,B; C, D, F and T on request), `limit=N` problems per set, `sims`
 (budgets, default 64,256), `uniform` (budget for the flat prior, default the largest of `sims`;
 0 = off), `seconds` (cap per problem and search, default 900), `hints` (the env's
 `hint_source`; must be the one the agent was trained with, default planner), `reward_scale`
 (the agent's PPO reward scale, for `zero`; default 0.01 as E-22), `workers`,
-`finishers` (leaf finishers, default share).
+`finishers` (leaf finishers: share, mrcm, paper; default share).
 
 Finisher test (D-55): the leaf finisher is a parameter. `finishers=share,mrcm` runs each search
 once per finisher: `share` is the sharing pass (`finish_from`), `mrcm` is MRCM finishing from the
@@ -87,6 +87,20 @@ against the `share` finisher (which finisher the search does better with).
 
     uv run python scripts/search_check.py sets=B finishers=share,mrcm sims=256 workers=26 \
         out=notes/search/finish_b.jsonl
+
+- **F (D-60):** the finisher test for the single-target graph methods DFM, FacDA, Generic and
+  DFMM. Per method, sub-set `F-<method>`: the 13 `val_s1_v2` / `val_s2_v2` problems the method
+  takes on which it does best against our best planner (lowest method cost / planner; ties by
+  id), from `notes/lit_bench/runs/e22/records.jsonl`; the method's cost is the reference (the
+  `mrcm` field). Finisher `paper` is the problem's own method finishing from the current chip
+  (`GraphFinish`: its graph, with nodes already on chip taken from there).
+Reading on F, fixed in advance (D-60), `uniform` at the largest budget with `paper`: per
+method, the search improves it if it is below the method on >= 1/3 of its 13 problems (as
+D-55). With MRCM (E-55), **the search improves most published methods** if it improves at
+least 3 of these 4 (then 4 or more of the 7 we compare with); 1-2: some; 0: none of these.
+
+    uv run python scripts/search_check.py sets=F finishers=share,paper sims=256 workers=30 \
+        out=outputs/finish/finish_f.jsonl
 """
 
 from __future__ import annotations
@@ -110,7 +124,10 @@ from meda.core.problem import Instance
 from meda.core.state import PrepState
 from meda.envs.sample_prep_env import EnvSnapshot, SamplePrepEnv
 from meda.generators.benchmark_io import BenchmarkSet
-from meda.solvers.baselines.paper_finish import MrcmFinish
+from meda.solvers.baselines.dfmm import dfmm
+from meda.solvers.baselines.facda import dfm, facda
+from meda.solvers.baselines.generic import generic
+from meda.solvers.baselines.paper_finish import GraphFinish, MrcmFinish
 from meda.solvers.baselines.share import finish_from
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -126,6 +143,8 @@ FOUND_SHARE, MISS = 1 / 3, 0.02
 D_MIN = 10
 LIT_FULL = ROOT / "notes/lit_bench/runs/full/records.jsonl"
 T_SIZE, T_N = "t40", 10  # D-59: the scale check's probes
+F_METHODS = {"dfm": dfm, "facda": facda, "generic": generic, "dfmm": dfmm}  # D-60
+F_N, F_MOST = 13, 3  # D-60: problems per method; methods improved for "most"
 COSTS = "costs/geometric.yaml"  # the env's costs; must match WEIGHTS
 RACE_AT, RACE_GAP = (1, 10, 60, 300, 900), 0.02
 
@@ -207,6 +226,25 @@ def tasks(sets: set[str], limit: int | None) -> list[dict[str, Any]]:
                 _task("D", i, want[i.instance_id]["cell"], want[i.instance_id], None)
                 | {"mrcm": lit[(src, i.instance_id)]}
                 for i in insts[:limit]
+            ]
+    if "F" in sets:
+        recs = [json.loads(x) for x in (ROOT / "notes/lit_bench/runs/e22/records.jsonl").open()]
+        insts = {
+            (src, i.instance_id): i
+            for src in ("val_s1_v2", "val_s2_v2")
+            for i in BenchmarkSet.read(src).instances
+        }
+        for m in F_METHODS:
+            takes = [
+                r
+                for r in recs
+                if (r["source"], r["id"]) in insts and (r.get(m) or {}).get("cost") is not None
+            ]
+            takes.sort(key=lambda r: (r[m]["cost"] / best_planner(r), r["id"]))
+            out += [
+                _task(f"F-{m}", insts[(r["source"], r["id"])], r["cell"], r, None)
+                | {"mrcm": r[m]["cost"], "method": m}
+                for r in takes[:F_N][:limit]
             ]
     if "T" in sets:
         import scale_check
@@ -471,7 +509,12 @@ def run_task(
             raise RuntimeError(f"{inst.instance_id}: the sharing pass does not finish")
         task["planner"], task["planner_seconds"] = float(start[1]), time.perf_counter() - t0
     t0 = time.perf_counter()
-    finish = MrcmFinish(inst, WEIGHTS) if finisher == "mrcm" else None
+    finish: MrcmFinish | GraphFinish | None = None
+    if finisher == "mrcm":
+        finish = MrcmFinish(inst, WEIGHTS)
+    elif finisher == "paper":  # D-60: the problem's own published method
+        finisher = task["method"]
+        finish = GraphFinish(finisher, F_METHODS[finisher], inst, WEIGHTS)
     search = Search(
         env, inst, agent, t0 + opts["seconds"], kind != "zero", opts["reward_scale"], finish=finish
     )
@@ -481,8 +524,8 @@ def run_task(
     if opt is not None and cost is not None and cost < opt - 1e-9:  # a bug (rule 9)
         raise RuntimeError(f"{inst.instance_id}: search plan {stats['cost']} < optimum")
     ref = task["mrcm"]
-    if finisher == "mrcm" and ref is not None and (cost is None or cost > ref + 1e-9):
-        raise RuntimeError(f"{inst.instance_id}: search with MRCM finishes dearer than MRCM")
+    if finish is not None and ref is not None and (cost is None or cost > ref + 1e-9):
+        raise RuntimeError(f"{inst.instance_id}: search with {finisher} finishes dearer than it")
     rec = {k: v for k, v in task.items() if k != "instance"}
     rec.update(
         kind=kind,
@@ -731,17 +774,46 @@ def summarise(path: Path) -> str:
             lines.append(
                 f"Reading on B at {top} sims (fixed in advance, D-55): {finisher_verdict(st)}"
             )
+    lines += f_reading(groups)
     lines += race(groups)
     return "\n".join(lines)
 
 
-def finisher_verdict(st: dict[str, Any]) -> str:
+def f_reading(groups: dict[tuple[str, str, int], list[dict[str, Any]]]) -> list[str]:
+    """Set F (D-60): per method, the search with that method's finishes against the method."""
+    f = {k: group_stats(rs) for k, rs in groups.items() if k[0].startswith("F-")}
+    if not f:
+        return []
+    lines = ["", "F against each method (D-60): below the method, ratio to it"]
+    for k in sorted(f):
+        st = f[k]
+        lines.append(
+            f"  {k[0]} {k[1]} {k[2]}: {st['below_mrcm']}/{st['n']}, {_r(st['ratio_mrcm'])}"
+        )
+    improved = 0
+    for m in F_METHODS:
+        tops = [k for k in f if k[0] == f"F-{m}" and k[1] == f"uniform/{m}"]
+        if not tops:
+            continue
+        st = f[max(tops, key=lambda k: k[2])]
+        improved += st["below_mrcm"] >= FOUND_SHARE * st["n"]
+        lines.append(f"Reading on F-{m} (D-60): {finisher_verdict(st, m.upper())}")
+    if improved >= F_MOST:
+        overall = "the search improves most published methods (with MRCM, E-55)"
+    elif improved:
+        overall = "the search improves some of these methods"
+    else:
+        overall = "the search improves none of these methods"
+    return [*lines, f"Reading on F (fixed in advance, D-60): {improved} of 4 improved: {overall}"]
+
+
+def finisher_verdict(st: dict[str, Any], name: str = "MRCM") -> str:
     n, k = st["n"], st["below_mrcm"]
     if k >= FOUND_SHARE * n:
-        return f"below MRCM on {k} of {n}: the search improves MRCM"
+        return f"below {name} on {k} of {n}: the search improves {name}"
     if k > 0:
-        return f"below MRCM on {k} of {n}: a weak gain"
-    return "below MRCM on none: its misses are not reachable by lookahead with its own finishes"
+        return f"below {name} on {k} of {n}: a weak gain"
+    return f"below {name} on none: its misses are not reachable by lookahead with its own finishes"
 
 
 def main(argv: list[str]) -> None:

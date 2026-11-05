@@ -231,3 +231,49 @@ def test_race_on_t_counts_net_or_zero_at_any_budget() -> None:
     lines = SC.race(groups)
     assert lines[-1].endswith("the network makes search faster at 40 targets")
     assert any(x.startswith("Race on T, zero at 1 sims") for x in lines)
+
+
+def test_set_f_is_each_methods_best_thirteen_with_its_cost_as_reference() -> None:
+    """D-60: per method, the 13 problems it takes where it does best against our planner."""
+    found = SC.tasks({"F"}, None)
+    by = {m: [t for t in found if t["set"] == f"F-{m}"] for m in SC.F_METHODS}
+    assert all(len(ts) == SC.F_N for ts in by.values())
+    for m, ts in by.items():
+        assert all(t["method"] == m and t["mrcm"] is not None for t in ts)
+        ratios = [t["mrcm"] / t["planner"] for t in ts]
+        assert ratios == sorted(ratios)
+
+
+def test_search_with_a_methods_finishes_is_never_dearer_than_the_method() -> None:
+    """D-60: the root's first leaf is the method's own plan."""
+    task = next(t for t in SC.tasks({"F"}, None) if t["set"] == "F-facda")
+    rec = SC.run_task(task, "uniform", 8, OPTS, "paper")
+    assert rec["finisher"] == "facda"
+    assert rec["search_cost"] is not None and rec["search_cost"] <= task["mrcm"] + 1e-9
+
+
+def test_reading_on_f_counts_methods_improved() -> None:
+    def recs(below: int) -> list[dict[str, Any]]:
+        return [
+            {
+                "planner": 100.0,
+                "optimum": None,
+                "mrcm": 50.0,
+                "search_cost": 40.0 if i < below else 50.0,
+                "planner_tail": 1,
+                "capped": False,
+                "search_seconds": 1.0,
+            }
+            for i in range(13)
+        ]
+
+    groups = {(f"F-{m}", f"uniform/{m}", 256): recs(5) for m in SC.F_METHODS}
+    assert SC.f_reading(groups)[-1].endswith(
+        "4 of 4 improved: the search improves most published methods (with MRCM, E-55)"
+    )
+    groups[("F-dfm", "uniform/dfm", 256)] = recs(4)
+    groups[("F-facda", "uniform/facda", 256)] = recs(0)
+    assert SC.f_reading(groups)[-1].endswith(
+        "2 of 4 improved: the search improves some of these methods"
+    )
+    assert SC.f_reading({}) == []

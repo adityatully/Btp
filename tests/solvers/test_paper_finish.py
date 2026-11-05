@@ -1,6 +1,7 @@
-"""MRCM finishing from a mid-episode state (`MrcmFinish`, D-55): on an empty chip it is MRCM's
-own plan; from any state it gives a legal completion that reuses what is on chip; a problem MRCM
-does not take gives None, with the reason counted."""
+"""Published methods finishing from a mid-episode state (`MrcmFinish`, D-55; `GraphFinish` for
+DFM, FacDA, Generic and DFMM, D-60): on an empty chip it is the method's own plan; from any state
+it gives a legal completion that reuses what is on chip; a problem the method does not take gives
+None, with the reason counted."""
 
 from __future__ import annotations
 
@@ -13,8 +14,11 @@ from meda.core.problem import Instance
 from meda.core.rules import apply, replay
 from meda.core.state import PrepState
 from meda.generators.benchmark_io import BenchmarkSet
+from meda.solvers.baselines.dfmm import dfmm
+from meda.solvers.baselines.facda import dfm, facda
+from meda.solvers.baselines.generic import generic
 from meda.solvers.baselines.mrcm import mrcm
-from meda.solvers.baselines.paper_finish import MrcmFinish
+from meda.solvers.baselines.paper_finish import GraphFinish, MrcmFinish
 from meda.solvers.baselines.paper_graph import PaperSolver
 from tests.core.helpers import load_yaml
 from tests.solvers.test_emrcm import instance as emrcm_instance
@@ -80,6 +84,59 @@ def test_a_target_already_on_chip_is_output_directly() -> None:
 def test_a_problem_mrcm_does_not_take_gives_none_with_the_reason() -> None:
     inst = emrcm_instance([(Composition.from_ints((1, 3, 4), 8), 2, 2)])  # demand 2
     finish = MrcmFinish(inst, GEOMETRIC)
+    assert finish.applicable() is not None
+    assert finish(PrepState.initial(inst)) is None
+    assert sum(finish.fails.values()) == 1
+
+
+GRAPH_METHODS = {"dfm": dfm, "facda": facda, "generic": generic, "dfmm": dfmm}
+S1 = BenchmarkSet.read("val_s1_v2").instances[:12]
+S2_ALL = BenchmarkSet.read("val_s2_v2").instances[:12]
+PAIRS = [
+    (name, inst)
+    for name, m in GRAPH_METHODS.items()
+    for inst in S1 + S2_ALL
+    if PaperSolver(name, m, GEOMETRIC).solve(inst).status == "feasible"
+]
+
+
+@pytest.mark.parametrize(
+    ("name", "inst"), PAIRS, ids=lambda x: x if isinstance(x, str) else x.instance_id
+)
+def test_graph_finish_is_the_methods_own_plan_and_finishes_from_every_prefix(
+    name: str, inst: Instance
+) -> None:
+    """D-60: from an empty chip the method's own cost; from any prefix of its plan a legal
+    completion (on the relaxed step limit the search scores leaves with)."""
+    method = GRAPH_METHODS[name]
+    finish = GraphFinish(name, method, inst, GEOMETRIC)
+    found = finish(PrepState.initial(inst))
+    assert found is not None
+    assert found[1] == PaperSolver(name, method, GEOMETRIC).solve(inst).cost
+    valid(inst, found[0])
+    plan = found[0]
+    state = PrepState.initial(inst)
+    for k, action in enumerate(plan[:-1], start=1):
+        state, _, _ = apply(state, action, inst)
+        rest = finish(state)
+        assert rest is not None, k
+        valid(finish.relaxed, plan[:k] + rest[0])
+
+
+def test_graph_finish_reuses_a_node_already_on_chip() -> None:
+    name, inst = next((n, i) for n, i in PAIRS if len(i.targets) == 1)
+    finish = GraphFinish(name, GRAPH_METHODS[name], inst, GEOMETRIC)
+    plan, _ = finish(PrepState.initial(inst)) or ((), 0)
+    state = PrepState.initial(inst)
+    for action in plan[:-1]:
+        state, _, _ = apply(state, action, inst)
+    found = finish(state)
+    assert found is not None and found[0] == plan[-1:]  # the target droplet is on chip
+
+
+def test_graph_finish_of_a_problem_the_method_does_not_take_gives_none() -> None:
+    inst = next(i for i in BenchmarkSet.read("val_s2_v2").instances if i.num_fluids > 2)
+    finish = GraphFinish("dfm", dfm, inst, GEOMETRIC)
     assert finish.applicable() is not None
     assert finish(PrepState.initial(inst)) is None
     assert sum(finish.fails.values()) == 1

@@ -1,5 +1,6 @@
-"""MRCM as a "finish from here" planner (plan 4.2, paper log D-55): the leaf finisher of the
-search, in place of the sharing pass's `finish_from`.
+"""Published methods as "finish from here" planners: the leaf finisher of the search, in place
+of the sharing pass's `finish_from`. MRCM (plan 4.2, paper log D-55) and the single-target
+graph methods DFM, FacDA, Generic and DFMM (`GraphFinish`, D-60).
 
 MRCM (`mrcm`) plans from an empty chip. From a mid-episode state the droplets already on chip
 are offered the way e-MRCM offers the droplets an earlier target's tree made (`emrcm`): a child
@@ -17,18 +18,19 @@ the chip, so one `MrcmFinish` keeps them across calls: same trees, far less time
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from dataclasses import replace
 from typing import Any
 
 from meda.core.actions import Action, Output, Source
-from meda.core.composition import Composition, Rational
+from meda.core.composition import ZERO, Composition, Rational
 from meda.core.costs import CostWeights
 from meda.core.problem import Instance
 from meda.core.rules import IllegalActionError
 from meda.core.state import PrepState
 from meda.solvers.baselines.emrcm import _overdrawn, _Shared, _SharedSearch
 from meda.solvers.baselines.mrcm import _Tree, smooth
-from meda.solvers.baselines.paper_graph import NotApplicable, _fold
+from meda.solvers.baselines.paper_graph import NotApplicable, PaperGraph, _fold, single_target
 from meda.solvers.baselines.share import RELAXED_STEP_LIMIT, _Builder
 
 
@@ -111,9 +113,13 @@ class MrcmFinish:
 
     @staticmethod
     def _spare(b: _Builder) -> dict[Composition, tuple[int, int]]:
+        return MrcmFinish._spare_of(b.state)
+
+    @staticmethod
+    def _spare_of(state: PrepState) -> dict[Composition, tuple[int, int]]:
         """The largest droplet on chip of each composition: (uid, volume)."""
         out: dict[Composition, tuple[int, int]] = {}
-        for d in sorted(b.state.droplets, key=lambda d: (d.volume, -d.uid)):
+        for d in sorted(state.droplets, key=lambda d: (d.volume, -d.uid)):
             out[d.composition] = (d.uid, d.volume)
         return out
 
@@ -146,3 +152,111 @@ def _shared(tree: _Tree) -> list[_Shared]:
             else:
                 stack.append(child)
     return out
+
+
+class GraphFinish:
+    """`finish(state)`: a single-target published method (DFM, FacDA, Generic, DFMM) finishing
+    from `state`, and its cost, or None (`fails` counts why). D-60.
+
+    The method's graph is its own for the target from an empty chip (it does not depend on the
+    chip), computed once. From a mid-episode state, a node whose composition is on chip with
+    enough volume for the nodes that take from it is taken from that droplet instead of built,
+    with everything only it needed; one droplet stands in for at most one node. The rest is
+    built as `paper_graph.emit` builds it (each n-input node a chain of 2-input mixes), through
+    the sharing pass's builder: leftovers wait in a pool, are discarded only when a mix needs the
+    room, and the cost is exact, final leftovers not charged. On an empty chip it is the
+    method's own plan. Like `MrcmFinish`, the method never chooses its graph around what is on
+    chip; only exact compositions are reused."""
+
+    def __init__(
+        self,
+        name: str,
+        method: Callable[[Instance], PaperGraph],
+        instance: Instance,
+        weights: CostWeights,
+    ) -> None:
+        self.name = name
+        self.instance = instance
+        self.relaxed = replace(instance, step_limit=RELAXED_STEP_LIMIT)
+        self.weights = weights
+        self.fails: dict[str, int] = {}
+        self.graph: PaperGraph | None = None
+        self.why: str | None = None
+        try:
+            single_target(instance)
+            self.graph = method(instance)
+            self.comps = self.graph.compositions()
+        except NotApplicable as e:
+            self.why = str(e)
+
+    def applicable(self) -> str | None:
+        """Why the method cannot take this problem at all, or None."""
+        return self.why
+
+    def __call__(self, state: PrepState) -> tuple[tuple[Action, ...], Rational] | None:
+        try:
+            return self.finish(state)
+        except (NotApplicable, IllegalActionError) as e:
+            why = " ".join(str(e).split()[:4])
+            self.fails[why] = self.fails.get(why, 0) + 1
+            return None
+
+    def finish(self, state: PrepState) -> tuple[tuple[Action, ...], Rational]:
+        if self.graph is None:
+            raise NotApplicable(self.why or f"{self.name} does not take this problem")
+        if state.is_success:
+            return (), ZERO
+        g, comps = self.graph, self.comps
+        target = self.instance.targets[0]
+        root = len(g.nodes) - 1
+        need = [0] * len(g.nodes)
+        need[root] = target.droplet_volume
+        spare = MrcmFinish._spare_of(state)
+        given: dict[int, int] = {}  # node -> uid of the droplet on chip that stands in for it
+        build = [False] * len(g.nodes)
+        for i in range(root, -1, -1):  # parents before children (nodes are topological)
+            if not need[i]:
+                continue
+            have = spare.get(comps[i])
+            if have is not None and have[1] >= need[i]:
+                given[i] = have[0]
+                del spare[comps[i]]
+                continue
+            build[i] = True
+            for x in g.nodes[i]:
+                if x.node is not None and x.units > 0:
+                    need[x.node] += x.units
+        users = [0] * len(g.nodes)
+        for i, node in enumerate(g.nodes):
+            if build[i]:
+                for j in {x.node for x in node if x.node is not None and x.units > 0}:
+                    users[j] += 1
+        b = _Builder(self.relaxed, state, [], self.weights, {d.uid for d in state.droplets})
+        b.pool -= set(given.values())
+        uid = dict(given)
+        n = self.instance.num_fluids
+        for i, node in enumerate(g.nodes):
+            if not build[i]:
+                continue
+            units: dict[Source, int] = {}
+            comp: dict[Source, Composition] = {}
+            for x in node:
+                if x.units <= 0:
+                    continue
+                if x.node is None:
+                    assert x.fluid is not None
+                    src, c = Source.reservoir(x.fluid), Composition.pure(x.fluid, n)
+                else:
+                    src, c = Source.droplet(uid[x.node]), comps[x.node]
+                units[src] = units.get(src, 0) + x.units
+                comp[src] = c
+            uid[i] = _fold(b, [(s, units[s], comp[s]) for s in units], self.instance, i)
+            for j in {x.node for x in node if x.node is not None and x.units > 0}:
+                users[j] -= 1
+                if not users[j]:
+                    b.discard_leftover(uid[j])
+        b.do(Output(Source.droplet(uid[root]), target.id))
+        b.discard_leftover(uid[root])
+        if not b.state.is_success:
+            raise IllegalActionError(f"instance '{self.instance.instance_id}': demand left")
+        return tuple(b.actions), b.cost
