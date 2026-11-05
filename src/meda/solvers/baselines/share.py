@@ -12,6 +12,10 @@ prices, on a copy of the plan, every way it knows to make the droplet:
    droplet, down to a pure fluid or a pool droplet (also a cheaper single-target recipe);
 4. **tree**: the split-tree recipe from scratch, except that any piece of it already in the
    pool is taken from there (`PlanBuilder.reuse`);
+5. **MRCM tree** (only with `mrcm=True`, paper log D-61): MRCM's cost-weighted search over
+   mixing trees for the exact aim, pool droplets offered as e-MRCM offers shared ones
+   (`mrcm_droplet`); none when the aim's denominator has a prime factor above M or MRCM's
+   search runs over its budget;
 
 and keeps the one with the least marginal cost per delivery (fluid, mixes, waste discarded on
 the way). Leftovers stay on chip while storage allows; when a mix needs room, the idle droplet
@@ -36,6 +40,7 @@ import time
 from collections.abc import Callable, Iterator
 from dataclasses import dataclass, field, replace
 from functools import lru_cache
+from typing import Any
 
 from meda.core.actions import Action, Discard, Mix, Output, Source
 from meda.core.composition import ZERO, Composition, Rational, linf_distance, mix
@@ -45,6 +50,9 @@ from meda.core.problem import Instance, Target
 from meda.core.rules import IllegalActionError, apply, replay
 from meda.core.state import PrepState
 from meda.solvers.base import PlanBuilder, SolveBudget, SolveResult
+from meda.solvers.baselines.emrcm import _overdrawn, _Shared, _SharedSearch
+from meda.solvers.baselines.mrcm import _Tree, smooth
+from meda.solvers.baselines.paper_graph import NotApplicable, _fold
 from meda.solvers.baselines.tree import _deliveries_per_droplet, aim, build, dilute_up_input
 from meda.solvers.fallback import (
     RELAXED_STEP_LIMIT,
@@ -61,10 +69,19 @@ class _Builder(PlanBuilder):
     weights: CostWeights = field(default=None)  # type: ignore[assignment]
     pool: set[int] = field(default_factory=set)
     cost: Rational = ZERO
+    # MRCM's mixing models by (composition, volume), shared by every copy; None = no MRCM
+    # recipe (D-61)
+    mrcm: dict[Any, list[Any]] | None = None
 
     def copy(self) -> _Builder:
         return _Builder(
-            self.instance, self.state, list(self.actions), self.weights, set(self.pool), self.cost
+            self.instance,
+            self.state,
+            list(self.actions),
+            self.weights,
+            set(self.pool),
+            self.cost,
+            self.mrcm,
         )
 
     def do(self, action: Action) -> None:
@@ -337,6 +354,10 @@ def _candidates(b: _Builder, target: Target, left: int) -> list[tuple[int, _Emit
     if aimed is not None:
         count = _deliveries_per_droplet(b, target, most)
         out.append((count, _tree(aimed, count * v)))
+    # 5. MRCM's tree, offering the pool (D-61)
+    if b.mrcm is not None and aimed is not None and aimed.den > 1:
+        for count in sorted({most, 1}, reverse=True):
+            out.append((count, _mrcm_tree(aimed, count * v)))
     return out
 
 
@@ -376,6 +397,93 @@ def _chained(base: _Base, steps: tuple[tuple[int, int, int], ...]) -> _Emit:
 
 def _tree(aimed: Composition, need: int) -> _Emit:
     return lambda b: build(b, aimed, need)
+
+
+def _mrcm_tree(aimed: Composition, need: int) -> _Emit:
+    def emit(b: _Builder) -> Source | None:
+        assert b.mrcm is not None
+        uid = mrcm_droplet(b, aimed, need, b.mrcm)
+        return None if uid is None else Source.droplet(uid)
+
+    return emit
+
+
+class _CachedSearch(_SharedSearch):
+    """MRCM's search with its mixing models cached: they depend on (composition, volume) and
+    the chip's mix sizes only, so one cache serves every call on one problem."""
+
+    def __init__(self, *args: Any, cache: dict[Any, list[Any]]) -> None:
+        super().__init__(*args)
+        self.cache = cache
+
+    def models(self, c: Composition, v: int):  # type: ignore[no-untyped-def]
+        key = (c, v)
+        if key not in self.cache:
+            self.cache[key] = list(super().models(c, v))
+        return self.cache[key]
+
+
+def mrcm_droplet(
+    b: _Builder, comp: Composition, need: int, cache: dict[Any, list[Any]]
+) -> int | None:
+    """Build MRCM's cheapest tree for `need` units of `comp`, the largest pool droplet of each
+    composition offered as a free child (e-MRCM's sharing); the uid of its root droplet, or None
+    when MRCM has no tree (a prime factor above M, its search budget, no legal mix order).
+    Raises IllegalActionError when a mix breaks a chip rule (storage)."""
+    inst = b.instance
+    m = inst.chip.max_mix_volume
+    if not smooth(comp.den, m) or need > m:
+        return None
+    w = tuple(b.weights.fluid_weight(f.kind) for f in inst.fluids)
+    lo = max(inst.chip.min_mix_volume, 2)
+    spare: dict[Composition, tuple[int, int]] = {}
+    for uid, c, vol in sorted(b.idle(), key=lambda x: (x[2], -x[0])):
+        spare[c] = (uid, vol)
+    offered = dict(spare)
+    try:
+        while True:
+            tree = _CachedSearch(w, lo, m, offered, False, cache=cache).best(comp, need)
+            if tree is None:
+                return None
+            over = _overdrawn(tree, offered)
+            if over is None:
+                break
+            del offered[over]
+        b.pool -= {c.node for c in _shared(tree)}
+        return _build_tree(b, tree)
+    except NotApplicable:
+        return None
+
+
+def _build_tree(b: _Builder, tree: _Tree) -> int:
+    """Build `tree` bottom up (children first, as MRCM's graph is emitted); its droplet's
+    uid. A child's leftover joins the pool once its parent has taken from it."""
+    n = b.instance.num_fluids
+    inputs = [
+        (Source.reservoir(f), u, Composition.pure(f, n)) for f, u in enumerate(tree.pure) if u
+    ]
+    kids = []
+    for units, child in tree.children:
+        uid = child.node if isinstance(child, _Shared) else _build_tree(b, child)
+        kids.append(uid)
+        inputs.append((Source.droplet(uid), units, b.state.droplet(uid).composition))
+    uid = _fold(b, inputs, b.instance, len(b.actions))
+    for k in kids:
+        b.discard_leftover(k)
+    return uid
+
+
+def _shared(tree: _Tree) -> list[_Shared]:
+    out: list[_Shared] = []
+    stack = [tree]
+    while stack:
+        t = stack.pop()
+        for _, child in t.children:
+            if isinstance(child, _Shared):
+                out.append(child)
+            else:
+                stack.append(child)
+    return out
 
 
 def _deliver(b: _Builder, target: Target, count: int, emit: _Emit) -> bool:
@@ -472,18 +580,20 @@ def orders(instance: Instance, weights: CostWeights) -> list[list[int]]:
 
 
 def share_plan(
-    instance: Instance, weights: CostWeights, lookahead: int = 0
+    instance: Instance, weights: CostWeights, lookahead: int = 0, mrcm: bool = False
 ) -> tuple[Action, ...] | None:
     """The cheapest plan over the target orders and the constructions, or None if neither
     finds one (not found, never a claim of infeasibility). `lookahead` = k rolls out the k
-    cheapest candidates of every delivery group (about k x groups times slower)."""
+    cheapest candidates of every delivery group (about k x groups times slower). `mrcm` adds
+    MRCM's tree to the recipes (D-61)."""
     best: tuple[Rational, tuple[Action, ...]] | None = None
     base = cheapest_construction(instance, weights)
     if base is not None:
         best = (base[1], base[0])
+    cache: dict[Any, list[Any]] | None = {} if mrcm else None
     for order in orders(instance, weights):
         try:
-            start = _Builder(instance, PrepState.initial(instance), [], weights)
+            start = _Builder(instance, PrepState.initial(instance), [], weights, mrcm=cache)
             done = _run(start, order, lookahead)
         except IllegalActionError:
             continue

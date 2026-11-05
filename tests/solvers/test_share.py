@@ -201,3 +201,32 @@ def test_plans_do_not_depend_on_what_the_caches_hold() -> None:
     _dilute_steps.cache_clear()
     _unmix.cache_clear()
     assert [share_plan(i, GEOMETRIC) for i in reversed(insts)] == warm[::-1]
+
+
+MRCM_FAST = ("val_s2-011", "val_s2-014", "val_s2-020", "val_s2-024", "val_s2-036")  # MRCM < 1 s
+
+
+@pytest.mark.parametrize("instance_id", MRCM_FAST)
+def test_with_mrcms_tree_one_target_is_never_dearer_than_mrcm(instance_id: str) -> None:
+    """D-61: on one target with demand 1 MRCM's whole tree is one of the candidates, so the
+    pass with it is at most MRCM's cost, and never dearer than the pass without it."""
+    from meda.solvers.baselines.mrcm import mrcm
+    from meda.solvers.baselines.paper_graph import PaperSolver
+
+    inst = next(i for i in BenchmarkSet.read("val_s2_v2").instances if i.instance_id == instance_id)
+    plan = share_plan(inst, GEOMETRIC, mrcm=True)
+    assert plan is not None
+    _, totals, deltas = replay(inst, plan)
+    assert validate(MixingDAG.from_deltas(inst, deltas, totals, "share_mrcm"), inst).ok
+    cost = GEOMETRIC.scalar(totals, inst.fluids)
+    ref = PaperSolver("mrcm", lambda x: mrcm(x, GEOMETRIC), GEOMETRIC).solve(inst).cost
+    assert ref is not None and cost <= ref
+    assert cost <= cost_of(inst)
+
+
+def test_with_mrcms_tree_a_multi_target_plan_is_legal() -> None:
+    inst = next(i for i in BenchmarkSet.read("val_s5_v2").instances if len(i.targets) > 1)
+    plan = share_plan(inst, GEOMETRIC, mrcm=True)
+    assert plan is not None
+    _, totals, deltas = replay(inst, plan)
+    assert validate(MixingDAG.from_deltas(inst, deltas, totals, "share_mrcm"), inst).ok

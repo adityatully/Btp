@@ -1,6 +1,11 @@
 # MEDA Design Automation — Codebase Specification
 
-Version 0.30 · 2026-10-31
+Version 0.31 · 2026-11-06
+
+Changes in 0.31 (planner check, paper log D-61): the sharing pass takes `mrcm` (off by
+default): a fifth recipe per delivery group, MRCM's cheapest tree for the exact aim with the
+pool's droplets offered as free children (`share.mrcm_droplet`, e-MRCM's sharing). With it off
+every plan is unchanged. `paper_finish.MrcmFinish` now builds its trees with the same helpers.
 
 Changes in 0.30 (multi-target literature baselines, 10.4; plan 6.3, L-6 to L-8): e-MRCM
 (`emrcm.py`) and NFSP (`nfsp.py`) join the published methods. `PaperGraph` gains `roots`: the
@@ -1683,6 +1688,10 @@ serves as tabular Q's value prior (11.3).
   against the tree's 196). Measured in paper log E-17: at the proved optimum on 51 of 65 small
   problems, within 1.02 (median) of the lower bound on the medium multi-target dilutions;
   median 0.04 s, at most 34 s per problem on one core.
+  `mrcm=True` (0.31, D-61) adds (5) MRCM's cheapest tree for the exact aim (1 or the most
+  deliveries a droplet serves), the largest pool droplet of each composition offered as a free
+  child; skipped when the aim's denominator has a prime factor above M or MRCM's search runs
+  over its budget. MRCM's mixing models are cached per call.
 - Further published methods (multi-target MEDA mixing, demand-driven mixture preparation) are
   added later behind the same interface, each with a reproduction test. The sharing pass is
   not one of them: "WSPM incremental" (one droplet per target, leftovers reused in sequence)

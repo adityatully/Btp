@@ -1,0 +1,204 @@
+"""Planner check (paper log D-61): does MRCM's tree as one more recipe let our planner catch the
+methods that beat it, without losing elsewhere?
+
+The sharing pass (`share.share_plan`) prices four recipes per delivery group and takes the
+cheapest per delivery. `share_mrcm` adds a fifth: MRCM's cost-weighted tree for the exact aim,
+pool droplets offered as e-MRCM offers shared ones (`share.mrcm_droplet`). Per problem both are
+run here (cost and seconds); the published methods' costs come from the lit-bench records
+(`notes/lit_bench/runs/e22/records.jsonl`: DFM, FacDA, Generic, DFMM, MRCM on s1-s2;
+`notes/lit_bench/runs/full/records.jsonl`, if present: e-MRCM and NFSP on s3-s5).
+
+Problems: the six val sets (`val_s1_v2` ... `val_s5_v2`, `heldout_combo_v2`, 242) and
+`litbench_s2_v1` (100 fresh single-target mixtures, MRCM's home ground).
+
+Reading, fixed in advance (D-61):
+- **Check (not a result):** on set B (the 13 `val_s2_v2` problems where MRCM beats our best
+  planner) `share_mrcm` is at or below MRCM on all 13. On one target with demand 1 MRCM's whole
+  tree is one of the candidates, so this holds by construction; a miss is a bug (raised).
+- **(1) gain beyond MRCM's own problems:** on stages 3-5 and the held-out combination (162),
+  where MRCM alone does not apply (demand > 1 or many targets), `share_mrcm` is cheaper than
+  `share` on >= 1/4 of problems;
+- **(2) keeps generality:** on the 242 val problems `share_mrcm` is dearer than `share` on
+  <= 5% (12) and its mean cost / `share` is <= 1.
+Both: MRCM's tree joins the planner (the user's go-ahead). (2) only: it fixes single-target
+mixtures and costs nothing elsewhere: it joins the planner too, as a fix for s2. (1) only: a
+separate variant. Neither: drop it. Reported, no bar: per set and method, how many problems
+that method beats `share` on, and `share_mrcm` on; time per problem.
+
+    uv run python scripts/planner_check.py workers=30 out=outputs/planner/records.jsonl
+    uv run python scripts/planner_check.py summary=outputs/planner/records.jsonl
+
+Arguments are key=value: `sets` (comma list), `limit` problems per set, `workers`, `out`.
+"""
+
+from __future__ import annotations
+
+import json
+import sys
+import time
+from collections import defaultdict
+from multiprocessing import Pool
+from pathlib import Path
+from typing import Any
+
+import numpy as np
+
+from meda.core.problem import Instance
+from meda.core.rules import replay
+from meda.generators.benchmark_io import BenchmarkSet
+from meda.solvers.baselines import share
+
+ROOT = Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(ROOT / "scripts"))
+import headroom  # noqa: E402
+
+WEIGHTS = headroom.WEIGHTS
+VAL = ("val_s1_v2", "val_s2_v2", "val_s3_v2", "val_s4_v2", "val_s5_v2", "heldout_combo_v2")
+SETS = (*VAL, "litbench_s2_v1")
+LIT_S12 = ROOT / "notes/lit_bench/runs/e22/records.jsonl"
+LIT_FULL = ROOT / "notes/lit_bench/runs/full/records.jsonl"
+METHODS = ("dfm", "facda", "generic", "dfmm", "mrcm", "emrcm", "nfsp")
+PLANNERS = ("share", "share_look3", "share_orders")
+FULL = ("val_s3_v2", "val_s4_v2", "val_s5_v2", "heldout_combo_v2")
+# Fixed in advance (D-61).
+GAIN_SHARE, DEARER_SHARE = 1 / 4, 0.05
+
+
+def literature() -> dict[tuple[str, str], dict[str, Any]]:
+    """(source, id) -> {method: cost, "best_planner": cost} from the lit-bench records."""
+    out: dict[tuple[str, str], dict[str, Any]] = defaultdict(dict)
+    for path in (LIT_S12, LIT_FULL):
+        if not path.exists():
+            continue
+        for r in map(json.loads, path.open()):
+            row = out[(r["source"], r["id"])]
+            for m in METHODS:
+                cost = (r.get(m) or {}).get("cost")
+                if cost is not None:
+                    row[m] = cost
+            planners = [r[k]["cost"] for k in PLANNERS if (r.get(k) or {}).get("cost") is not None]
+            if planners:
+                row["best_planner"] = min(planners)
+    return dict(out)
+
+
+def problems(sets: list[str], limit: int | None) -> list[tuple[str, Instance]]:
+    return [(s, i) for s in sets for i in BenchmarkSet.read(s).instances[:limit]]
+
+
+def cost_of(inst: Instance, plan: Any) -> float:
+    _, totals, _ = replay(inst, plan)
+    return float(WEIGHTS.scalar(totals, inst.fluids))
+
+
+def run_task(task: tuple[str, Instance]) -> dict[str, Any]:
+    source, inst = task
+    rec: dict[str, Any] = {"source": source, "id": inst.instance_id}
+    for name, mrcm in (("share", False), ("share_mrcm", True)):
+        t0 = time.perf_counter()
+        plan = share.share_plan(inst, WEIGHTS, mrcm=mrcm)
+        if plan is None:
+            raise RuntimeError(f"{inst.instance_id}: {name} found no plan")
+        rec[name] = {"cost": cost_of(inst, plan), "seconds": round(time.perf_counter() - t0, 3)}
+    return rec
+
+
+# --------------------------------------------------------------------------- summary
+
+
+def set_b(recs: list[dict[str, Any]], lit: dict[tuple[str, str], dict[str, Any]]) -> list[Any]:
+    """Set B (search_check): val_s2 problems where MRCM beats our best planner."""
+    out = []
+    for r in recs:
+        row = lit.get((r["source"], r["id"]), {})
+        if r["source"] == "val_s2_v2" and "mrcm" in row and row["mrcm"] < row["best_planner"]:
+            out.append((r, row["mrcm"]))
+    return out
+
+
+def reading(recs: list[dict[str, Any]], lit: dict[tuple[str, str], dict[str, Any]]) -> str:
+    missed = [r["id"] for r, m in set_b(recs, lit) if r["share_mrcm"]["cost"] > m + 1e-9]
+    if missed:  # holds by construction on one target with demand 1 (rule 9)
+        raise RuntimeError(f"share_mrcm dearer than MRCM on set B: {missed}")
+    full = [r for r in recs if r["source"] in FULL]
+    gain = sum(1 for r in full if r["share_mrcm"]["cost"] < r["share"]["cost"] - 1e-9)
+    val = [r for r in recs if r["source"] in VAL]
+    dearer = sum(1 for r in val if r["share_mrcm"]["cost"] > r["share"]["cost"] + 1e-9)
+    ratio = float(np.mean([r["share_mrcm"]["cost"] / r["share"]["cost"] for r in val]))
+    one = gain >= GAIN_SHARE * len(full)
+    two = dearer <= DEARER_SHARE * len(val) and ratio <= 1.0
+    head = (
+        f"(1) cheaper than share on {gain} of {len(full)} of s3-s5 + held-out; (2) dearer on "
+        f"{dearer} of {len(val)}, mean ratio {ratio:.3f}: "
+    )
+    if one and two:
+        return head + "MRCM's tree joins the planner (user's go-ahead)"
+    if two:
+        return head + "a fix for single-target mixtures at no cost elsewhere: it joins too"
+    if one:
+        return head + "gains on s3-s5 but costs elsewhere: a separate variant only"
+    return head + "neither: drop it"
+
+
+def summarise(path: Path) -> str:
+    recs = [json.loads(x) for x in path.read_text().splitlines()]
+    lit = literature()
+    by: dict[str, list[dict[str, Any]]] = defaultdict(list)
+    for r in recs:
+        by[r["source"]].append(r)
+    lines = [
+        "share_mrcm vs share (cost ratio; cheaper / equal / dearer; median seconds), and how many",
+        "problems each published method beats share on -> beats share_mrcm on (of those it takes)",
+        "",
+        "| set | n | ratio | cheaper / equal / dearer | seconds share / mrcm | methods: beat share"
+        " -> beat share_mrcm |",
+        "|---|---|---|---|---|---|",
+    ]
+    for s in [x for x in SETS if x in by]:
+        rs = by[s]
+        a = [r["share_mrcm"]["cost"] for r in rs]
+        p = [r["share"]["cost"] for r in rs]
+        cheap = sum(1 for x, y in zip(a, p, strict=True) if x < y - 1e-9)
+        dear = sum(1 for x, y in zip(a, p, strict=True) if x > y + 1e-9)
+        meth = []
+        for m in METHODS:
+            takes = [(r, lit[(s, r["id"])][m]) for r in rs if m in lit.get((s, r["id"]), {})]
+            if takes:
+                before = sum(1 for r, c in takes if c < r["share"]["cost"] - 1e-9)
+                after = sum(1 for r, c in takes if c < r["share_mrcm"]["cost"] - 1e-9)
+                meth.append(f"{m} {before}->{after}/{len(takes)}")
+        lines.append(
+            f"| {s} | {len(rs)} | {np.mean(np.array(a) / np.array(p)):.3f} | {cheap} / "
+            f"{len(rs) - cheap - dear} / {dear} | "
+            f"{np.median([r['share']['seconds'] for r in rs]):.1f} / "
+            f"{np.median([r['share_mrcm']['seconds'] for r in rs]):.1f} | {', '.join(meth)} |"
+        )
+    lines += ["", f"Reading (fixed in advance, D-61): {reading(recs, lit)}"]
+    return "\n".join(lines)
+
+
+def main(argv: list[str]) -> None:
+    args = dict(a.split("=", 1) for a in argv)
+    if "summary" in args:
+        print(summarise(Path(args["summary"])))
+        return
+    sets = args.get("sets", ",".join(SETS)).split(",")
+    limit = int(args["limit"]) if "limit" in args else None
+    todo = problems(sets, limit)
+    out = Path(args.get("out", "outputs/planner/records.jsonl"))
+    out.parent.mkdir(parents=True, exist_ok=True)
+    workers = int(args.get("workers", 1))
+    print(f"{len(todo)} problems, {workers} workers", flush=True)
+    t0 = time.perf_counter()
+    with out.open("w") as fh, Pool(workers) as pool:
+        for done, rec in enumerate(pool.imap_unordered(run_task, todo), 1):
+            fh.write(json.dumps(rec) + "\n")
+            fh.flush()
+            if done % 10 == 0 or done == len(todo):
+                print(f"{done}/{len(todo)}  {time.perf_counter() - t0:.0f} s", flush=True)
+    print(f"wrote {len(todo)} records to {out}\n")
+    print(summarise(out))
+
+
+if __name__ == "__main__":
+    main(sys.argv[1:])

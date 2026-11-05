@@ -28,22 +28,16 @@ from meda.core.costs import CostWeights
 from meda.core.problem import Instance
 from meda.core.rules import IllegalActionError
 from meda.core.state import PrepState
-from meda.solvers.baselines.emrcm import _overdrawn, _Shared, _SharedSearch
-from meda.solvers.baselines.mrcm import _Tree, smooth
+from meda.solvers.baselines.emrcm import _overdrawn
+from meda.solvers.baselines.mrcm import smooth
 from meda.solvers.baselines.paper_graph import NotApplicable, PaperGraph, _fold, single_target
-from meda.solvers.baselines.share import RELAXED_STEP_LIMIT, _Builder
-
-
-class _CachedSearch(_SharedSearch):
-    def __init__(self, *args: Any, cache: dict[Any, list[Any]]) -> None:
-        super().__init__(*args)
-        self.cache = cache
-
-    def models(self, c: Composition, v: int):
-        key = (c, v)
-        if key not in self.cache:
-            self.cache[key] = list(super().models(c, v))
-        return self.cache[key]
+from meda.solvers.baselines.share import (
+    RELAXED_STEP_LIMIT,
+    _build_tree,
+    _Builder,
+    _CachedSearch,
+    _shared,
+)
 
 
 class MrcmFinish:
@@ -102,7 +96,7 @@ class MrcmFinish:
                         break
                     del offered[over]
                 b.pool -= {c.node for c in _shared(tree)}
-                root = self._build(b, tree)
+                root = _build_tree(b, tree)
             b.pool.discard(root)
             b.do(Output(Source.droplet(root), target.id))
             b.discard_leftover(root)
@@ -122,36 +116,6 @@ class MrcmFinish:
         for d in sorted(state.droplets, key=lambda d: (d.volume, -d.uid)):
             out[d.composition] = (d.uid, d.volume)
         return out
-
-    def _build(self, b: _Builder, tree: _Tree) -> int:
-        """Build `tree` bottom up (children first, as MRCM's graph is emitted); its droplet's
-        uid. A child's leftover joins the pool once its parent has taken from it."""
-        n = self.instance.num_fluids
-        inputs = [
-            (Source.reservoir(f), u, Composition.pure(f, n)) for f, u in enumerate(tree.pure) if u
-        ]
-        kids = []
-        for units, child in tree.children:
-            uid = child.node if isinstance(child, _Shared) else self._build(b, child)
-            kids.append(uid)
-            inputs.append((Source.droplet(uid), units, b.state.droplet(uid).composition))
-        uid = _fold(b, inputs, self.instance, len(b.actions))
-        for k in kids:
-            b.discard_leftover(k)
-        return uid
-
-
-def _shared(tree: _Tree) -> list[_Shared]:
-    out: list[_Shared] = []
-    stack = [tree]
-    while stack:
-        t = stack.pop()
-        for _, child in t.children:
-            if isinstance(child, _Shared):
-                out.append(child)
-            else:
-                stack.append(child)
-    return out
 
 
 class GraphFinish:
