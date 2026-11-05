@@ -824,6 +824,29 @@ Format: date · decision · alternatives considered · why · evidence.
   Smoke run (Mac, random-weight network, one problem, 16 sims, 180 s; not a result): `zero`
   scores about 40 leaves a second and plays 16 sims a move, but did not finish a plan in
   180 s; `uniform` scores 4 leaves in 120 s.
+- **D-60 (2026-11-06) Finisher test for the other published methods (Q-132; user: "Yes,
+  option 2"; an experiment, Q-125 stays open).** E-55: the search improves MRCM put at its
+  leaves. Does that hold for most published heuristics? **Finishers:** DFM, FacDA, Generic and
+  DFMM (single-target graph methods) finishing from the current chip (`GraphFinish` in
+  `paper_finish.py`): the method's own graph for the target, computed once (it does not depend
+  on the chip); a node whose composition is on chip with enough volume is taken from that
+  droplet, with everything only it needed; the rest is built as `emit` builds it, through the
+  sharing pass's builder (cost exact, final leftovers not charged). From an empty chip it is
+  the method's own plan: same cost on all 128 method/problem pairs of `val_s1_v2` and
+  `val_s2_v2` the methods take, and a legal finish from every prefix of that plan. Unlike
+  MRCM, these methods never choose their graph around what is on chip, so the search can gain
+  only by making one of the graph's nodes more cheaply than the method does. **Set F:** per
+  method, the 13 `val_s1_v2` / `val_s2_v2` problems it takes on which it does best against our
+  best planner (lowest method cost / planner), from the E-22 lit-bench records; the method's
+  cost is the reference. **Run** (coe9): flat prior, 256 sims, 900 s cap, finishers `share` and
+  the problem's own method (`search_check.py sets=F finishers=share,paper sims=256`).
+  **Reading, fixed in advance:** per method, the search improves it if below it on >= 1/3 of
+  its 13 (D-55's bar); **the search improves most published methods** if it improves >= 3 of
+  these 4 (with MRCM, E-55, then >= 4 of the 7 we compare with); 1-2: some; 0: none of these.
+  Not covered: e-MRCM on several targets (on one target it is MRCM; `MrcmFinish` follows its
+  sharing rule) and NFSP (an ILP over 1:1 dilutions; finishing from a chip would change the
+  method). Smoke run (Mac, 2 problems per method, 16 sims, 30 s, not a result): runs in about
+  45 s; plumbing and reading work.
 
 ---
 
@@ -1605,6 +1628,58 @@ MRCM's intermediates on val_s2: 4 of 28 covered (chain D4), 5 of 28 (premix D3).
   (an exact lower bound on mixes left, or a constructive method's recipes, which is a planner
   again). (3) Built as SPEC 0.28 `hint_source: problem` (depth-4 chain in the recipe columns)
   for a copy-test comparison on stages 1–2 against the planner's hints.
+
+### E-55 (2026-11-06) Finisher test (D-55): the search improves MRCM put at its leaves
+`scripts/search_check.py sets=B finishers=share,mrcm sims=256 workers=26`, code `53d2f06`
+(search check as of `9bffa3e`), coe9, `outputs/finish/{finish_b.jsonl,run.log}` there. Set B:
+13 `val_s2_v2` single-target mixtures where MRCM beats our best planner; flat prior, 256 sims,
+900 s cap.
+
+| search | finisher | below planner | <= MRCM | below MRCM | ratio to planner | ratio to MRCM | capped | median s |
+|---|---|---|---|---|---|---|---|---|
+| uniform | share (ours) | 11/13 | 7 | 6 | 0.674 | 1.334 | 3 | 155 |
+| uniform | mrcm | 13/13 | 13 | 7 | 0.522 | 0.949 | 5 | 566 |
+
+Race (mean cost / best planner if stopped at t; with a plan by t): `share` 0.836 (13), 0.731,
+0.675, 0.674, 0.674 at 1/10/60/300/900 s; `mrcm` 0.849 (6), 0.652 (10), 0.523 (13), 0.522, 0.522.
+
+- **Reading (D-55, fixed in advance): the search improves MRCM.** With MRCM finishing the
+  leaves it is below MRCM on 7 of 13 (bar >= 5), never dearer (13 of 13 at or below, as
+  built), and 5.1% below MRCM on average. Q-128 closed.
+- **The finisher matters more than the search budget:** with our sharing pass at the leaves
+  the search is below MRCM on 6 of 13 but 33% dearer on average; swapping in MRCM takes the
+  mean from 0.674 to 0.522 of our planner. The gain over MRCM is in place by 60 s.
+- MRCM leaves are slower: 6 of 13 have no plan by 1 s, the median run takes 566 s, and 5 of
+  13 hit the 900 s cap (their best plan so far counts).
+- Limits: 13 problems, one seed, one budget; s2 mixtures only; a droplet left part-way
+  through an n-input mix is not reused (D-55).
+
+### E-54 (2026-11-04) Race at 40 targets (D-59): the network does not make search faster
+`scripts/search_check.py sets=T sims=1,16,256 uniform=256 workers=30`, code `9bffa3e`, coe9,
+`outputs/scale/{search_t.jsonl,search_t.log}` there. 10 problems with 40 targets (E-53's probes);
+round 2's V network. Mean cost / planner if stopped at t (problems with a plan by t):
+
+| search | sims | 1 s | 10 s | 60 s | 300 s | 900 s |
+|---|---|---|---|---|---|---|
+| net | 1 | 1.000 (0) | 0.998 (2) | 0.974 (4) | 0.934 (9) | 0.924 (10) |
+| net | 16 | 1.000 (0) | 0.996 (2) | 0.974 (4) | 0.955 (9) | 0.938 (10) |
+| net | 256 | 1.000 (0) | 0.993 (2) | 0.974 (4) | 0.955 (9) | 0.931 (10) |
+| uniform | 256 | 1.000 (0) | 0.993 (3) | 0.971 (5) | 0.947 (9) | 0.935 (10) |
+| zero | 1 | 1.000 (0) | 1.000 (0) | 1.000 (1) | 1.000 (1) | 1.000 (1) |
+| zero | 16 | 1.000 (0) | 1.000 (0) | 1.000 (0) | 1.000 (0) | 1.000 (0) |
+| zero | 256 | 1.000 (0) | 1.000 (0) | 1.000 (0) | 1.000 (0) | 1.000 (0) |
+
+- **Reading (D-59, fixed in advance): no speed gain.** No arm passes D-43 at 10 s or 60 s:
+  `net` is level with or 0.003-0.005 dearer than `uniform`, and dearer on more problems than
+  cheaper at 10 s; `zero` is dearer on 2-3 problems. Q-131 closed: even where the planner
+  finish is slow (26 s), the network does not speed the search up.
+- **The network alone cannot plan at 40 targets.** `zero` (value head, no planner) finishes 1
+  problem of 10 at 1 sim and none at 16 or 256 in 900 s, and never beats the planner's cost.
+  It was trained on at most 10 targets, so part of this may be generalisation (D-59 caveat).
+- **The search over the planner still pays at this size:** 6.5-7.6% below the planner by
+  900 s with or without the network (`uniform` 0.935; best arm `net` 1 sim 0.924, a 0.011
+  gap outside the fixed times and below 0.02). At 60 s it is 2.6-2.9% below.
+- Limits: 10 problems, one seed, six arms against one control; probes outside SPEC 1.3.
 
 ### E-53 (2026-11-04) Scale check (D-58): at 40 targets one planner finish takes a median 26 s
 `scripts/scale_check.py workers=30`, code `179f7ac`, coe9, `outputs/scale/{records.jsonl,run.log}`
