@@ -57,7 +57,8 @@ chats. Last updated 2026-11-03.*
 | Q-125 | Change the claim to "search over a planner, with learning where the planner is weak", and stop trying to replace the planner on s3-s5? | Open, waiting on the user; after D-54 (plan 4.2) |
 | Q-126 | Can a value head rank sibling moves if it reads the candidate moves (and hints), or is trained to rank instead of to hit the cost? | Closed → E-50: ranking helps (0.38 → 0.52), below the 0.55 bar |
 | Q-128 | Does the search improve a published planner (MRCM) put at its leaves, as it improves ours? | Closed → E-55: yes, below MRCM on 7 of 13 of set B (bar 5), 5.1% below on average |
-| Q-132 | Does the search improve most published heuristics put at its leaves (DFM, FacDA, Generic, DFMM, with MRCM from E-55)? | Finisher test on set F (D-60), plan 4.2 |
+| Q-133 | With MRCM's tree as one more recipe, does our planner catch the methods that beat it without losing elsewhere? | Planner check (D-61), plan 4.2 |
+| Q-132 | Does the search improve most published heuristics put at its leaves (DFM, FacDA, Generic, DFMM, with MRCM from E-55)? | Closed → E-56: no, 1 of 4 improved (DFM 5/13; FacDA 2, Generic 3, DFMM 4); with MRCM 2 of 5. The search over our planner beats each on 6-11 of its 13 best problems |
 | Q-131 | On bigger problems, does one planner finish get so slow (median >= 10 s) that the search affords only a few leaves, leaving room for a network? | Closed → E-54: the finish is slow at 40 targets (E-53, median 25.6 s), but the network does not speed the search there (no arm passes D-43; the network alone finishes 1 of 10) |
 | Q-130 | Under the literature's other goals (steps first, waste first), do the planner and the search over it fall short of the optimum, leaving room for a network? | Closed → E-52: no (after the search at most 2.2% of proved problems > 2% above, mean gap <= 2.1%) |
 | Q-129 | Does the network guide the search where our planner is weak at full size (s3-s5 problems where e-MRCM or NFSP beats it)? | Closed → E-51: no (0.754 vs 0.755 at 60 s, 13 problems) |
@@ -613,8 +614,16 @@ hopeless positions as dearer on average (1,361 vs 1,197) but not the move into o
 causes left: dead ends are a small share of the value data, and the value head reads only the
 global token (Q-111).
 
-**Q-132 Does the search improve most published heuristics put at its leaves?** · **Open →
-plan 4.2, finisher test on set F (D-60)** (user, 2026-11-06; an experiment, Q-125 stays open)
+**Q-133 Can our planner take MRCM's strength without losing its generality?** · **Open → plan
+4.2, planner check (D-61)** (user, 2026-11-06; an experiment, Q-125 stays open)
+Published methods beat our planner on single-target mixtures (MRCM) and on 13 of 122
+full-size problems (e-MRCM, NFSP). Add MRCM's tree as a fifth recipe; gain if cheaper on >= 1/4
+of s3-s5, generality kept if dearer on <= 5% of the val sets.
+
+**Q-132 Does the search improve most published heuristics put at its leaves?** · **Closed →
+E-56: no** (user, 2026-11-06; closed 2026-11-06: improves DFM (5 of 13), only weakly FacDA 2,
+Generic 3, DFMM 4; with MRCM 2 of 5 methods; fixed-recipe methods leave the search little to
+gain; the search over our planner is below each on 6-11 of 13; an experiment, Q-125 stays open)
 E-55: with MRCM finishing its leaves the search is below MRCM on 7 of 13. A claim that search
 improves the heuristic it searches over needs most published methods, not one. DFM, FacDA,
 Generic and DFMM as finishers, each on its 13 best problems; improved if below on >= 1/3;

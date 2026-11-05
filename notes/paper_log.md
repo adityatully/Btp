@@ -847,6 +847,28 @@ Format: date · decision · alternatives considered · why · evidence.
   sharing rule) and NFSP (an ILP over 1:1 dilutions; finishing from a chip would change the
   method). Smoke run (Mac, 2 problems per method, 16 sims, 30 s, not a result): runs in about
   45 s; plumbing and reading work.
+- **D-61 (2026-11-06) MRCM's tree as a fifth recipe in our planner (Q-133; user: "lets make
+  our planner better and try to beat the methods that beat us", then "yea design and implement
+  this experiment"; an experiment, Q-125 stays open).** Where published methods beat us: MRCM
+  on single-target mixtures (s2, 13 of 40, 0.66 of our cost, E-29), and e-MRCM / NFSP on 13 of
+  122 full-size problems (E-51). Our planner's single-target recipe is a fixed split tree; MRCM
+  searches cost-weighted trees. **Change** (`share.share_plan(..., mrcm=True)`, variant
+  `share_mrcm`): for each delivery group, besides direct reuse, one mix, chains and the split
+  tree, MRCM's cheapest tree for the exact aim (1 or the most deliveries a droplet serves),
+  with the pool's droplets offered as free children (e-MRCM's sharing, `mrcm_droplet`); the
+  cheapest per delivery wins as before. MRCM's models are cached per run. Off by default: the
+  plain pass, the search's finishes and every earlier result are unchanged. Generality is kept
+  by design (a candidate that does not apply is skipped); whether it costs elsewhere is
+  measured, since a cheaper-per-delivery choice can still be dearer over a whole plan.
+  **Check** (`scripts/planner_check.py`): both planners on the six val sets (242) and
+  `litbench_s2_v1` (100). **Reading, fixed in advance:** check: at or below MRCM on all 13 of
+  set B (by construction on one target with demand 1: 13 of 13 on the Mac before the run, a
+  miss is a bug); **(1) gain beyond MRCM's problems:** cheaper than `share` on >= 1/4 of s3-s5
+  + held-out (162); **(2) keeps generality:** dearer than `share` on <= 5% of the 242 and mean
+  ratio <= 1. Both → it joins the planner (user's go-ahead); (2) only → it joins as a fix for
+  s2; (1) only → a separate variant; neither → drop it. Reported: per set and method, problems
+  it beats `share` on and `share_mrcm` on; time. Mac check on B: same cost as MRCM on 13 of 13,
+  0-15 s per problem (plain pass under 0.1 s).
 
 ---
 
@@ -1628,6 +1650,33 @@ MRCM's intermediates on val_s2: 4 of 28 covered (chain D4), 5 of 28 (premix D3).
   (an exact lower bound on mixes left, or a constructive method's recipes, which is a planner
   again). (3) Built as SPEC 0.28 `hint_source: problem` (depth-4 chain in the recipe columns)
   for a copy-test comparison on stages 1–2 against the planner's hints.
+
+### E-56 (2026-11-06) Finisher test on set F (D-60): the search improves DFM, only weakly FacDA, Generic, DFMM
+`scripts/search_check.py sets=F finishers=share,paper sims=256 workers=30`, code `bfb0fee`,
+coe9, `outputs/finish/{finish_f.jsonl,run_f.log}` there. Per method its 13 best problems
+against our planner; flat prior, 256 sims, 900 s cap (no search with a method finisher hit it).
+
+| method | search with the method's finishes: below it | ratio to it | search with our planner's finishes: below it | ratio to it |
+|---|---|---|---|---|
+| DFM | **5/13** | 0.950 | 11/13 | 0.818 |
+| FacDA | 2/13 | 0.987 | 10/13 | 0.898 |
+| Generic | 3/13 | 0.921 | 6/13 | 0.863 |
+| DFMM | 4/13 | 0.957 | 10/13 | 0.796 |
+
+- **Reading (D-60, fixed in advance): 1 of 4 improved (DFM); FacDA, Generic and DFMM a weak
+  gain.** The search does not improve most published methods put at its leaves; with MRCM
+  (E-55) it improves 2 of the 5 tested. Q-132 closed.
+- **As expected in D-60, the gain depends on the finisher.** These four build a fixed recipe
+  whatever is on chip, so the search can only make one of its droplets more cheaply; MRCM
+  re-plans around what is on chip and gains more (7 of 13). Search over a planner is not
+  finisher-agnostic.
+- **The search over our planner beats each method on its own best problems:** below DFM on
+  11, FacDA 10, DFMM 10, Generic 6 of 13; 10-20% cheaper on average; and it is cheaper than the
+  search over the method itself for all four (mean cost / our planner 0.74-0.84 vs 0.81-0.91).
+- Budget is not the limit: with method finishes the searches end in a median 6-40 s, and the
+  race is flat after 60 s.
+- Limits: 13 problems per method, one seed, one budget; s1-s2 sizes only (where these methods
+  apply).
 
 ### E-55 (2026-11-06) Finisher test (D-55): the search improves MRCM put at its leaves
 `scripts/search_check.py sets=B finishers=share,mrcm sims=256 workers=26`, code `53d2f06`
