@@ -277,3 +277,14 @@ def test_reading_on_f_counts_methods_improved() -> None:
         "2 of 4 improved: the search improves some of these methods"
     )
     assert SC.f_reading({}) == []
+
+
+def test_search_with_strong_finishes_is_never_dearer_than_its_finisher() -> None:
+    """D-64: the root's first leaf is the strong finisher's own plan from the empty chip."""
+    task = SC.tasks({"C"}, 1)[0]
+    inst = SC.Instance.from_json(task["instance"])
+    root = SC.StrongFinish(inst)(SC.PrepState.initial(inst))
+    assert root is not None
+    rec = SC.run_task(task, "uniform", 2, OPTS | {"seconds": 10.0}, "strong")
+    assert rec["finisher"] == "strong"
+    assert rec["search_cost"] is not None and rec["search_cost"] <= float(root[1]) + 1e-9

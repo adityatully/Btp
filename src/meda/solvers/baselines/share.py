@@ -603,19 +603,25 @@ def share_plan(
 
 
 def finish_from(
-    state: PrepState, instance: Instance, weights: CostWeights
+    state: PrepState,
+    instance: Instance,
+    weights: CostWeights,
+    lookahead: int = 0,
+    mrcm: dict[Any, list[Any]] | None = None,
 ) -> tuple[tuple[Action, ...], Rational] | None:
     """The pass started from `state`, every droplet on chip in its pool: the cheapest
     completion over the target orders, with its cost (final leftovers not charged, as for a
     finished plan), or None if no order finishes. Run on a relaxed step limit: it answers
-    "what would finishing cost", like the constructions' cost to finish (10.3)."""
+    "what would finishing cost", like the constructions' cost to finish (10.3). `lookahead`
+    as in `share_plan`; `mrcm`, a per-problem cache, adds MRCM's tree to the recipes (D-64)."""
     relaxed = replace(instance, step_limit=RELAXED_STEP_LIMIT)
     pool = {d.uid for d in state.droplets}
     best: tuple[tuple[Action, ...], Rational] | None = None
     for order in orders(instance, weights):
         open_order = [t for t in order if state.remaining_demand[t]]
         try:
-            done = _run(_Builder(relaxed, state, [], weights, set(pool)), open_order, 0)
+            start = _Builder(relaxed, state, [], weights, set(pool), mrcm=mrcm)
+            done = _run(start, open_order, lookahead)
         except IllegalActionError:
             continue
         if best is None or done.cost < best[1]:

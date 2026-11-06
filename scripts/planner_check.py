@@ -57,6 +57,13 @@ planner / old.
     uv run python scripts/planner_check.py search=outputs/expert/round2/race.jsonl \
 look=outputs/planner/look3.jsonl
 
+Stronger finisher (D-64, after E-59): the search's leaves finished by the new planner
+(`search_check.py finishers=strong`, flat prior, set C, the same 900 s cap), its records added
+to `search=` (comma list). Reading on all of C, fixed in advance (D-64): **a stronger finisher
+makes the search add more** if `uniform/strong`'s mean cost / new planner is at least 0.02 below
+`uniform`'s (plain finishes) and it is below the new planner on more problems; otherwise the
+search adds about as much whichever finisher, and its gain over our best planner is E-59's.
+
 Arguments are key=value: `sets` (comma list; `val` = the six val sets), `planners` (default
 share,share_mrcm), `limit` problems per set, `workers`, `out`; or `summary=`; or `search=` with
 `look=`.
@@ -100,6 +107,7 @@ RUNS = {  # planner -> (lookahead, MRCM's tree)
 # Fixed in advance (D-61).
 GAIN_SHARE, DEARER_SHARE = 1 / 4, 0.05
 FOUND_SHARE = 1 / 3  # D-63, D-37's bar
+STRONG_GAP = 0.02  # D-64, D-43's gap
 
 
 def literature() -> dict[tuple[str, str], dict[str, Any]]:
@@ -268,8 +276,10 @@ def search_recheck(search: list[dict[str, Any]], look: list[dict[str, Any]]) -> 
         old = r["planner"]
         new = min(old, new_cost[key])
         found = old if r["search_cost"] is None else min(old, r["search_cost"])
+        fin = r.get("finisher", "share")
+        kind = r["kind"] if fin == "share" else f"{r['kind']}/{fin}"
         for group in (r["set"], "C"):
-            rows[(group, r["kind"])].append((found, old, new))
+            rows[(group, kind)].append((found, old, new))
     if not rows:
         raise ValueError("no set C records at 256 simulations in the search records")
     lines = [
@@ -286,6 +296,7 @@ def search_recheck(search: list[dict[str, Any]], look: list[dict[str, Any]]) -> 
         )
     if ("C", "uniform") not in rows:
         return lines
+    lines += strong_reading(rows)
     xs = rows[("C", "uniform")]
     below = sum(1 for f, _, n in xs if f < n - 1e-9)
     ratio = float(np.mean([f / n for f, _, n in xs]))
@@ -297,14 +308,38 @@ def search_recheck(search: list[dict[str, Any]], look: list[dict[str, Any]]) -> 
     return [*lines, "", f"Reading (fixed in advance, D-63): {head}{verdict}"]
 
 
+def strong_reading(rows: dict[tuple[str, str], list[tuple[float, float, float]]]) -> list[str]:
+    """D-64: does the search add more over the new planner when its leaves use that planner?"""
+    if ("C", "uniform/strong") not in rows:
+        return []
+
+    def against_new(xs: list[tuple[float, float, float]]) -> tuple[int, float]:
+        return sum(1 for f, _, n in xs if f < n - 1e-9), float(np.mean([f / n for f, _, n in xs]))
+
+    plain_below, plain = against_new(rows[("C", "uniform")])
+    below, strong = against_new(rows[("C", "uniform/strong")])
+    head = (
+        f"with strong finishes below the new planner on {below}, mean ratio {strong:.3f} "
+        f"(plain finishes {plain_below}, {plain:.3f}): "
+    )
+    if strong <= plain - STRONG_GAP and below > plain_below:
+        verdict = "a stronger finisher makes the search add more"
+    else:
+        verdict = "the search adds about as much whichever finisher; its gain is what E-59 shows"
+    return ["", f"Reading on finishers (fixed in advance, D-64): {head}{verdict}"]
+
+
 def main(argv: list[str]) -> None:
     args = dict(a.split("=", 1) for a in argv)
     if "summary" in args:
         print(summarise(Path(args["summary"])))
         return
     if "search" in args:
-        read = lambda k: [json.loads(x) for x in Path(args[k]).read_text().splitlines()]  # noqa: E731
-        print("\n".join(search_recheck(read("search"), read("look"))))
+
+        def read(paths: str) -> list[dict[str, Any]]:
+            return [json.loads(x) for p in paths.split(",") for x in Path(p).open()]
+
+        print("\n".join(search_recheck(read(args["search"]), read(args["look"]))))
         return
     sets = args.get("sets", ",".join(SETS)).split(",")
     if sets == ["val"]:

@@ -230,3 +230,24 @@ def test_with_mrcms_tree_a_multi_target_plan_is_legal() -> None:
     assert plan is not None
     _, totals, deltas = replay(inst, plan)
     assert validate(MixingDAG.from_deltas(inst, deltas, totals, "share_mrcm"), inst).ok
+
+
+def test_finish_from_with_lookahead_and_mrcms_tree_replays_at_its_cost() -> None:
+    """D-64: the search's strong finisher, from states along a multi-target plan."""
+    inst = next(i for i in BenchmarkSet.read("val_s5_v2").instances if len(i.targets) > 1)
+    plan = share_plan(inst, GEOMETRIC)
+    assert plan is not None
+    relaxed = replace(inst, step_limit=RELAXED_STEP_LIMIT)
+    state, cache = PrepState.initial(relaxed), {}  # type: ignore[var-annotated]
+    for k, action in enumerate(plan[: len(plan) // 2]):
+        state, _, _ = apply(state, action, relaxed)
+        if k % 3:
+            continue
+        found = finish_from(state, inst, GEOMETRIC, lookahead=3, mrcm=cache)
+        assert found is not None
+        rest, cost = found
+        end, total = state, ZERO
+        for a in rest:
+            end, step, _ = apply(end, a, relaxed)
+            total = total + GEOMETRIC.scalar(step, inst.fluids)
+        assert end.is_success and total == cost

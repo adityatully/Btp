@@ -122,3 +122,17 @@ def test_search_recheck_follows_the_rule_fixed_in_advance() -> None:
     assert "| C | uniform | 9 | 2, 0.967 | 2, 1.074 | 0.900 |" in out
     with pytest.raises(ValueError, match="no share_mrcm_look3 cost"):
         PC.search_recheck(still, look[:3])
+
+
+def test_strong_finisher_reading_follows_the_rule_fixed_in_advance() -> None:
+    def rows(plain: float, strong: float, n_strong: int) -> dict[Any, Any]:
+        return {
+            ("C", "uniform"): [(plain, 100.0, 100.0)] * 5 + [(100.0, 100.0, 100.0)] * 5,
+            ("C", "uniform/strong"): [(strong, 100.0, 100.0)] * n_strong
+            + [(100.0, 100.0, 100.0)] * (10 - n_strong),
+        }
+
+    assert PC.strong_reading(rows(96.0, 90.0, 6))[-1].endswith("makes the search add more")
+    assert PC.strong_reading(rows(96.0, 95.0, 6))[-1].endswith("its gain is what E-59 shows")
+    assert PC.strong_reading(rows(96.0, 90.0, 5))[-1].endswith("its gain is what E-59 shows")
+    assert PC.strong_reading({("C", "uniform"): []}) == []

@@ -1,6 +1,11 @@
 # MEDA Design Automation — Codebase Specification
 
-Version 0.31 · 2026-11-06
+Version 0.32 · 2026-11-06
+
+Changes in 0.32 (stronger finisher, paper log D-64): `share.finish_from` takes `lookahead`
+(default 0) and `mrcm` (a per-problem MRCM cache, default None), as `share_plan` does; with the
+defaults every completion is unchanged. The search check's `strong` leaf finisher uses
+`lookahead=3` with MRCM's tree (E-58's planner).
 
 Changes in 0.31 (planner check, paper log D-61): the sharing pass takes `mrcm` (off by
 default): a fifth recipe per delivery group, MRCM's cheapest tree for the exact aim with the
@@ -1563,7 +1568,8 @@ of `share.finish_from(state, instance, weights)` and the rebuild below. `finish_
 sharing pass (10.4) from `state` with every droplet on chip in its pool, over its target orders,
 on a relaxed step limit, and returns the completion and its exact cost (final leftovers not
 charged, as for a finished plan). Both are completions that really exist, so the minimum is one
-too. Measured from states along the teacher's plans (E-18): always found; 4–9 ms median on
+too. Since 0.32 it also takes `lookahead` and `mrcm` (D-64; defaults unchanged, the
+penalty uses the defaults). Measured from states along the teacher's plans (E-18): always found; 4–9 ms median on
 stages 1–3 and 5, 1.8 s on stage 4. Called once per failed episode, never per candidate.
 
 **`construction`.**
