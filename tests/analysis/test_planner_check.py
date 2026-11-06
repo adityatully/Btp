@@ -64,3 +64,34 @@ def test_reading_follows_the_rule_fixed_in_advance() -> None:
     missed = [rec("val_s2_v2", i, 100.0, 100.0) for i in range(13)]
     with pytest.raises(RuntimeError, match="dearer than MRCM"):
         PC.reading(missed, lit)
+
+
+def test_reading_on_recipe_choice_follows_the_rule_fixed_in_advance() -> None:
+    def rec(i: int, plain: float, greedy: float, look: float) -> dict[str, Any]:
+        def cell(c: float) -> dict[str, float]:
+            return {"cost": c, "seconds": 1.0}
+
+        return {
+            "source": "val_s4_v2",
+            "id": f"p{i}",
+            "share": cell(plain),
+            "share_mrcm": cell(greedy),
+            "share_look3": cell(plain),
+            "share_mrcm_look3": cell(look),
+        }
+
+    fixed = [
+        rec(i, 100.0, 110.0 if i < 17 else 90.0, 100.0 if i < 17 else 90.0) for i in range(242)
+    ]
+    lines = PC.look_reading(fixed)
+    assert "fixed by lookahead: 17 of 17" in lines[-3]
+    assert lines[-1].endswith("joins the planner")
+    still = [rec(i, 100.0, 110.0, 110.0 if i < 13 else 90.0) for i in range(242)]
+    assert PC.look_reading(still)[-1].endswith("stop there")
+    assert PC.look_reading([rec(0, 1.0, 1.0, 1.0) | {"share_mrcm_look3": None}][:0]) == []
+
+
+def test_a_record_holds_the_planners_asked_for() -> None:
+    (task,) = PC.problems(["val_s1_v2"], 1)
+    rec = PC.run_task((*task, ["share", "share_mrcm", "share_mrcm_look3"]))
+    assert rec["share_mrcm_look3"]["cost"] <= rec["share_mrcm"]["cost"]

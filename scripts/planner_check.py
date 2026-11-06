@@ -28,7 +28,22 @@ that method beats `share` on, and `share_mrcm` on; time per problem.
     uv run python scripts/planner_check.py workers=30 out=outputs/planner/records.jsonl
     uv run python scripts/planner_check.py summary=outputs/planner/records.jsonl
 
-Arguments are key=value: `sets` (comma list), `limit` problems per set, `workers`, `out`.
+Recipe choice (D-62, after E-57): `share_mrcm` was dearer than `share` on 17 of 242, all with
+many targets: the cheapest recipe per delivery left a pool that served later targets worse.
+`share_mrcm_look3` rolls each delivery group's 3 cheapest recipes out to the end and keeps the
+best (the pass's existing `lookahead`); `share_look3` is the same lookahead without MRCM's tree,
+the fair comparison. Reading on the 242 val problems, fixed in advance (D-62):
+**the greedy choice was the problem** if `share_mrcm_look3` is dearer than `share` on <= 5%
+(12) with mean cost / `share` <= 1: the MRCM recipe with lookahead joins the planner, and
+choosing recipes is worth a faster chooser (search or a network, next). Otherwise it is not
+only the greedy choice: stop there. Reported, no bar: against `share_look3` (cheaper / dearer,
+mean ratio), how many of E-57's 17 it fixes, time.
+
+    uv run python scripts/planner_check.py sets=val planners=share,share_mrcm,share_look3,\
+share_mrcm_look3 workers=30 out=outputs/planner/look3.jsonl
+
+Arguments are key=value: `sets` (comma list; `val` = the six val sets), `planners` (default
+share,share_mrcm), `limit` problems per set, `workers`, `out`.
 """
 
 from __future__ import annotations
@@ -60,6 +75,12 @@ LIT_FULL = ROOT / "notes/lit_bench/runs/full/records.jsonl"
 METHODS = ("dfm", "facda", "generic", "dfmm", "mrcm", "emrcm", "nfsp")
 PLANNERS = ("share", "share_look3", "share_orders")
 FULL = ("val_s3_v2", "val_s4_v2", "val_s5_v2", "heldout_combo_v2")
+RUNS = {  # planner -> (lookahead, MRCM's tree)
+    "share": (0, False),
+    "share_mrcm": (0, True),
+    "share_look3": (3, False),
+    "share_mrcm_look3": (3, True),
+}
 # Fixed in advance (D-61).
 GAIN_SHARE, DEARER_SHARE = 1 / 4, 0.05
 
@@ -91,12 +112,14 @@ def cost_of(inst: Instance, plan: Any) -> float:
     return float(WEIGHTS.scalar(totals, inst.fluids))
 
 
-def run_task(task: tuple[str, Instance]) -> dict[str, Any]:
-    source, inst = task
+def run_task(task: tuple[str, Instance] | tuple[str, Instance, list[str]]) -> dict[str, Any]:
+    source, inst = task[0], task[1]
+    names = task[2] if len(task) > 2 else ["share", "share_mrcm"]  # type: ignore[misc]
     rec: dict[str, Any] = {"source": source, "id": inst.instance_id}
-    for name, mrcm in (("share", False), ("share_mrcm", True)):
+    for name in names:
+        look, mrcm = RUNS[name]
         t0 = time.perf_counter()
-        plan = share.share_plan(inst, WEIGHTS, mrcm=mrcm)
+        plan = share.share_plan(inst, WEIGHTS, lookahead=look, mrcm=mrcm)
         if plan is None:
             raise RuntimeError(f"{inst.instance_id}: {name} found no plan")
         rec[name] = {"cost": cost_of(inst, plan), "seconds": round(time.perf_counter() - t0, 3)}
@@ -174,7 +197,45 @@ def summarise(path: Path) -> str:
             f"{np.median([r['share_mrcm']['seconds'] for r in rs]):.1f} | {', '.join(meth)} |"
         )
     lines += ["", f"Reading (fixed in advance, D-61): {reading(recs, lit)}"]
+    lines += look_reading(recs)
     return "\n".join(lines)
+
+
+def _vs(rs: list[dict[str, Any]], a: str, b: str) -> tuple[int, int, float]:
+    """(cheaper, dearer, mean ratio) of planner `a` against `b`."""
+    x = [(r[a]["cost"], r[b]["cost"]) for r in rs]
+    cheap = sum(1 for u, v in x if u < v - 1e-9)
+    dear = sum(1 for u, v in x if u > v + 1e-9)
+    return cheap, dear, float(np.mean([u / v for u, v in x]))
+
+
+def look_reading(recs: list[dict[str, Any]]) -> list[str]:
+    """D-62: does lookahead over recipes fix the greedy choice's losses?"""
+    val = [r for r in recs if r["source"] in VAL and "share_mrcm_look3" in r]
+    if not val:
+        return []
+    lines = ["", "Recipe choice (D-62), on the val sets: cheaper / dearer, mean ratio"]
+    for a, b in (
+        ("share_mrcm", "share"),
+        ("share_mrcm_look3", "share"),
+        ("share_look3", "share"),
+        ("share_mrcm_look3", "share_look3"),
+    ):
+        if all(a in r and b in r for r in val):
+            c, d, m = _vs(val, a, b)
+            lines.append(f"  {a} vs {b}: {c} / {d}, {m:.3f}")
+    lost = [r for r in val if r["share_mrcm"]["cost"] > r["share"]["cost"] + 1e-9]
+    fixed = sum(1 for r in lost if r["share_mrcm_look3"]["cost"] <= r["share"]["cost"] + 1e-9)
+    secs = {k: float(np.median([r[k]["seconds"] for r in val])) for k in RUNS if k in val[0]}
+    lines.append(f"  share_mrcm's losses fixed by lookahead: {fixed} of {len(lost)}")
+    lines.append("  median seconds: " + ", ".join(f"{k} {v:.1f}" for k, v in secs.items()))
+    _, dear, ratio = _vs(val, "share_mrcm_look3", "share")
+    head = f"dearer than share on {dear} of {len(val)}, mean ratio {ratio:.3f}: "
+    if dear <= DEARER_SHARE * len(val) and ratio <= 1.0:
+        verdict = "the greedy choice was the problem; MRCM's tree with lookahead joins the planner"
+    else:
+        verdict = "not only the greedy choice: stop there"
+    return [*lines, f"Reading on recipe choice (fixed in advance, D-62): {head}{verdict}"]
 
 
 def main(argv: list[str]) -> None:
@@ -183,8 +244,14 @@ def main(argv: list[str]) -> None:
         print(summarise(Path(args["summary"])))
         return
     sets = args.get("sets", ",".join(SETS)).split(",")
+    if sets == ["val"]:
+        sets = list(VAL)
     limit = int(args["limit"]) if "limit" in args else None
-    todo = problems(sets, limit)
+    names = args.get("planners", "share,share_mrcm").split(",")
+    unknown = set(names) - set(RUNS)
+    if unknown or not {"share", "share_mrcm"} <= set(names):
+        raise ValueError(f"planners must include share and share_mrcm, from {list(RUNS)}")
+    todo = [(s, i, names) for s, i in problems(sets, limit)]
     out = Path(args.get("out", "outputs/planner/records.jsonl"))
     out.parent.mkdir(parents=True, exist_ok=True)
     workers = int(args.get("workers", 1))
