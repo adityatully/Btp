@@ -869,6 +869,21 @@ Format: date · decision · alternatives considered · why · evidence.
   s2; (1) only → a separate variant; neither → drop it. Reported: per set and method, problems
   it beats `share` on and `share_mrcm` on; time. Mac check on B: same cost as MRCM on 13 of 13,
   0-15 s per problem (plain pass under 0.1 s).
+- **D-62 (2026-11-06) Recipe choice: does lookahead fix the greedy losses of MRCM's recipe?
+  (Q-134; user: "is this even a right way? ... we are now just making a combination of
+  heuristics" → recipe choice over more recipes, then "proceed"; an experiment, Q-125 stays
+  open).** Adding methods to the menu only to match them on their own problems would be a
+  portfolio, not a result; what E-57 showed that is ours is the pass lifting a one-target
+  method to s3-s5 (11%). Its one cost: dearer than the plain pass on 17 of 242, all with many
+  targets, where the cheapest recipe per delivery leaves a worse pool. Choosing among 5-10
+  recipes is a small decision, where search or a network might have a job. **First step,
+  cheap:** the pass's existing lookahead (`lookahead=3`: each group's 3 cheapest recipes rolled
+  out to the end) on `share_mrcm` (`share_mrcm_look3`), with `share_look3` as the fair control,
+  all four planners on the 242 val problems (`planner_check.py sets=val planners=...`).
+  **Reading, fixed in advance:** the greedy choice was the problem if `share_mrcm_look3` is
+  dearer than `share` on <= 5% (12) with mean ratio <= 1: it joins the planner, and a faster
+  chooser (search or a network) is the next question; otherwise not only the greedy choice:
+  stop. Reported: against `share_look3`, how many of the 17 it fixes, time.
 
 ---
 
@@ -1650,6 +1665,37 @@ MRCM's intermediates on val_s2: 4 of 28 covered (chain D4), 5 of 28 (premix D3).
   (an exact lower bound on mixes left, or a constructive method's recipes, which is a planner
   again). (3) Built as SPEC 0.28 `hint_source: problem` (depth-4 chain in the recipe columns)
   for a copy-test comparison on stages 1–2 against the planner's hints.
+
+### E-57 (2026-11-06) Planner check (D-61): MRCM's tree makes the planner 11% cheaper and removes MRCM's and e-MRCM's wins, but is dearer on 7%
+`scripts/planner_check.py workers=30`, code `3426fb8`, coe9, `outputs/planner/{records.jsonl,
+run.log}` there. Both planners (4 target orders, no lookahead) on every problem; published
+methods' costs from the lit-bench records (s3-s5 from `runs/full`).
+
+| set | n | share_mrcm / share | cheaper / equal / dearer | median s (share / mrcm) | methods beating us: before -> after (of those they take) |
+|---|---|---|---|---|---|
+| val_s1 | 40 | 0.952 | 14 / 26 / 0 | 0.0 / 0.0 | DFM 2->0, FacDA 9->7 /30, Generic 3->0, DFMM 1->0, MRCM 10->0 /27 |
+| val_s2 | 40 | 0.738 | 26 / 14 / 0 | 0.0 / 1.8 | DFMM 8->1 /15, MRCM 13->0 /17 |
+| val_s3 | 40 | 0.892 | 15 / 25 / 0 | 0.0 / 0.1 | NFSP 3->2 /12 |
+| val_s4 | 40 | 0.887 | 28 / 7 / 5 | 1.5 / 3.6 | e-MRCM 3->0 /5, NFSP 0->0 /1 |
+| val_s5 | 42 | 0.908 | 22 / 17 / 3 | 0.1 / 0.9 | e-MRCM 6->0 /8, NFSP 2->2 /4 |
+| held-out | 40 | 0.980 | 17 / 14 / 9 | 0.7 / 1.2 | - |
+| litbench_s2 | 100 | 0.766 | 58 / 42 / 0 | 0.0 / 0.7 | DFMM 23->8 /48, MRCM 29->0 /41 |
+
+- **Reading (D-61, fixed in advance): (1) yes, (2) no → a separate variant only.** Cheaper
+  than the plain pass on 82 of 162 s3-s5 + held-out problems (bar 1/4), but dearer on 17 of 242
+  val problems (7.0%, bar 5%), though 10.7% cheaper on average (0.893). Check passed: at or
+  below MRCM on all 13 of set B. Q-133 closed.
+- **The dearer cases are the greedy choice, on many targets only:** s4 5, s5 3, held-out 9; none
+  on one-target sets. A recipe cheaper for this delivery can leave a pool that serves later
+  targets worse. As a variant beside the others (our best planner is already the cheapest of
+  `share`, `share_look3`, `share_orders`), it is never dearer by construction.
+- **It removes most published wins:** MRCM 52 -> 0, e-MRCM 9 -> 0, DFM 2 -> 0, Generic 3 -> 0,
+  DFMM 32 -> 9. **Left:** FacDA 7 of 30 (s1), DFMM 9 (s2 mixtures), NFSP 4 (s3, s5).
+- **The gain reaches well past MRCM's own problems:** 11% on s3-s5, where MRCM alone does not
+  apply (demand > 1 or many targets); 26% on s2 mixtures.
+- Time: median 0.0-3.6 s per problem (plain 0.0-1.5 s).
+- Limits: no lookahead or extra orders on either side; one cost model; the search's finishes
+  still use the plain pass.
 
 ### E-56 (2026-11-06) Finisher test on set F (D-60): the search improves DFM, only weakly FacDA, Generic, DFMM
 `scripts/search_check.py sets=F finishers=share,paper sims=256 workers=30`, code `bfb0fee`,

@@ -57,7 +57,8 @@ chats. Last updated 2026-11-03.*
 | Q-125 | Change the claim to "search over a planner, with learning where the planner is weak", and stop trying to replace the planner on s3-s5? | Open, waiting on the user; after D-54 (plan 4.2) |
 | Q-126 | Can a value head rank sibling moves if it reads the candidate moves (and hints), or is trained to rank instead of to hit the cost? | Closed → E-50: ranking helps (0.38 → 0.52), below the 0.55 bar |
 | Q-128 | Does the search improve a published planner (MRCM) put at its leaves, as it improves ours? | Closed → E-55: yes, below MRCM on 7 of 13 of set B (bar 5), 5.1% below on average |
-| Q-133 | With MRCM's tree as one more recipe, does our planner catch the methods that beat it without losing elsewhere? | Planner check (D-61), plan 4.2 |
+| Q-134 | Is the greedy recipe choice why MRCM's recipe is dearer on some many-target problems, i.e. does choosing recipes matter? | Recipe choice, lookahead step (D-62), plan 4.2 |
+| Q-133 | With MRCM's tree as one more recipe, does our planner catch the methods that beat it without losing elsewhere? | Closed → E-57: gains (cheaper on 82 of 162 s3-s5, 11% on average) but dearer on 17 of 242 (bar 12): a separate variant; MRCM and e-MRCM no longer beat us anywhere; FacDA 7, DFMM 9, NFSP 4 still do |
 | Q-132 | Does the search improve most published heuristics put at its leaves (DFM, FacDA, Generic, DFMM, with MRCM from E-55)? | Closed → E-56: no, 1 of 4 improved (DFM 5/13; FacDA 2, Generic 3, DFMM 4); with MRCM 2 of 5. The search over our planner beats each on 6-11 of its 13 best problems |
 | Q-131 | On bigger problems, does one planner finish get so slow (median >= 10 s) that the search affords only a few leaves, leaving room for a network? | Closed → E-54: the finish is slow at 40 targets (E-53, median 25.6 s), but the network does not speed the search there (no arm passes D-43; the network alone finishes 1 of 10) |
 | Q-130 | Under the literature's other goals (steps first, waste first), do the planner and the search over it fall short of the optimum, leaving room for a network? | Closed → E-52: no (after the search at most 2.2% of proved problems > 2% above, mean gap <= 2.1%) |
@@ -614,8 +615,16 @@ hopeless positions as dearer on average (1,361 vs 1,197) but not the move into o
 causes left: dead ends are a small share of the value data, and the value head reads only the
 global token (Q-111).
 
-**Q-133 Can our planner take MRCM's strength without losing its generality?** · **Open → plan
-4.2, planner check (D-61)** (user, 2026-11-06; an experiment, Q-125 stays open)
+**Q-134 Does the choice among recipes matter?** · **Open → plan 4.2, recipe choice (D-62)**
+(user, 2026-11-06; an experiment, Q-125 stays open)
+E-57: with MRCM's tree the pass is 11% cheaper but dearer on 17 of 242, all many-target, from
+taking the cheapest recipe per delivery. Lookahead over each group's 3 cheapest recipes: if it
+removes the losses (dearer on <= 12), recipe choice matters and a faster chooser is next.
+
+**Q-133 Can our planner take MRCM's strength without losing its generality?** · **Closed →
+E-57: yes, as a separate variant** (user, 2026-11-06; closed 2026-11-06: cheaper on 82 of 162
+s3-s5 + held-out, 10.7% on average, but dearer on 17 of 242 (bar 5%), all on many targets;
+MRCM's and e-MRCM's wins go to 0; FacDA 7, DFMM 9, NFSP 4 left; Q-125 stays open)
 Published methods beat our planner on single-target mixtures (MRCM) and on 13 of 122
 full-size problems (e-MRCM, NFSP). Add MRCM's tree as a fifth recipe; gain if cheaper on >= 1/4
 of s3-s5, generality kept if dearer on <= 5% of the val sets.
