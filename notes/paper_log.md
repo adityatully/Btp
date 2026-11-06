@@ -2712,6 +2712,18 @@ independent reference (oracle, optimum, bound, validator) catches it.**
   lets the teacher's later actions follow the twin the env used; tests cover a discard and a
   partial take of the unlisted twin, `val_s4-033` and six `val_s3_v2` problems (all three
   failed on the old code).
+- **F-17 (2026-11-06/07) MRCM's tree lost a shared droplet under tight storage.** D-64's coe9
+  run (`strong` finisher, code `501296b`) crashed after 69 of 99 problems (C3 30, C4 30, C5 9):
+  `KeyError: no droplet with uid 4 on chip` in `share._build_tree`. A droplet on chip used
+  twice in one MRCM tree went back to the pool after its first use; with limited storage
+  (s5) the next sibling's build discarded it, and the second use failed. It needs a part-built
+  chip, so the plain recipe from the empty chip (E-57, E-58) did not meet it. **Fixed
+  2026-11-07:** a shared droplet stays reserved until its last use in the tree; a test builds
+  that tree (KeyError on the old code; with too little room it is now a storage violation,
+  which the pass skips). No plan that built before changes (the droplet was only ever
+  discarded when a later use was still to come). The run is redone in full. Also found: one
+  strong finish can take minutes on s5, past the 900 s cap, so D-64's reading counts only
+  the plans the search found by 900 s (its trace).
 - **Ops lessons (not for the paper):** Python stdout buffering hid a 10 h background check;
   pytest thrashed at 1,144% CPU without `OMP_NUM_THREADS=1`; parallel checks on the Mac
   overheated it (heavy jobs now run only on the workstation).
