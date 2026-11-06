@@ -136,3 +136,19 @@ def test_strong_finisher_reading_follows_the_rule_fixed_in_advance() -> None:
     assert PC.strong_reading(rows(96.0, 95.0, 6))[-1].endswith("its gain is what E-59 shows")
     assert PC.strong_reading(rows(96.0, 90.0, 5))[-1].endswith("its gain is what E-59 shows")
     assert PC.strong_reading({("C", "uniform"): []}) == []
+
+
+def test_strong_records_count_only_plans_found_by_the_cap() -> None:
+    look = [{"source": "val_s4_v2", "id": "p0", "share_mrcm_look3": {"cost": 90.0}}]
+    rec = {
+        "set": "C4",
+        "id": "p0",
+        "kind": "uniform",
+        "sims": 256,
+        "planner": 100.0,
+        "finisher": "strong",
+        "search_cost": 70.0,
+        "trace": [(10.0, 95.0), (1200.0, 70.0)],
+    }
+    out = PC.search_recheck([rec], look)
+    assert "| C | uniform/strong | 1 | 1, 0.950 | 0, 1.056 | 0.900 |" in out

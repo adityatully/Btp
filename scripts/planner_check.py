@@ -108,6 +108,7 @@ RUNS = {  # planner -> (lookahead, MRCM's tree)
 GAIN_SHARE, DEARER_SHARE = 1 / 4, 0.05
 FOUND_SHARE = 1 / 3  # D-63, D-37's bar
 STRONG_GAP = 0.02  # D-64, D-43's gap
+STRONG_CAP = 900.0  # D-64: E-39's cap, seconds
 
 
 def literature() -> dict[tuple[str, str], dict[str, Any]]:
@@ -275,8 +276,11 @@ def search_recheck(search: list[dict[str, Any]], look: list[dict[str, Any]]) -> 
             raise ValueError(f"{key}: no share_mrcm_look3 cost in the look records")
         old = r["planner"]
         new = min(old, new_cost[key])
-        found = old if r["search_cost"] is None else min(old, r["search_cost"])
         fin = r.get("finisher", "share")
+        if fin == "strong":  # D-64: one finish can run past the cap; count what was found by it
+            found = min([old, *(c for s, c in r["trace"] if s <= STRONG_CAP)])
+        else:
+            found = old if r["search_cost"] is None else min(old, r["search_cost"])
         kind = r["kind"] if fin == "share" else f"{r['kind']}/{fin}"
         for group in (r["set"], "C"):
             rows[(group, kind)].append((found, old, new))

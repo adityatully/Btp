@@ -251,3 +251,34 @@ def test_finish_from_with_lookahead_and_mrcms_tree_replays_at_its_cost() -> None
             end, step, _ = apply(end, a, relaxed)
             total = total + GEOMETRIC.scalar(step, inst.fluids)
         assert end.is_success and total == cost
+
+
+def test_a_shared_droplet_is_kept_until_its_last_use_in_mrcms_tree() -> None:
+    """D-64 bug (coe9, strong finisher on s5): a droplet on chip used twice in one MRCM tree
+    went back to the pool after its first use, storage discarded it while a sibling was built,
+    and the second use raised KeyError. Now it stays reserved: with room the tree builds; without
+    room storage reports the violation (IllegalActionError, which the pass skips)."""
+    from meda.core.actions import Mix, Source
+    from meda.core.rules import IllegalActionError
+    from meda.solvers.baselines.emrcm import _Shared
+    from meda.solvers.baselines.mrcm import _Tree
+    from meda.solvers.baselines.share import _build_tree, _Builder
+
+    key = (ZERO, 0, 0)
+    for storage, builds in ((5, True), (2, False)):
+        inst = dilution([(3, 8)], chip(storage_capacity=storage))
+        state, _, _ = apply(
+            PrepState.initial(inst), Mix(Source.reservoir(0), 1, Source.reservoir(1), 1), inst
+        )
+        x = state.droplets[0].uid  # 1/2, two units
+        shared = _Shared(key, (), (), 0, x)
+        b1 = _Tree(key, (0, 1), ((1, shared),), 2)  # X + buffer: 1/4
+        b2 = _Tree(key, (1, 1), (), 2)  # sample + buffer: 1/2, needs a new slot
+        root = _Tree(key, (), ((1, b1), (1, b2), (1, shared)), 3)
+        b = _Builder(inst, state, [], GEOMETRIC, set())
+        if builds:
+            uid = _build_tree(b, root)
+            assert b.state.has_droplet(uid) and not b.state.has_droplet(x)
+        else:
+            with pytest.raises(IllegalActionError):
+                _build_tree(b, root)

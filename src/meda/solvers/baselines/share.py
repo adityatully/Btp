@@ -37,6 +37,7 @@ lowers the penalty instead of being priced as waste (paper log E-18).
 from __future__ import annotations
 
 import time
+from collections import Counter
 from collections.abc import Callable, Iterator
 from dataclasses import dataclass, field, replace
 from functools import lru_cache
@@ -455,21 +456,30 @@ def mrcm_droplet(
         return None
 
 
-def _build_tree(b: _Builder, tree: _Tree) -> int:
+def _build_tree(b: _Builder, tree: _Tree, pending: Counter[int] | None = None) -> int:
     """Build `tree` bottom up (children first, as MRCM's graph is emitted); its droplet's
-    uid. A child's leftover joins the pool once its parent has taken from it."""
+    uid. A child's leftover joins the pool once its parent has taken from it; a shared droplet
+    only after its last use in the tree (`pending` counts the uses not yet taken), so storage
+    never discards it while a later use is still to come (D-64 fix)."""
+    if pending is None:
+        pending = Counter(c.node for c in _shared(tree))
     n = b.instance.num_fluids
     inputs = [
         (Source.reservoir(f), u, Composition.pure(f, n)) for f, u in enumerate(tree.pure) if u
     ]
     kids = []
     for units, child in tree.children:
-        uid = child.node if isinstance(child, _Shared) else _build_tree(b, child)
+        if isinstance(child, _Shared):
+            uid = child.node
+            pending[uid] -= 1
+        else:
+            uid = _build_tree(b, child, pending)
         kids.append(uid)
         inputs.append((Source.droplet(uid), units, b.state.droplet(uid).composition))
     uid = _fold(b, inputs, b.instance, len(b.actions))
     for k in kids:
-        b.discard_leftover(k)
+        if not pending[k]:
+            b.discard_leftover(k)
     return uid
 
 
