@@ -896,6 +896,21 @@ Format: date · decision · alternatives considered · why · evidence.
   new planner on >= 1/3 of C (D-37's bar); otherwise the planner's greedy choices were most of
   what the search was fixing. Reported: per stage and arm, below / ratio against the old and the
   new planner. Code and notes as separate commits; an experiment, Q-125 stays open.
+- **D-64 (2026-11-06) Search over the stronger planner (Q-136; user: "proceed" on option 1,
+  search over the new planner first, then a faster recipe chooser).** E-59: the search is 3.7%
+  below the new planner on set C, but its leaves were finished by the plain pass. Does a better
+  finisher make the search add more, even though each finish is about 15x slower and far fewer
+  leaves fit in 900 s? **Run:** `search_check.py sets=C finishers=strong` (flat prior, 256
+  sims, 900 s cap as E-39; `strong` = `finish_from` with lookahead 3 and MRCM's tree, SPEC
+  0.32), read with `planner_check.py search=<E-39 race>,<this> look=<E-58 records>`.
+  **Reading, fixed in advance:** a stronger finisher makes the search add more if its mean
+  cost / new planner is at least 0.02 below the plain-finish search's (0.963) and it is below
+  the new planner on more problems (54); otherwise the search adds about as much whichever
+  finisher, and its gain over our best planner is E-59's. Then (user's order) a faster recipe
+  chooser. An experiment, Q-125 stays open.
+  Mac trial (one problem per stage, 120 s cap, not a result): runs end to end; the strong
+  finisher fits 35-60% of the plain finisher's leaves (75-1,323 vs 212-2,285), not 1/15, since
+  finishes from later states are short; equal on C3 and C4, cheaper on C5 (338 vs 401).
 
 ---
 
@@ -1677,6 +1692,35 @@ MRCM's intermediates on val_s2: 4 of 28 covered (chain D4), 5 of 28 (premix D3).
   (an exact lower bound on mixes left, or a constructive method's recipes, which is a planner
   again). (3) Built as SPEC 0.28 `hint_source: problem` (depth-4 chain in the recipe columns)
   for a copy-test comparison on stages 1–2 against the planner's hints.
+
+### E-59 (2026-11-06) Search re-check (D-63): the search still beats the stronger planner, by far less
+`planner_check.py search=outputs/expert/round2/race.jsonl look=outputs/planner/look3.jsonl`,
+code `7f0f8a5`, coe9, `outputs/planner/recheck.log` there. Set C (99 full-size s3-s5 problems),
+E-39's race records (256 sims, 900 s cap, leaves finished by the plain pass); new planner = min
+(old best planner, `share_mrcm_look3`). Below / mean cost ratio:
+
+| set | arm | vs old planner | vs new planner | new planner / old |
+|---|---|---|---|---|
+| C (99) | net | 84, 0.840 | 53, 0.983 | 0.869 |
+| C (99) | **uniform** | 83, 0.828 | **54, 0.963** | 0.869 |
+| C (99) | zero | 29, 0.931 | 21, 1.119 | 0.869 |
+| C3 (30) | uniform | 23, 0.777 | 18, 0.911 | 0.854 |
+| C4 (32) | uniform | 30, 0.860 | 16, 1.008 | 0.866 |
+| C5 (37) | uniform | 30, 0.843 | 20, 0.967 | 0.884 |
+
+- **Reading (D-63, fixed in advance): the search still earns its place** (below the new planner
+  on 54 of 99, bar 33). Q-135 closed.
+- **But most of its margin was the planner's greedy recipe choice:** the new planner alone is
+  13.1% cheaper than the old on C; the search's average gain drops from 17.2% to 3.7%. On C4
+  the search is below on half (16 of 32) but dearer on average (1.008).
+- The ratios above count the search alone; in use one would take the cheaper of the search and
+  the new planner, so the combined gain over the new planner is at least what the 54 problems
+  give (not computed).
+- The network arm (`net`) is no better than the flat prior (53 vs 54, 0.983 vs 0.963); the
+  network alone (`zero`) is dearer than the new planner on average (1.119).
+- Unfair to the search in one way: its leaves are finished by the plain pass, not the new
+  planner (15x slower). A search over the new planner is untested.
+- Limits: one seed; costs from runs at different times but all deterministic.
 
 ### E-58 (2026-11-06) Recipe choice (D-62): lookahead removes every loss of MRCM's recipe
 `scripts/planner_check.py sets=val planners=share,share_mrcm,share_look3,share_mrcm_look3

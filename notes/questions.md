@@ -57,7 +57,8 @@ chats. Last updated 2026-11-03.*
 | Q-125 | Change the claim to "search over a planner, with learning where the planner is weak", and stop trying to replace the planner on s3-s5? | Open, waiting on the user; after D-54 (plan 4.2) |
 | Q-126 | Can a value head rank sibling moves if it reads the candidate moves (and hints), or is trained to rank instead of to hit the cost? | Closed → E-50: ranking helps (0.38 → 0.52), below the 0.55 bar |
 | Q-128 | Does the search improve a published planner (MRCM) put at its leaves, as it improves ours? | Closed → E-55: yes, below MRCM on 7 of 13 of set B (bar 5), 5.1% below on average |
-| Q-135 | With the stronger planner (MRCM's tree + lookahead) as a variant, is the search still below it on set C? | Search re-check (D-63), plan 4.2 |
+| Q-136 | Does the search add more over the new planner when its leaves are finished by that planner? | Search over the stronger planner (D-64), plan 4.2 |
+| Q-135 | With the stronger planner (MRCM's tree + lookahead) as a variant, is the search still below it on set C? | Closed → E-59: yes, below on 54 of 99 (bar 33), but only 3.7% cheaper on average (was 17.2%); most of the margin was greedy recipe choice |
 | Q-134 | Is the greedy recipe choice why MRCM's recipe is dearer on some many-target problems, i.e. does choosing recipes matter? | Closed → E-58: yes; with lookahead dearer on 0 of 242, 12.1% cheaper on average, all 17 losses fixed; 15x slower (1.5 s median) |
 | Q-133 | With MRCM's tree as one more recipe, does our planner catch the methods that beat it without losing elsewhere? | Closed → E-57: gains (cheaper on 82 of 162 s3-s5, 11% on average) but dearer on 17 of 242 (bar 12): a separate variant; MRCM and e-MRCM no longer beat us anywhere; FacDA 7, DFMM 9, NFSP 4 still do |
 | Q-132 | Does the search improve most published heuristics put at its leaves (DFM, FacDA, Generic, DFMM, with MRCM from E-55)? | Closed → E-56: no, 1 of 4 improved (DFM 5/13; FacDA 2, Generic 3, DFMM 4); with MRCM 2 of 5. The search over our planner beats each on 6-11 of its 13 best problems |
@@ -616,8 +617,14 @@ hopeless positions as dearer on average (1,361 vs 1,197) but not the move into o
 causes left: dead ends are a small share of the value data, and the value head reads only the
 global token (Q-111).
 
-**Q-135 Does the search still beat the stronger planner?** · **Open → plan 4.2, search re-check
-(D-63)** (user, 2026-11-06; an experiment, Q-125 stays open)
+**Q-136 Does a stronger finisher make the search add more?** · **Open → plan 4.2, search over
+the stronger planner (D-64)** (user, 2026-11-06; an experiment, Q-125 stays open)
+E-59: 3.7% below the new planner with plain finishes. With the new planner at the leaves (15x
+slower per finish): at least 0.02 lower mean ratio and below on more than 54 → it adds more.
+
+**Q-135 Does the search still beat the stronger planner?** · **Closed → E-59: yes, by far
+less** (user, 2026-11-06; closed 2026-11-06: below on 54 of 99, mean 0.963 (was 0.828 against
+the old planner); the new planner alone is 13% cheaper; an experiment, Q-125 stays open)
 E-36/E-39: the search was 16% below the best planner on set C. E-58's planner is about 12%
 cheaper on its own. Still below it on >= 1/3 of C → the search earns its place; else the
 planner's greedy choices were most of what it fixed.
