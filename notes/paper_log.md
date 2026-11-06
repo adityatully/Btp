@@ -884,6 +884,18 @@ Format: date · decision · alternatives considered · why · evidence.
   dearer than `share` on <= 5% (12) with mean ratio <= 1: it joins the planner, and a faster
   chooser (search or a network) is the next question; otherwise not only the greedy choice:
   stop. Reported: against `share_look3`, how many of the 17 it fixes, time.
+- **D-63 (2026-11-06) The stronger planner joins; does the search still beat it? (Q-135; user:
+  "proceed" on adding it, then re-checking the search).** By D-62's rule (E-58) `share_mrcm_look3`
+  becomes a fourth variant of the best planner (`headroom_share.py`, `lit_bench.py`,
+  `search_check.py`, `planner_check.py`; records written before lack it and keep the old
+  best). The search's leaves still use the plain pass (15x faster). Our main full-size result
+  (E-36/E-39: the search 16% below the best planner on set C) was measured against the weaker
+  planner. **Check, no new search:** E-39's race records against min(old best planner,
+  `share_mrcm_look3` from E-58's records), per problem (`planner_check.py search=... look=...`).
+  **Reading, fixed in advance:** the search (`uniform`) still earns its place if it is below the
+  new planner on >= 1/3 of C (D-37's bar); otherwise the planner's greedy choices were most of
+  what the search was fixing. Reported: per stage and arm, below / ratio against the old and the
+  new planner. Code and notes as separate commits; an experiment, Q-125 stays open.
 
 ---
 
@@ -1665,6 +1677,36 @@ MRCM's intermediates on val_s2: 4 of 28 covered (chain D4), 5 of 28 (premix D3).
   (an exact lower bound on mixes left, or a constructive method's recipes, which is a planner
   again). (3) Built as SPEC 0.28 `hint_source: problem` (depth-4 chain in the recipe columns)
   for a copy-test comparison on stages 1–2 against the planner's hints.
+
+### E-58 (2026-11-06) Recipe choice (D-62): lookahead removes every loss of MRCM's recipe
+`scripts/planner_check.py sets=val planners=share,share_mrcm,share_look3,share_mrcm_look3
+workers=30`, code `46a71e5`, coe9, `outputs/planner/{look3.jsonl,look3.log}` there. 242 val
+problems (s1-s5, held-out), 4 target orders in every planner.
+
+| pair | cheaper / dearer | mean ratio |
+|---|---|---|
+| share_mrcm vs share | 122 / 17 | 0.893 |
+| share_mrcm_look3 vs share | **149 / 0** | **0.879** |
+| share_look3 vs share | 63 / 0 | 0.988 |
+| share_mrcm_look3 vs share_look3 | 123 / 8 | 0.890 |
+
+- **Reading (D-62, fixed in advance): the greedy choice was the problem.** With lookahead over
+  each group's 3 cheapest recipes, MRCM's recipe is dearer than the plain pass on 0 of 242
+  (bar 12), 12.1% cheaper on average; it fixes all 17 of E-57's losses. Q-134 closed.
+- **The gain is the recipe, not the lookahead:** lookahead alone gives 1.2% (0.988); with
+  MRCM's tree 12.1%. Against the fair control (`share_look3`) it is cheaper on 123, dearer on
+  8, 11% cheaper on average.
+- **Cost: time.** Median seconds per problem: share 0.1, share_mrcm 0.6, share_look3 0.0,
+  share_mrcm_look3 1.5 (about 15x the plain pass). As the search's leaf finisher this would
+  slow every finish by the same factor.
+- Held-out row from the log: share_mrcm / share 0.980, 17 / 14 / 9 (as E-57). Per-set rows for
+  the lookahead variants are in `look3.jsonl` on coe9, not copied here.
+- **Published wins left, against the cheapest of the four planners** (val sets only; one-off
+  read of `look3.jsonl` with `planner_check.literature()`, 2026-11-06): DFM 0 of 30, FacDA 7 of
+  30, Generic 0 of 34, DFMM 1 of 34, MRCM 0 of 44, NFSP 4 of 17, e-MRCM 0 of 13. Same as E-57 on
+  the val sets: lookahead removes our losses to the plain pass, not the wins left to FacDA and
+  NFSP. DFMM's 8 wins on litbench_s2 (E-57) were not rechecked (not in this run).
+- Limits: one cost model, one seed; lookahead width 3 only; no search on top.
 
 ### E-57 (2026-11-06) Planner check (D-61): MRCM's tree makes the planner 11% cheaper and removes MRCM's and e-MRCM's wins, but is dearer on 7%
 `scripts/planner_check.py workers=30`, code `3426fb8`, coe9, `outputs/planner/{records.jsonl,
