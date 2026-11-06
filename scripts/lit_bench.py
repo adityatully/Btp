@@ -5,8 +5,9 @@ Producers per problem, every plan replayed by the engine and its DAG validated (
 - the published methods `dfm`, `facda`, `generic` (dilution) and `dfmm`, `mrcm` (mixtures),
   each from its paper (`notes/lit_bench/selection.md`); a method that does not take a problem
   records why (`na`), never an approximate plan;
-- our planner: `share`, `share_look3`, `share_orders` (as `scripts/headroom_share.py`); the
-  best planner is the cheapest of the three;
+- our planner: `share`, `share_look3`, `share_orders` and, from E-58, `share_mrcm_look3`
+  (as `scripts/headroom_share.py`); the best planner is the cheapest of them (records written
+  before E-58 lack the fourth);
 - with `agent=<agent.pt>`, the greedy agent, labelled by `label=` (default: the run folder
   name), so a later agent gets its own results next to this one.
 
@@ -63,7 +64,7 @@ LITERATURE: dict[str, Callable[[Instance], PaperGraph]] = {
     "dfmm": dfmm,
     "mrcm": functools.partial(mrcm, weights=WEIGHTS),
 }
-PLANNERS = ("share", "share_look3", "share_orders")
+PLANNERS = ("share", "share_look3", "share_orders", "share_mrcm_look3")
 
 
 def tasks(sets: list[str], limit: int | None) -> list[dict[str, Any]]:
@@ -150,6 +151,7 @@ def run_task(task: dict[str, Any], opts: dict[str, Any]) -> dict[str, Any]:
         "share": lambda: share.share_plan(inst, WEIGHTS),
         "share_look3": lambda: share.share_plan(inst, WEIGHTS, lookahead=3),
         "share_orders": lambda: hs.share_orders(inst, opts["orders"]),
+        "share_mrcm_look3": lambda: share.share_plan(inst, WEIGHTS, lookahead=3, mrcm=True),
     }
     for name, make in makers.items():
         t0 = time.perf_counter()
@@ -245,7 +247,8 @@ def summarise(path: Path) -> str:
     has_agent = any("agent" in r for r in recs)
     lines = [
         f"Records: `{path}`. Ratio = cost / best planner (cheapest of share, share_look3, "
-        "share_orders), costs 64/8/1, mix 1, waste 1. `vs best: < / = / >` counts problems "
+        "share_orders, share_mrcm_look3 where recorded), costs 64/8/1, mix 1, waste 1. "
+        "`vs best: < / = / >` counts problems "
         "where the producer is cheaper / equal / dearer than the best planner. `agent on same` is "
         "the agent's mean ratio on the problems that producer accepted (agent failures left out). "
         "Units, waste and mixes are the engine's (2-input mixes); `own metric` is the paper's "

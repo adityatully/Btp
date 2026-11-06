@@ -95,3 +95,30 @@ def test_a_record_holds_the_planners_asked_for() -> None:
     (task,) = PC.problems(["val_s1_v2"], 1)
     rec = PC.run_task((*task, ["share", "share_mrcm", "share_mrcm_look3"]))
     assert rec["share_mrcm_look3"]["cost"] <= rec["share_mrcm"]["cost"]
+
+
+def test_search_recheck_follows_the_rule_fixed_in_advance() -> None:
+    def search(i: int, kind: str, found: float | None) -> dict[str, Any]:
+        return {
+            "set": "C4",
+            "id": f"p{i}",
+            "kind": kind,
+            "sims": 256,
+            "planner": 100.0,
+            "search_cost": found,
+        }
+
+    look = [
+        {"source": "val_s4_v2", "id": f"p{i}", "share_mrcm_look3": {"cost": 90.0}} for i in range(9)
+    ]
+    # the search at 85 is below the new planner (90) on 3 of 9: >= 1/3
+    still = [search(i, "uniform", 85.0 if i < 3 else 95.0) for i in range(9)]
+    assert PC.search_recheck(still, look)[-1].endswith(
+        "still earns its place over the stronger planner"
+    )
+    gone = [search(i, "uniform", 85.0 if i < 2 else None) for i in range(9)]
+    out = PC.search_recheck(gone, look)
+    assert out[-1].endswith("most of what the search was fixing")
+    assert "| C | uniform | 9 | 2, 0.967 | 2, 1.074 | 0.900 |" in out
+    with pytest.raises(ValueError, match="no share_mrcm_look3 cost"):
+        PC.search_recheck(still, look[:3])

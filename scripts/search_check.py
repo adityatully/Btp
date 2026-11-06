@@ -3,7 +3,8 @@ that the planner and the greedy agent miss?
 
 Problems where a cheaper plan than our best planner is known:
 - **A (the test):** E2 problems with a proved optimum on which the best planner (cheapest of
-  `share`, `share_look3`, `share_orders`) is more than 2% above it (`notes/headroom/records.jsonl`).
+  `share`, `share_look3`, `share_orders`, `share_mrcm_look3` where recorded) is more than 2%
+  above it (`notes/headroom/records.jsonl`).
 - **B (reported, no bar):** `val_s2_v2` problems on which MRCM is cheaper than the best planner
   (`notes/lit_bench/runs/e22/records.jsonl`; no proved optimum, MRCM's cost is the reference).
 - **C (D-41):** `val_s3_v2`, `val_s4_v2`, `val_s5_v2` at full size, without the problems where
@@ -136,7 +137,7 @@ import headroom_share as hs  # noqa: E402
 
 _load = lambda rel: OmegaConf.to_container(OmegaConf.load(ROOT / "configs" / rel))  # noqa: E731
 WEIGHTS = hs.WEIGHTS
-PLANNERS = ("share", "share_look3", "share_orders")
+PLANNERS = ("share", "share_look3", "share_orders", "share_mrcm_look3")
 C_PUCT = 1.5
 # Fixed in advance (module docstring).
 FOUND_SHARE, MISS = 1 / 3, 0.02

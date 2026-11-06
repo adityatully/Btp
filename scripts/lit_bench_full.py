@@ -7,7 +7,7 @@ plan replayed by the engine and its DAG validated (rule 7):
 - `nfsp` (`meda.solvers.baselines.nfsp`), each ILP solve limited to `seconds` (Q-118: 600);
   a solve over the limit is reported as `na` with that reason, never an approximate plan;
 - `emrcm` (`meda.solvers.baselines.emrcm`, "our reading", L-7);
-- the best planner (cheapest of share, share_look3, share_orders), from
+- the best planner (cheapest of share, share_look3, share_orders, share_mrcm_look3), from
   `notes/headroom/records.jsonl`;
 - with `search=`, E-36's search (`net` at 256 simulations) on set C.
 
@@ -168,7 +168,8 @@ def summarise(path: Path, search_path: Path | None) -> str:
             groups["C"].append(r)
     lines = [
         f"Records: `{path}`. Ratio = cost / best planner (cheapest of share, share_look3, "
-        "share_orders), costs 64/8/1, mix 1, waste 1. `< / = / >`: cheaper / equal / dearer than "
+        "share_orders, share_mrcm_look3 where recorded), costs 64/8/1, mix 1, waste 1. "
+        "`< / = / >`: cheaper / equal / dearer than "
         "the best planner. `vs search`: mean cost / E-36 search cost on the problems both have."
     ]
     for key in sorted(groups):

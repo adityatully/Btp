@@ -4,7 +4,8 @@ The sharing pass solves every problem and is at the optimum on 51 of the 65 prov
 (E-17). Learning or search is only worth building where it can be beaten. Per problem:
 
 - **H2 producers:** `share` (the teacher), `share_look3` (rollout lookahead 3), `share_orders`
-  (the pass over its 4 target orders plus `orders` random ones) and, with `agent=<agent.pt>`,
+  (the pass over its 4 target orders plus `orders` random ones), `share_mrcm_look3` (lookahead 3
+  with MRCM's tree as a recipe, E-58) and, with `agent=<agent.pt>`,
   the greedy agent. Every plan is replayed by the engine and its DAG validated.
 - **H1 proofs:** on the sources in `exact`, problems without a proved optimum get exact search
   seeded with the cheapest plan above as its incumbent, so branch and bound prunes against a
@@ -234,6 +235,7 @@ def run_task(task: dict[str, Any], opts: dict[str, Any]) -> dict[str, Any]:
         "share": lambda: share.share_plan(inst, WEIGHTS),
         "share_look3": lambda: share.share_plan(inst, WEIGHTS, lookahead=3),
         "share_orders": lambda: share_orders(inst, opts["orders"]),
+        "share_mrcm_look3": lambda: share.share_plan(inst, WEIGHTS, lookahead=3, mrcm=True),
     }
     plans: dict[str, tuple[Action, ...] | None] = {}
     for name, make in producers.items():
