@@ -936,6 +936,35 @@ Format: date · decision · alternatives considered · why · evidence.
   most closed, the rest listed; fewer → published methods keep real wins. Mac trial (5
   problems, 16 sims): the new planner closes 4, the search catches FacDA's on val_s1-007 (76 vs
   77). An experiment, Q-125 stays open.
+- **D-67 (2026-11-07) Paper benchmark plan (user: "make a plan of how would we benchmark our
+  method accurately across all stages, all papers and methods ... unbiased and true").**
+  Development ends at E-63; results come only from fresh frozen test sets with the method
+  frozen (`method-v1`), answer keys computed before our method runs, readings fixed in advance,
+  every problem reported, each method also on its own metric, cost with time. Build order B1
+  stage test sets, B2 the papers' own experiments, B3 DMFB sanity, B4 scaling, B5 assays.
+  Plan and rules: `notes/benchmark_plan.md`. First decision: the headline time budget (Q-139).
+- **D-68 (2026-11-07) B1 test sets: seeds and size fixed before drawing.** `test_s1_v1` ...
+  `test_s5_v1` and `test_heldout_v1`, track2_v1's stage generators (as the val sets), 100
+  problems each split evenly over the stage's cells, seeds 20261107 + stage index (s1 0 ... s5 4,
+  held-out 5), excluding every problem in any set already in `benchmarks/`. Answer keys as the
+  val sets ([lower bound, best of naive and split tree]); nothing of ours in them. Built by
+  `make_benchmark.py test_s<k>_v1`. Never used to tune the method. Both time budgets are
+  reported (60 s and 900 s, read from one run's trace; Q-139, the headline is Tom's call). The PPO agent is not a producer (user: "Leave it out").
+- **D-69 (2026-11-07) B1 run and reading, fixed before it runs.** `scripts/bench.py` on the six
+  test sets × 3 goals (fluid, steps, waste). Per problem and goal, in order: answer key from
+  producers not ours (root bound, cheapest construction, exact search seeded with the
+  construction, 60 s / 1M nodes, counted only if it proves the optimum); the seven published
+  methods (once; each plan costed under every goal); our planner alone (4 variants); our method
+  `method-v1` (flat-prior search, greedy MRCM finishes, 256 sims, 900 s; cost at 60 s and 900 s
+  from its trace). PPO agent left out (user). **Reading, per published method under its own
+  goal (DFM, Generic: steps; FacDA, MRCM, e-MRCM, NFSP: fluid; DFMM: waste) at 900 s, on the
+  problems it accepts, paired per problem:** our method *beats* it if the 95% bootstrap interval
+  of the mean cost ratio (ours / its) is below 1 and we lose on at most 10% of them; *loses* if
+  the interval is above 1; otherwise *level*; fewer than 10 problems: too few. Reported, no bar:
+  the same at 60 s and under the other goals; ours against the planner alone and against the
+  bound / proved optimum per set and goal; coverage (problems each method accepts). Mac trial
+  (1 problem per set, 15 s): runs end to end; on the held-out problem (5 targets, 13 droplets,
+  M 10) `share_mrcm_look3` alone takes over 2 min, so planner time is reported, uncapped.
 ---
 
 ## 4. Experiments and results
@@ -1716,6 +1745,58 @@ MRCM's intermediates on val_s2: 4 of 28 covered (chain D4), 5 of 28 (premix D3).
   (an exact lower bound on mixes left, or a constructive method's recipes, which is a planner
   again). (3) Built as SPEC 0.28 `hint_source: problem` (depth-4 chain in the recipe columns)
   for a copy-test comparison on stages 1–2 against the planner's hints.
+
+### E-63 (2026-11-07) Time of our method per stage (E-61 and E-62 records)
+One-off read on coe9 of `outputs/finish/{greedy_c,wins_w}.jsonl` (search over the greedy MRCM
+pass, flat prior, 256 sims, 900 s cap, one core per problem). Seconds: total = whole search;
+to best = when the plan it ends with was found (trace).
+
+| set | n | mean total | median total | mean to best | capped at 900 s |
+|---|---|---|---|---|---|
+| C3 | 30 | 672 | 900 | 86 | 18 |
+| C4 | 32 | 823 | 901 | 370 | 27 |
+| C5 | 37 | 669 | 900 | 240 | 22 |
+| val_s1_v2 (W) | 7 | 123 | 76 | 4 | 0 |
+| litbench_s1_v1 (W) | 22 | 187 | 55 | 3 | 1 |
+| litbench_paper_v1 (W) | 17 | 27 | 29 | 1 | 0 |
+| litbench_s2_v1 (W) | 8 | 821 | 901 | 431 | 7 |
+
+- On full-size s3-s5 (set C) two thirds of the searches hit the 900 s cap; the final plan is
+  found after 1.5 (s3) to 6 (s4) minutes on average. On s1 it is found in seconds.
+- The planner alone takes 0.1-2 s; the method is about 100x slower for its 10% (E-61).
+- Limits: only hard subsets (set C, set W); not run on the problems already near the bound or
+  on s1-s2 as a whole; "to best" on capped runs may undercount (a later plan was possible).
+
+### E-62 (2026-11-07) Published wins (D-66): our method catches 162 of 167; 5 left, two by far
+`search_check.py sets=W finishers=share_mrcm uniform=256 sims=256 workers=30`, code `e07ae66`,
+coe9, `outputs/finish/{wins_w.jsonl,wins_w.log}` there, 17 min. Set W: 167 problems where a
+published method is cheaper than the old best planner (154 s1-s2 / lit-bench, 13 s3-s5). New
+planner first (off the clock), then the search (flat prior, greedy MRCM finishes) where a method
+still wins. Problems a method beats us on, old planner -> new planner -> search:
+
+| source | old | new | search | | method | old | new | search |
+|---|---|---|---|---|---|---|---|---|
+| litbench_paper_v1 | 55 | 17 | 1 | | DFM | 6 | 1 | 1 |
+| litbench_s1_v1 | 35 | 22 | 2 | | FacDA | 65 | 46 | 3 |
+| litbench_s2_v1 | 36 | 8 | 1 | | Generic | 19 | 1 | 0 |
+| val_s1_v2 | 14 | 7 | 0 | | DFMM | 33 | 9 | 1 |
+| val_s2_v2 | 14 | 1 | 0 | | MRCM | 116 | 0 | 0 |
+| val_s3_v2 | 3 | 2 | 1 | | e-MRCM | 8 | 0 | 0 |
+| val_s4_v2 | 2 | 0 | 0 | | NFSP | 5 | 4 | 1 |
+| val_s5_v2 | 8 | 2 | 0 | | | | | |
+
+- **Reading (D-66, fixed in advance): most published wins closed** (the new planner closes 108
+  of 167; on the 59 left the search is at or below the best published method on 54, bar 2/3).
+  Q-138 closed.
+- **Left (5):** litbench_s1-052 FacDA 76 vs ours 141 (1.855); val_s3-015 NFSP 76 vs 138
+  (1.816); litbench_s1-090 FacDA 328 vs 402 (1.226); litbench_s2-021 DFMM 215 vs 250 (1.163);
+  litbench_paper-053 FacDA 261 vs 262 (1.004).
+- The search does most of the work on FacDA (46 -> 3) and on the val s1 / lit-bench s1 sets;
+  MRCM's and e-MRCM's wins are gone with the planner alone.
+- The two gaps near 1.8x are too large for search to close; they look like a recipe our planner
+  cannot build at all (FacDA's factorised dilution, NFSP's plan), not a choice it gets wrong.
+  Not yet looked at.
+- Limits: one seed; flat prior; 900 s cap; costs 64/8/1 only; "caught" includes ties.
 
 ### E-61 (2026-11-07) Greedy MRCM finisher (D-65): the search makes the recipe choice itself
 `search_check.py sets=C finishers=share_mrcm uniform=256 sims=256 workers=30`, code `4d8f59b`,

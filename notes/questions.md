@@ -57,7 +57,8 @@ chats. Last updated 2026-11-03.*
 | Q-125 | Change the claim to "search over a planner, with learning where the planner is weak", and stop trying to replace the planner on s3-s5? | Open, waiting on the user; after D-54 (plan 4.2) |
 | Q-126 | Can a value head rank sibling moves if it reads the candidate moves (and hints), or is trained to rank instead of to hit the cost? | Closed → E-50: ranking helps (0.38 → 0.52), below the 0.55 bar |
 | Q-128 | Does the search improve a published planner (MRCM) put at its leaves, as it improves ours? | Closed → E-55: yes, below MRCM on 7 of 13 of set B (bar 5), 5.1% below on average |
-| Q-138 | Does any published method still beat our method (search over the greedy MRCM pass) on the lit-bench and val problems? | Set W (D-66), plan 4.2 |
+| Q-139 | What time budget does our method get in the paper's headline tables (900 s, or a smaller fixed budget with 900 s as an extra column)? | Both reported (60 s and 900 s, user 2026-11-07); which one heads the tables is Tom's call |
+| Q-138 | Does any published method still beat our method (search over the greedy MRCM pass) on the lit-bench and val problems? | Closed → E-62: on 5 of 167 (FacDA 3, NFSP 1, DFMM 1); two by ~1.8x |
 | Q-137 | Does the search need the planner's lookahead, or does it make the recipe choice itself? | Closed → E-61: it makes it itself; greedy MRCM finishes 0.900 of the new planner (below on 79 of 99) vs lookahead 0.916 (72); no faster chooser needed |
 | Q-136 | Does the search add more over the new planner when its leaves are finished by that planner? | Closed → E-60: yes; 8.4% below the new planner (was 3.7%), below on 72 of 99 (was 54); gain mostly on s4-s5 |
 | Q-135 | With the stronger planner (MRCM's tree + lookahead) as a variant, is the search still below it on set C? | Closed → E-59: yes, below on 54 of 99 (bar 33), but only 3.7% cheaper on average (was 17.2%); most of the margin was greedy recipe choice |
@@ -619,8 +620,13 @@ hopeless positions as dearer on average (1,361 vs 1,197) but not the move into o
 causes left: dead ends are a small share of the value data, and the value head reads only the
 global token (Q-111).
 
-**Q-138 Does any published method still beat our method?** · **Open → plan 4.2, set W
-(D-66)** (user, 2026-11-07; an experiment, Q-125 stays open)
+**Q-139 Headline time budget for our method?** · **Both run (user, 2026-11-07); headline: Tom**
+(2026-11-07) Most s3-s5 searches use the whole 900 s (E-63); the published methods run in
+milliseconds. The budget is fixed before the test sets run.
+
+**Q-138 Does any published method still beat our method?** · **Closed → E-62: on 5 of 167**
+(user, 2026-11-07; closed 2026-11-07: the new planner closes 108, the search 54 of the 59 left;
+left FacDA 3, NFSP 1, DFMM 1, two by ~1.8x; an experiment, Q-125 stays open)
 E-61 fixed the method (search over the greedy MRCM pass); the published comparisons predate it.
 
 **Q-137 Does the search need the planner's lookahead?** · **Closed → E-61: no**
