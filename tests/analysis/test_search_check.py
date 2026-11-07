@@ -288,3 +288,14 @@ def test_search_with_strong_finishes_is_never_dearer_than_its_finisher() -> None
     rec = SC.run_task(task, "uniform", 2, OPTS | {"seconds": 10.0}, "strong")
     assert rec["finisher"] == "strong"
     assert rec["search_cost"] is not None and rec["search_cost"] <= float(root[1]) + 1e-9
+
+
+def test_search_with_greedy_mrcm_finishes_is_never_dearer_than_its_finisher() -> None:
+    """D-65: the root's first leaf is the greedy MRCM pass's own plan from the empty chip."""
+    task = SC.tasks({"C"}, 1)[0]
+    inst = SC.Instance.from_json(task["instance"])
+    root = SC.StrongFinish(inst, lookahead=0)(SC.PrepState.initial(inst))
+    assert root is not None
+    rec = SC.run_task(task, "uniform", 2, OPTS | {"seconds": 10.0}, "share_mrcm")
+    assert rec["finisher"] == "share_mrcm"
+    assert rec["search_cost"] is not None and rec["search_cost"] <= float(root[1]) + 1e-9

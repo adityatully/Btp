@@ -74,7 +74,7 @@ Arguments are key=value: `sets` (A,B; C, D, F and T on request), `limit=N` probl
 0 = off), `seconds` (cap per problem and search, default 900), `hints` (the env's
 `hint_source`; must be the one the agent was trained with, default planner), `reward_scale`
 (the agent's PPO reward scale, for `zero`; default 0.01 as E-22), `workers`,
-`finishers` (leaf finishers: share, mrcm, paper, strong; default share).
+`finishers` (leaf finishers: share, mrcm, paper, strong, share_mrcm; default share).
 
 Stronger finisher (D-64, after E-59): `strong` finishes each leaf with E-58's planner (lookahead
 3 with MRCM's tree, about 15x slower than the plain pass). On C with the flat prior, same 900 s
@@ -83,6 +83,13 @@ cap as E-39; read with `planner_check.py search=<E-39 race>,<this> look=<E-58 re
 
     uv run python scripts/search_check.py sets=C finishers=strong uniform=256 sims=256 \
         workers=30 out=outputs/finish/strong_c.jsonl
+
+Does the search need the planner's lookahead (D-65, after E-60)? `share_mrcm` finishes each leaf
+with MRCM's tree but greedy recipe choice (no lookahead, about 2.5x faster per finish); same
+run as D-64 otherwise, read the same way with its records added to `search=`.
+
+    uv run python scripts/search_check.py sets=C finishers=share_mrcm uniform=256 sims=256 \
+        workers=30 out=outputs/finish/greedy_c.jsonl
 
 Finisher test (D-55): the leaf finisher is a parameter. `finishers=share,mrcm` runs each search
 once per finisher: `share` is the sharing pass (`finish_from`), `mrcm` is MRCM finishing from the
@@ -495,15 +502,16 @@ _AGENT: dict[str, Any] = {}
 
 class StrongFinish:
     """The leaf finisher of D-64: the sharing pass from the current chip with lookahead 3 and
-    MRCM's tree (E-58's planner), one MRCM cache per problem."""
+    MRCM's tree (E-58's planner), one MRCM cache per problem. With `lookahead=0`, D-65's
+    `share_mrcm` finisher: MRCM's tree, recipes chosen greedily."""
 
-    def __init__(self, inst: Instance) -> None:
-        self.inst = inst
+    def __init__(self, inst: Instance, lookahead: int = 3) -> None:
+        self.inst, self.lookahead = inst, lookahead
         self.cache: dict[Any, list[Any]] = {}
         self.fails: dict[str, int] = {}
 
     def __call__(self, state: PrepState) -> tuple[tuple[Action, ...], Rational] | None:
-        found = finish_from(state, self.inst, WEIGHTS, lookahead=3, mrcm=self.cache)
+        found = finish_from(state, self.inst, WEIGHTS, lookahead=self.lookahead, mrcm=self.cache)
         if found is None:
             self.fails["no order finishes"] = self.fails.get("no order finishes", 0) + 1
         return found
@@ -543,6 +551,8 @@ def run_task(
         finish = GraphFinish(finisher, F_METHODS[finisher], inst, WEIGHTS)
     elif finisher == "strong":  # D-64: lookahead 3 with MRCM's tree (E-58's planner)
         finish = StrongFinish(inst)
+    elif finisher == "share_mrcm":  # D-65: MRCM's tree, greedy recipe choice
+        finish = StrongFinish(inst, lookahead=0)
     search = Search(
         env, inst, agent, t0 + opts["seconds"], kind != "zero", opts["reward_scale"], finish=finish
     )

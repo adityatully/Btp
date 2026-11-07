@@ -64,6 +64,12 @@ makes the search add more** if `uniform/strong`'s mean cost / new planner is at 
 `uniform`'s (plain finishes) and it is below the new planner on more problems; otherwise the
 search adds about as much whichever finisher, and its gain over our best planner is E-59's.
 
+Lookahead inside the search (D-65, after E-60): `search_check.py finishers=share_mrcm` (MRCM's
+tree, greedy recipes, no lookahead), its records added to `search=`. Reading, fixed in advance
+(D-65): **the search makes the recipe choice itself** if its mean cost / new planner is at most
+0.01 above the strong finisher's (E-60: 0.916); otherwise the planner's lookahead matters inside
+the search, and a faster recipe chooser is next.
+
 Arguments are key=value: `sets` (comma list; `val` = the six val sets), `planners` (default
 share,share_mrcm), `limit` problems per set, `workers`, `out`; or `summary=`; or `search=` with
 `look=`.
@@ -109,6 +115,7 @@ GAIN_SHARE, DEARER_SHARE = 1 / 4, 0.05
 FOUND_SHARE = 1 / 3  # D-63, D-37's bar
 STRONG_GAP = 0.02  # D-64, D-43's gap
 STRONG_CAP = 900.0  # D-64: E-39's cap, seconds
+LOOK_GAP = 0.01  # D-65: about lookahead's own gain in the planner (E-58: 0.893 -> 0.879)
 
 
 def literature() -> dict[tuple[str, str], dict[str, Any]]:
@@ -277,7 +284,7 @@ def search_recheck(search: list[dict[str, Any]], look: list[dict[str, Any]]) -> 
         old = r["planner"]
         new = min(old, new_cost[key])
         fin = r.get("finisher", "share")
-        if fin == "strong":  # D-64: one finish can run past the cap; count what was found by it
+        if fin in ("strong", "share_mrcm"):  # D-64: a finish can run past the cap; count by it
             found = min([old, *(c for s, c in r["trace"] if s <= STRONG_CAP)])
         else:
             found = old if r["search_cost"] is None else min(old, r["search_cost"])
@@ -330,7 +337,19 @@ def strong_reading(rows: dict[tuple[str, str], list[tuple[float, float, float]]]
         verdict = "a stronger finisher makes the search add more"
     else:
         verdict = "the search adds about as much whichever finisher; its gain is what E-59 shows"
-    return ["", f"Reading on finishers (fixed in advance, D-64): {head}{verdict}"]
+    lines = ["", f"Reading on finishers (fixed in advance, D-64): {head}{verdict}"]
+    if ("C", "uniform/share_mrcm") not in rows:
+        return lines
+    g_below, greedy = against_new(rows[("C", "uniform/share_mrcm")])
+    head = (
+        f"with greedy MRCM finishes below the new planner on {g_below}, mean ratio "
+        f"{greedy:.3f} (strong finishes {below}, {strong:.3f}): "
+    )
+    if greedy <= strong + LOOK_GAP:
+        verdict = "the search makes the recipe choice itself; no faster chooser needed"
+    else:
+        verdict = "the planner's lookahead matters inside the search; a faster chooser is next"
+    return [*lines, f"Reading on lookahead (fixed in advance, D-65): {head}{verdict}"]
 
 
 def main(argv: list[str]) -> None:

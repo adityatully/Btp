@@ -152,3 +152,21 @@ def test_strong_records_count_only_plans_found_by_the_cap() -> None:
     }
     out = PC.search_recheck([rec], look)
     assert "| C | uniform/strong | 1 | 1, 0.950 | 0, 1.056 | 0.900 |" in out
+
+
+def test_lookahead_reading_follows_the_rule_fixed_in_advance() -> None:
+    def rows(greedy: float) -> dict[Any, Any]:
+        return {
+            ("C", "uniform"): [(96.0, 100.0, 100.0)] * 10,
+            ("C", "uniform/strong"): [(92.0, 100.0, 100.0)] * 10,
+            ("C", "uniform/share_mrcm"): [(greedy, 100.0, 100.0)] * 10,
+        }
+
+    assert PC.strong_reading(rows(92.5))[-1].endswith("no faster chooser needed")
+    assert PC.strong_reading(rows(94.0))[-1].endswith("a faster chooser is next")
+    assert (
+        "D-65"
+        not in PC.strong_reading({k: v for k, v in rows(92.0).items() if "share_mrcm" not in k[1]})[
+            -1
+        ]
+    )
