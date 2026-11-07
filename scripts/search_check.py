@@ -69,9 +69,9 @@ run, against `uniform`; **the network makes search faster at 40 targets** if any
     uv run python scripts/search_check.py sets=T agent=outputs/expert/round2/copy_v/imitation.pt \
         sims=1,16,256 uniform=256 workers=30 out=outputs/scale/search_t.jsonl
 
-Arguments are key=value: `sets` (A,B; C, D, F and T on request), `limit=N` problems per set, `sims`
-(budgets, default 64,256), `uniform` (budget for the flat prior, default the largest of `sims`;
-0 = off), `seconds` (cap per problem and search, default 900), `hints` (the env's
+Arguments are key=value: `sets` (A,B; C, D, F, T and W on request), `limit=N` problems per
+set, `sims` (budgets, default 64,256), `uniform` (budget for the flat prior, default the
+largest of `sims`; 0 = off), `seconds` (cap per problem and search, default 900), `hints` (the env's
 `hint_source`; must be the one the agent was trained with, default planner), `reward_scale`
 (the agent's PPO reward scale, for `zero`; default 0.01 as E-22), `workers`,
 `finishers` (leaf finishers: share, mrcm, paper, strong, share_mrcm; default share).
@@ -90,6 +90,19 @@ run as D-64 otherwise, read the same way with its records added to `search=`.
 
     uv run python scripts/search_check.py sets=C finishers=share_mrcm uniform=256 sims=256 \
         workers=30 out=outputs/finish/greedy_c.jsonl
+
+- **W (D-66, after E-61):** published wins. Every lit-bench problem (`notes/lit_bench/runs/e22`,
+  s1-s2 and the litbench sets; `runs/full`, s3-s5, where present) on which a published method is
+  cheaper than the old best planner recorded there; the cheapest method is the reference (the
+  `mrcm` field, its name in `method`). Each problem first runs the new planner
+  (`share_mrcm_look3`, off the clock); where that already ties or beats the method, no search
+  (`closed_by_planner`). Otherwise the search runs as E-61 (flat prior, greedy MRCM finishes).
+Reading on W, fixed in advance (D-66): on the problems the new planner leaves, the search at or
+below the best published method on all → **no published method beats our method on these
+sets**; on >= 2/3 → most wins closed, the rest listed; fewer → published methods keep real wins.
+
+    uv run python scripts/search_check.py sets=W finishers=share_mrcm uniform=256 sims=256 \
+        workers=30 out=outputs/finish/wins_w.jsonl
 
 Finisher test (D-55): the leaf finisher is a parameter. `finishers=share,mrcm` runs each search
 once per finisher: `share` is the sharing pass (`finish_from`), `mrcm` is MRCM finishing from the
@@ -145,7 +158,7 @@ from meda.solvers.baselines.dfmm import dfmm
 from meda.solvers.baselines.facda import dfm, facda
 from meda.solvers.baselines.generic import generic
 from meda.solvers.baselines.paper_finish import GraphFinish, MrcmFinish
-from meda.solvers.baselines.share import finish_from
+from meda.solvers.baselines.share import finish_from, share_plan
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "scripts"))
@@ -162,6 +175,9 @@ LIT_FULL = ROOT / "notes/lit_bench/runs/full/records.jsonl"
 T_SIZE, T_N = "t40", 10  # D-59: the scale check's probes
 F_METHODS = {"dfm": dfm, "facda": facda, "generic": generic, "dfmm": dfmm}  # D-60
 F_N, F_MOST = 13, 3  # D-60: problems per method; methods improved for "most"
+LIT_S12 = ROOT / "notes/lit_bench/runs/e22/records.jsonl"
+W_METHODS = ("dfm", "facda", "generic", "dfmm", "mrcm", "emrcm", "nfsp")  # D-66
+W_MOST = 2 / 3  # D-66: share of the problems still lost on which the search must catch up
 COSTS = "costs/geometric.yaml"  # the env's costs; must match WEIGHTS
 RACE_AT, RACE_GAP = (1, 10, 60, 300, 900), 0.02
 
@@ -263,11 +279,47 @@ def tasks(sets: set[str], limit: int | None) -> list[dict[str, Any]]:
                 | {"mrcm": r[m]["cost"], "method": m}
                 for r in takes[:F_N][:limit]
             ]
+    if "W" in sets:
+        out += w_tasks(limit)
     if "T" in sets:
         import scale_check
 
         for inst in scale_check.problems(T_SIZE, T_N, 0)[:limit]:
             out.append(_task("T", inst, inst.metadata["cell"], {}, None) | {"planner": None})
+    return out
+
+
+def w_tasks(limit: int | None) -> list[dict[str, Any]]:
+    """Set W (D-66): every lit-bench problem on which a published method is cheaper than the
+    best planner recorded there (old planners; the new one is computed in `run_task`)."""
+    out: list[dict[str, Any]] = []
+    for path in (LIT_S12, LIT_FULL):
+        if not path.exists():
+            print(f"set W: {path} not found, its problems are left out", flush=True)
+            continue
+        by: dict[str, dict[str, dict[str, Any]]] = defaultdict(dict)
+        for r in map(json.loads, path.open()):
+            if r["source"] == "e2":  # not a benchmark set; its one MRCM win is closed (E-57)
+                continue
+            old = r["planner"] if "planner" in r else best_planner(r)
+            pub = {m: r[m]["cost"] for m in W_METHODS if (r.get(m) or {}).get("cost") is not None}
+            if pub and min(pub.values()) < old - 1e-9:
+                by[r["source"]][r["id"]] = r | {"old": old, "published": pub}
+        for src, want in by.items():
+            insts = [i for i in BenchmarkSet.read(src).instances if i.instance_id in want]
+            for i in insts[:limit]:
+                r = want[i.instance_id]
+                best = min(r["published"], key=lambda m: (r["published"][m], m))
+                out.append(
+                    _task("W", i, r.get("cell", src), {}, None)
+                    | {
+                        "source": src,
+                        "planner": r["old"],
+                        "published": r["published"],
+                        "method": best,
+                        "mrcm": r["published"][best],
+                    }
+                )
     return out
 
 
@@ -542,6 +594,24 @@ def run_task(
         if start is None:
             raise RuntimeError(f"{inst.instance_id}: the sharing pass does not finish")
         task["planner"], task["planner_seconds"] = float(start[1]), time.perf_counter() - t0
+    if task["set"] == "W":  # D-66: the new planner, off the clock; skip if it closes the gap
+        t0 = time.perf_counter()
+        new = hs.plan_stats(
+            inst, "share_mrcm_look3", share_plan(inst, WEIGHTS, lookahead=3, mrcm=True), 0.0
+        )["cost"]
+        task["new_planner"], task["planner_seconds"] = new, time.perf_counter() - t0
+        task["old_planner"] = task["planner"]
+        if new is not None and new < task["planner"]:
+            task["planner"] = new
+        if task["mrcm"] >= task["planner"] - 1e-9:
+            rec = {k: v for k, v in task.items() if k != "instance"}
+            return rec | {
+                "kind": kind,
+                "sims": sims,
+                "finisher": finisher,
+                "search_cost": None,
+                "closed_by_planner": True,
+            }
     t0 = time.perf_counter()
     finish: MrcmFinish | GraphFinish | StrongFinish | None = None
     if finisher == "mrcm":
@@ -561,7 +631,7 @@ def run_task(
     opt, cost = task["optimum"], stats["cost"]
     if opt is not None and cost is not None and cost < opt - 1e-9:  # a bug (rule 9)
         raise RuntimeError(f"{inst.instance_id}: search plan {stats['cost']} < optimum")
-    ref = task["mrcm"]
+    ref = task["mrcm"] if task["set"] != "W" else None  # W: the reference is not the finisher
     if finish is not None and ref is not None and (cost is None or cost > ref + 1e-9):
         raise RuntimeError(f"{inst.instance_id}: search with {finisher} finishes dearer than it")
     rec = {k: v for k, v in task.items() if k != "instance"}
@@ -754,6 +824,8 @@ def _r(x: float | None) -> str:
 def summarise(path: Path) -> str:
     recs = [json.loads(x) for x in path.read_text().splitlines()]
     groups: dict[tuple[str, str, int], list[dict[str, Any]]] = defaultdict(list)
+    w = [r for r in recs if r["set"] == "W"]
+    recs = [r for r in recs if r["set"] != "W"]
     for r in recs:
         fin = r.get("finisher", "share")
         kind = r["kind"] if fin == "share" else f"{r['kind']}/{fin}"
@@ -814,7 +886,69 @@ def summarise(path: Path) -> str:
             )
     lines += f_reading(groups)
     lines += race(groups)
+    lines += w_reading(w)
     return "\n".join(lines)
+
+
+def w_reading(rs: list[dict[str, Any]]) -> list[str]:
+    """Set W (D-66): do published methods still beat the new planner, and the search over it?"""
+    if not rs:
+        return []
+    left = [r for r in rs if not r.get("closed_by_planner")]
+    lines = [
+        "",
+        "W, published wins (D-66): problems a method beats the old planner on -> the new planner "
+        "-> the search (uniform, greedy MRCM finishes)",
+        "",
+        "| source / method | old planner | new planner | search |",
+        "|---|---|---|---|",
+    ]
+
+    def beats(r: dict[str, Any], m: str, ref: float | None) -> bool:
+        c = r["published"].get(m)
+        return c is not None and ref is not None and c < ref - 1e-9
+
+    keys = [(s, None) for s in sorted({r["source"] for r in rs})]
+    keys += [(None, m) for m in W_METHODS]
+    for src, m in keys:
+        sub = [r for r in rs if src is None or r["source"] == src]
+        ms = [m] if m else list(W_METHODS)
+        old = sum(1 for r in sub if any(beats(r, x, r["old_planner"]) for x in ms))
+        if not old:
+            continue
+        new = sum(1 for r in sub if any(beats(r, x, r["planner"]) for x in ms))
+        srch = sum(
+            1
+            for r in sub
+            if not r.get("closed_by_planner")
+            and any(beats(r, x, min(r["planner"], r["search_cost"] or math.inf)) for x in ms)
+        )
+        lines.append(f"| {src or m} | {old} | {new} | {srch} |")
+    caught = [
+        r for r in left if r["search_cost"] is not None and r["search_cost"] <= r["mrcm"] + 1e-9
+    ]
+    still = sorted(
+        (r for r in left if r not in caught),
+        key=lambda r: -(min(r["planner"], r["search_cost"] or math.inf) / r["mrcm"]),
+    )
+    for r in still[:15]:
+        mine = min(r["planner"], r["search_cost"] or math.inf)
+        lines.append(
+            f"  left: {r['source']} {r['id']} {r['method']} {r['mrcm']:g} vs {mine:g} "
+            f"({mine / r['mrcm']:.3f})"
+        )
+    n, k = len(left), len(caught)
+    head = (
+        f"of {len(rs)} problems, the new planner closes {len(rs) - n}; on the {n} left the search "
+        f"is at or below the best published method on {k}"
+    )
+    if k == n:
+        verdict_ = "no published method beats our method on these sets"
+    elif k >= W_MOST * n:
+        verdict_ = "most published wins closed; the rest are listed above"
+    else:
+        verdict_ = "published methods keep real wins; look at the ones left"
+    return [*lines, "", f"Reading on W (fixed in advance, D-66): {head}: {verdict_}"]
 
 
 def f_reading(groups: dict[tuple[str, str, int], list[dict[str, Any]]]) -> list[str]:

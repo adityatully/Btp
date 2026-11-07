@@ -299,3 +299,51 @@ def test_search_with_greedy_mrcm_finishes_is_never_dearer_than_its_finisher() ->
     rec = SC.run_task(task, "uniform", 2, OPTS | {"seconds": 10.0}, "share_mrcm")
     assert rec["finisher"] == "share_mrcm"
     assert rec["search_cost"] is not None and rec["search_cost"] <= float(root[1]) + 1e-9
+
+
+def test_set_w_is_each_problem_a_published_method_beats_the_old_planner_on() -> None:
+    """D-66: the reference is the cheapest published method, below the old planner."""
+    tasks = SC.w_tasks(2)
+    assert tasks
+    for t in tasks:
+        assert t["set"] == "W" and t["method"] in SC.W_METHODS
+        assert t["mrcm"] == min(t["published"].values()) == t["published"][t["method"]]
+        assert t["mrcm"] < t["planner"] - 1e-9
+
+
+def test_set_w_skips_a_search_where_the_new_planner_closes_the_gap() -> None:
+    """D-66: the new planner runs first; the search runs only where a method still wins."""
+    for t in SC.w_tasks(3):
+        rec = SC.run_task(t, "uniform", 2, OPTS | {"seconds": 10.0}, "share_mrcm")
+        assert rec["planner"] <= rec["old_planner"] + 1e-9
+        if rec["mrcm"] >= rec["planner"] - 1e-9:
+            assert rec["closed_by_planner"] and rec["search_cost"] is None
+        else:
+            assert rec["search_cost"] is not None
+            assert rec["search_cost"] <= rec["new_planner"] + 1e-9
+
+
+def _w(source: str, method: str, pub: float, old: float, new: float, search: float | None) -> dict:
+    closed = pub >= new
+    return {
+        "set": "W", "source": source, "id": f"{source}-{pub}", "method": method,
+        "published": {method: pub}, "mrcm": pub, "old_planner": old, "planner": min(old, new),
+        "search_cost": None if closed else search, "closed_by_planner": closed or None,
+    }  # fmt: skip
+
+
+def test_reading_on_w_counts_the_published_wins_left() -> None:
+    rs = [
+        _w("val_s1_v2", "facda", 77, 144, 142, 76),  # search catches it
+        _w("val_s1_v2", "mrcm", 203, 402, 203, None),  # planner closes it
+        _w("val_s2_v2", "dfmm", 100, 120, 110, 105),  # left
+    ]
+    out = SC.w_reading(rs)
+    assert "| facda | 1 | 1 | 0 |" in out
+    assert "| dfmm | 1 | 1 | 1 |" in out
+    assert out[-1].endswith(
+        "of 3 problems, the new planner closes 1; on the 2 left the search is at or below the best "
+        "published method on 1: published methods keep real wins; look at the ones left"
+    )
+    assert SC.w_reading(rs[:2])[-1].endswith("no published method beats our method on these sets")
+    assert SC.w_reading([]) == []
