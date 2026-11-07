@@ -911,6 +911,17 @@ Format: date · decision · alternatives considered · why · evidence.
   Mac trial (one problem per stage, 120 s cap, not a result): runs end to end; the strong
   finisher fits 35-60% of the plain finisher's leaves (75-1,323 vs 212-2,285), not 1/15, since
   finishes from later states are short; equal on C3 and C4, cheaper on C5 (338 vs 401).
+- **D-65 (2026-11-07) Does the search need the planner's lookahead? (Q-137; user: "proceed").**
+  E-60's strong finisher has two upgrades over the plain pass: MRCM's tree (most of the
+  planner's gain, E-57: 0.893; 0.1 -> 0.6 s) and lookahead over 3 recipes (1.4% more, E-58:
+  0.879; 0.6 -> 1.5 s). The search itself tries alternatives, so it may make the recipe choice
+  that lookahead makes. **Run:** `search_check.py sets=C finishers=share_mrcm` (MRCM's tree,
+  greedy recipes), else as D-64. **Reading, fixed in advance:** the search makes the recipe
+  choice itself if its mean cost / new planner is at most 0.01 above the strong finisher's
+  (E-60: 0.916): then the method is search over the greedy MRCM pass, and no faster chooser is
+  needed; otherwise lookahead matters inside the search and a faster recipe chooser is next.
+  (Correction to the 2026-11-06 framing: a chooser could at best save lookahead's 2.5x, not
+  15x, which was against the plain pass.) An experiment, Q-125 stays open.
 
 ---
 
@@ -1692,6 +1703,33 @@ MRCM's intermediates on val_s2: 4 of 28 covered (chain D4), 5 of 28 (premix D3).
   (an exact lower bound on mixes left, or a constructive method's recipes, which is a planner
   again). (3) Built as SPEC 0.28 `hint_source: problem` (depth-4 chain in the recipe columns)
   for a copy-test comparison on stages 1–2 against the planner's hints.
+
+### E-60 (2026-11-07) Search over the stronger planner (D-64): a better finisher makes the search add more
+`search_check.py sets=C finishers=strong uniform=256 sims=256 workers=30`, code `3a0d3ed` (after
+F-17), coe9, `outputs/finish/{strong_c.jsonl,strong_c.log}` there, about 50 min; read with
+`planner_check.py search=<E-39 race>,<this> look=<E-58 records>`. Set C (99), flat prior, 256
+sims; strong plans counted if found by 900 s. Below / mean cost ratio:
+
+| set | search (leaf finisher) | vs old planner | vs new planner |
+|---|---|---|---|
+| C (99) | uniform (plain pass) | 83, 0.828 | 54, 0.963 |
+| C (99) | **uniform/strong (new planner)** | 82, 0.794 | **72, 0.916** |
+| C3 (30) | uniform / strong | 23, 0.777 / 23, 0.770 | 18, 0.911 / 20, 0.904 |
+| C4 (32) | uniform / strong | 30, 0.860 / 28, 0.818 | 16, 1.008 / 24, 0.941 |
+| C5 (37) | uniform / strong | 30, 0.843 / 31, 0.793 | 20, 0.967 / 28, 0.903 |
+
+- **Reading (D-64, fixed in advance): a stronger finisher makes the search add more** (mean
+  ratio to the new planner 0.916 vs 0.963, 0.047 lower, bar 0.02; below on 72 vs 54). Q-136
+  closed.
+- **The search over the new planner is 8.4% below it** on average and below it on 72 of 99;
+  20.6% below the old best planner. The gain grows with size: C3 almost unchanged (0.904 vs
+  0.911), C4 and C5 much larger (0.941 vs 1.008, 0.903 vs 0.967).
+- **Fewer, better leaves win:** the strong finisher fits about half the leaves per second (Mac
+  trial, D-64) but each is a better estimate. Search and planner are complements: better
+  finishes make the search's choices better, not redundant.
+- Cost: some s5 searches ran past 900 s (one finish takes minutes); only plans found by 900 s
+  count. The run took about 50 min on 30 workers (E-39's plain run: 51 of 99 capped).
+- Limits: one seed; flat prior only (no network arm with the strong finisher); 900 s cap.
 
 ### E-59 (2026-11-06) Search re-check (D-63): the search still beats the stronger planner, by far less
 `planner_check.py search=outputs/expert/round2/race.jsonl look=outputs/planner/look3.jsonl`,
