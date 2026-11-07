@@ -965,6 +965,26 @@ Format: date · decision · alternatives considered · why · evidence.
   bound / proved optimum per set and goal; coverage (problems each method accepts). Mac trial
   (1 problem per set, 15 s): runs end to end; on the held-out problem (5 targets, 13 droplets,
   M 10) `share_mrcm_look3` alone takes over 2 min, so planner time is reported, uncapped.
+- **D-70 (2026-11-07) B2, the papers' own experiments: sets and reading fixed before building.**
+  Read from the PDFs: NFSP's experiments (its Tables I and II) are on 1:1 chips (M = 2), so they
+  move to B3 (DMFB, a sanity check, never a win; SPEC 8.4). B2 has two parts. **(a)
+  `litbench_paper_v1`** as frozen (131 problems: Poddar's x/64 at 4X and 8X with M 4 and 8, and
+  the worked examples of FacDA, Generic, DFMM and MRCM), under all three goals. It was seen in
+  development (E-29, E-62) and cannot be redrawn (the papers fix the problems), so it is labelled
+  that way. **(b) `test_emrcm_v1`**, e-MRCM's protocol (TCAD 2020, Section VI): precision
+  1/512, each target 4 units (4X), mixes of at most 8 units, demand 1, storage 32; reactants S,
+  R1 ... R(N-2), B. One target: N = 2 all 511 targets; N = 3, 4, 5 512 random targets each.
+  Many targets: 50 random sets per (N, T), N 2-5, T 2-5. 2,847 problems, seed 20261108, random
+  targets drawn as `emrcm_table3.draw` (uniform cut points), a repeated problem redrawn. Our
+  weights are per fluid kind (64/8/1), so every reagent costs 8 where e-MRCM's are geometric
+  per reactant: every plan is graded under ours, and e-MRCM's printed mixes and waste (Table III)
+  are shown next to e-MRCM (our reading) and ours, not graded (L-7: they do not reproduce).
+  `test_emrcm_v1` runs under the fluid goal only (e-MRCM's family). **Reading:** D-69's rule,
+  per set and per published method under its own goal at 900 s (60 s reported).
+  NFSP is not run on `test_emrcm_v1` (its ILP times out at 1/512 and its experiments are B3's).
+  Mac probe: `share_mrcm_look3` alone takes up to 6 min on N 5, T 5; time is reported. Mac
+  trial (4 problems, 15 s, 8 sims): runs end to end; MRCM and e-MRCM decline N 5 ("search
+  exceeded 2,000,000 candidates"), so coverage there is low.
 ---
 
 ## 4. Experiments and results

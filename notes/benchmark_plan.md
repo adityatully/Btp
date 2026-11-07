@@ -70,7 +70,8 @@ Each step ends with frozen sets, a run on coe9, a report and a paper log entry.
 is our method to the bound and to the optimum, and how does it compare with each published
 method that applies? Reuses `evaluate.py`, `lit_bench*.py`, `search_check.py`.
 
-**B2. The papers' own experiments (tier 3).** One set per paper, built from its own protocol,
+**B2. The papers' own experiments (tier 3).** *Built 2026-11-07 (D-70): `test_emrcm_v1` and
+`litbench_paper_v1`; NFSP's experiments are 1:1 (M = 2), so they moved to B3.* One set per paper, built from its own protocol,
 so we can put our numbers next to its printed table:
 - FacDA / Generic: every x/64 at 4X and 8X (Table III) — exists in `litbench_paper_v1`,
   re-frozen as `literature_facda_v1`.
