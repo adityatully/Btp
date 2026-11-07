@@ -923,6 +923,19 @@ Format: date · decision · alternatives considered · why · evidence.
   (Correction to the 2026-11-06 framing: a chooser could at best save lookahead's 2.5x, not
   15x, which was against the plain pass.) An experiment, Q-125 stays open.
 
+- **D-66 (2026-11-07) Do published methods still beat our method? (Q-138; user: "yes proceed").**
+  After E-61 the method is search over the greedy MRCM pass; every comparison with the
+  published methods so far was against an older version (left after E-58: FacDA 7, NFSP 4,
+  DFMM 1 on val; DFMM's litbench_s2 wins not rechecked). **Set W:** every lit-bench problem
+  (s1-s2 val, litbench_s1/s2/paper, and s3-s5 val from `runs/full`) where a published method
+  is cheaper than the old best planner (154 s1-s2 problems locally, plus s3-s5 on coe9). Each
+  first runs the new planner off the clock; where a method still wins, the search runs as E-61.
+  **Run:** `search_check.py sets=W finishers=share_mrcm uniform=256 sims=256`. **Reading, fixed
+  in advance:** on the problems the new planner leaves, the search at or below the best
+  published method on all → no published method beats our method on these sets; on >= 2/3 →
+  most closed, the rest listed; fewer → published methods keep real wins. Mac trial (5
+  problems, 16 sims): the new planner closes 4, the search catches FacDA's on val_s1-007 (76 vs
+  77). An experiment, Q-125 stays open.
 ---
 
 ## 4. Experiments and results
@@ -1703,6 +1716,34 @@ MRCM's intermediates on val_s2: 4 of 28 covered (chain D4), 5 of 28 (premix D3).
   (an exact lower bound on mixes left, or a constructive method's recipes, which is a planner
   again). (3) Built as SPEC 0.28 `hint_source: problem` (depth-4 chain in the recipe columns)
   for a copy-test comparison on stages 1–2 against the planner's hints.
+
+### E-61 (2026-11-07) Greedy MRCM finisher (D-65): the search makes the recipe choice itself
+`search_check.py sets=C finishers=share_mrcm uniform=256 sims=256 workers=30`, code `4d8f59b`,
+coe9, `outputs/finish/{greedy_c.jsonl,greedy_c.log}` there; read with `planner_check.py
+search=<E-39 race>,<E-60>,<this> look=<E-58 records>`. Set C (99), flat prior, 256 sims, plans
+counted if found by 900 s. Leaves finished by MRCM's tree with greedy recipe choice (no
+lookahead). Below / mean cost ratio:
+
+| set | search (leaf finisher) | vs old planner | vs new planner |
+|---|---|---|---|
+| C (99) | uniform (plain pass) | 83, 0.828 | 54, 0.963 |
+| C (99) | uniform/strong (lookahead 3 + MRCM) | 82, 0.794 | 72, 0.916 |
+| C (99) | **uniform/share_mrcm (greedy MRCM)** | 90, 0.781 | **79, 0.900** |
+| C3 (30) | strong / greedy | 23, 0.770 / 24, 0.771 | 20, 0.904 / 21, 0.905 |
+| C4 (32) | strong / greedy | 28, 0.818 / 32, 0.794 | 24, 0.941 / 29, 0.914 |
+| C5 (37) | strong / greedy | 31, 0.793 / 34, 0.777 | 28, 0.903 / 29, 0.884 |
+
+- **Reading (D-65, fixed in advance): the search makes the recipe choice itself; no faster
+  chooser is needed** (greedy 0.900 vs strong 0.916, better, not just within 0.01). Q-137
+  closed.
+- **Greedy beats lookahead inside the search**, on every stage (C3 equal, C4 and C5 clearly):
+  each greedy finish is 2.5x faster, so the search sees more leaves by 900 s, and its own
+  branching covers the alternatives lookahead would roll out. Lookahead pays in the planner
+  alone (E-58), not under the search.
+- **The method on set C is now search over the greedy MRCM pass:** 10.0% below the new best
+  planner, below it on 79 of 99; 21.9% below the old best planner, below on 90 of 99.
+- Limits: one seed; flat prior only; 900 s cap (the gain over strong may partly be the cap:
+  strong finishes on s5 overran it, E-60).
 
 ### E-60 (2026-11-07) Search over the stronger planner (D-64): a better finisher makes the search add more
 `search_check.py sets=C finishers=strong uniform=256 sims=256 workers=30`, code `3a0d3ed` (after
