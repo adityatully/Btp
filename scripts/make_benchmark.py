@@ -511,6 +511,86 @@ def build_test(which: int | None) -> BenchmarkSet:
     return build_design_set("track2_v1", which, name, seed, TEST_SIZE, held)
 
 
+EMRCM_SEED, EMRCM_PRECISION, EMRCM_VOLUME, EMRCM_MIXER = 20261108, 512, 4, 8  # D-70
+
+
+def build_emrcm() -> BenchmarkSet:
+    """e-MRCM's own protocol (Liang et al., TCAD 2020, Section VI; benchmark plan B2, D-70):
+    precision 1/512, 4-unit targets, mixes of at most 8, demand 1. One target: N = 2 all 511,
+    N = 3-5 512 random each; many targets: 50 random sets per (N, T), N and T in 2..5. Random
+    targets are uniform cut points (`emrcm_table3.draw`); a repeated problem is redrawn."""
+    from emrcm_table3 import draw  # scripts/, as this script
+
+    weights = load_weights("geometric")
+    base = load_chip("meda_m8")
+    chip = replace(base, name=f"{base.name}-M{EMRCM_MIXER}-S32", max_mix_volume=EMRCM_MIXER,
+                   storage_capacity=32, max_denominator=EMRCM_PRECISION)  # fmt: skip
+    rng = np.random.default_rng(EMRCM_SEED)
+    seen: set[str] = set()
+    instances: list[Instance] = []
+
+    def fluids(n: int) -> tuple[Fluid, ...]:
+        reagents = [Fluid(i, f"R{i}", FluidKind.REAGENT) for i in range(1, n - 1)]
+        return (Fluid(0, "S", FluidKind.SAMPLE), *reagents, Fluid(n - 1, "B", FluidKind.BUFFER))
+
+    def add(n: int, comps: list[Composition], cell: str) -> bool:
+        targets = tuple(Target(i, 0, c, ZERO, EMRCM_VOLUME, 1) for i, c in enumerate(comps))
+        probe = Instance("probe", fluids(n), targets, chip, 10_000)
+        key = instance_hash(probe)
+        if key in seen or len(set(comps)) < len(comps):
+            return False
+        witness = tree_plan(probe)
+        if witness is None:
+            raise ValueError(f"{cell}: the split tree finds no plan for {comps}")
+        seen.add(key)
+        limit = max(4 * step_limit_base(probe, "depth_support"), 2 * len(witness))
+        instances.append(
+            replace(
+                probe,
+                instance_id=f"test_emrcm-{len(instances):04d}",
+                step_limit=limit,
+                metadata={
+                    "generator": "emrcm_protocol",
+                    "cell": cell,
+                    "witness_actions": len(witness),
+                    "witness_source": "tree",
+                },
+            )
+        )
+        return True
+
+    for x in range(1, EMRCM_PRECISION):
+        add(2, [Composition.from_ints((x, EMRCM_PRECISION - x), EMRCM_PRECISION)], "N2-T1")
+    for n in (3, 4, 5):
+        made = 0
+        while made < EMRCM_PRECISION:
+            made += add(n, [draw(n, rng)], f"N{n}-T1")
+    for n in (2, 3, 4, 5):
+        for t in (2, 3, 4, 5):
+            made = 0
+            while made < 50:
+                made += add(n, [draw(n, rng) for _ in range(t)], f"N{n}-T{t}")
+    return BenchmarkSet(
+        name="test_emrcm",
+        version=1,
+        instances=tuple(instances),
+        reference=answer_key(instances, weights),
+        generator={
+            "builder": "scripts/make_benchmark.py:build_emrcm",
+            "protocol": "e-MRCM (Liang et al., TCAD 39(10) 2020), Section VI",
+            "precision": EMRCM_PRECISION,
+            "costs": "geometric",
+            "answer_key": "[root conservation bound (SPEC 0.21), cheaper of naive and tree]",
+        },
+        seeds=(EMRCM_SEED,),
+        description=(
+            "Benchmark plan B2 (D-70): e-MRCM's own experiments. One target: N = 2 all 511 "
+            "x/512, N = 3-5 512 random each; many targets: 50 random sets per (N, T), N, T in "
+            "2..5. 4X targets, mixes of at most 8. Graded under costs/geometric."
+        ),
+    )
+
+
 BUILDERS: dict[str, Callable[[], BenchmarkSet]] = {
     "tiny_exact_v1": build_tiny_exact,
     "val_stage1_v1": build_val_stage1,
@@ -521,6 +601,7 @@ BUILDERS: dict[str, Callable[[], BenchmarkSet]] = {
     "litbench_paper_v1": build_litbench_paper,
     **{f"test_s{k + 1}_v1": functools.partial(build_test, k) for k in range(5)},
     "test_heldout_v1": functools.partial(build_test, None),
+    "test_emrcm_v1": build_emrcm,
 }
 
 

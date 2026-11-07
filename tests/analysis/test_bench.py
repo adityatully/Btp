@@ -80,3 +80,23 @@ def test_ours_at_reads_the_trace() -> None:
     assert B.ours_at(rec, 0.1) is None
     assert B.ours_at(rec, 60.0) == 90.0
     assert B.ours_at(rec, 900.0) == 80.0
+
+
+def test_emrcm_table_puts_the_papers_numbers_beside_ours() -> None:
+    emrcm = {"by_goal": {"fluid": 200.0}, "mixes": 10, "waste": 9}
+    rec = {
+        "set": "test_emrcm_v1",
+        "goal": "fluid",
+        "cell": "N2-T2",
+        "bound": 100.0,
+        "published": {"emrcm": emrcm},  # only the methods run (`methods=`)
+        "ours": {"trace": [(5.0, 150.0)], "mixes": 5, "waste": 3},
+    }
+    rows = B.emrcm_table([rec])
+    assert rows[-1] == "| N2-T2 | 1 | 1 | 0.75 | 5.00 / 10.00 / 10.52 | 3.00 / 9.00 / 5.93 | 1.50 |"
+
+
+def test_run_task_runs_only_the_methods_asked_for() -> None:
+    task = B.tasks(["test_s1_v1"], ["fluid"], 1)[0]
+    rec = B.run_task(task, OPTS | {"methods": ["mrcm"]})
+    assert set(rec["published"]) == {"mrcm"}

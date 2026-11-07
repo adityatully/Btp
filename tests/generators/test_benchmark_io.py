@@ -268,7 +268,7 @@ def test_val_stage1_v2_is_v1_with_a_better_answer_key() -> None:
 TEST_SETS = ("test_s1_v1", "test_s2_v1", "test_s3_v1", "test_s4_v1", "test_s5_v1")
 
 
-@pytest.mark.parametrize("name", [*TEST_SETS, "test_heldout_v1"])
+@pytest.mark.parametrize("name", [*TEST_SETS, "test_heldout_v1", "test_emrcm_v1"])
 def test_paper_test_sets_share_no_problem_with_any_other_set(name: str) -> None:
     """Benchmark plan B1 (D-68): the test sets are fresh; no problem in any other frozen set,
     and an answer key of [bound, best known] with nothing produced by our method."""
@@ -280,3 +280,18 @@ def test_paper_test_sets_share_no_problem_with_any_other_set(name: str) -> None:
     for ref in bench.reference.values():
         assert ref.producer == "cheapest_construction", ref  # naive or split tree, not ours
         assert ref.lower_bound is None or ref.lower_bound <= ref.cost
+
+
+def test_emrcm_protocol_set_follows_the_paper() -> None:
+    """Benchmark plan B2 (D-70): e-MRCM's experiments at 1/512, 4X targets, mixes of 8."""
+    bench = BenchmarkSet.read("test_emrcm_v1", BENCHMARKS_DIR)
+    cells: dict[str, int] = {}
+    for inst in bench.instances:
+        cells[inst.metadata["cell"]] = cells.get(inst.metadata["cell"], 0) + 1
+        assert inst.chip.max_mix_volume == 8 and inst.chip.max_denominator == 512
+        assert all(t.droplet_volume == 4 and t.demand == 1 for t in inst.targets)
+        n, t = (int(x[1:]) for x in inst.metadata["cell"].split("-"))
+        assert inst.num_fluids == n and len(inst.targets) == t
+    assert cells.pop("N2-T1") == 511
+    assert all(cells.pop(f"N{n}-T1") == 512 for n in (3, 4, 5))
+    assert cells == {f"N{n}-T{t}": 50 for n in range(2, 6) for t in range(2, 6)}

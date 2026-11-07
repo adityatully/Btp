@@ -28,10 +28,15 @@ every plan is checked to keep the goal's first term first (`goal_check.check_fir
 
 Arguments are key=value: `sets` (default all six), `goals` (default fluid,steps,waste),
 `limit=N` problems per set, `exact_seconds` (default 60), `exact_nodes` (default 1,000,000),
-`nfsp_seconds` (per ILP solve, default 600, as Q-118), `orders` (default 32), `workers`, `out`.
+`nfsp_seconds` (per ILP solve, default 600, as Q-118), `orders` (default 32), `methods`
+(published methods to run, default all), `workers`, `out`.
 `seconds` and `sims` override the method's settings for light tests only.
 
-Reading, fixed in advance (D-69), is in `reading()`.
+B2 (D-70), the papers' own experiments: `sets=litbench_paper_v1` under all three goals and
+`sets=test_emrcm_v1 goals=fluid methods=dfm,facda,generic,dfmm,mrcm,emrcm` (e-MRCM's
+protocol, its own table `emrcm_table`; NFSP's experiments are 1:1, so B3's).
+
+Reading, fixed in advance (D-69), is in `reading()`; it is given per set (D-70).
 """
 
 from __future__ import annotations
@@ -68,8 +73,10 @@ import headroom_share as hs  # noqa: E402
 import lit_bench as lb  # noqa: E402
 import lit_bench_full as lbf  # noqa: E402
 import search_check as sc  # noqa: E402
+from emrcm_table3 import PAPER as EMRCM_PAPER  # noqa: E402
 
 SETS = ("test_s1_v1", "test_s2_v1", "test_s3_v1", "test_s4_v1", "test_s5_v1", "test_heldout_v1")
+B2_SETS = ("litbench_paper_v1", "test_emrcm_v1")  # D-70: the papers' own experiments
 GOALS = tuple(gc.GOALS)
 METHOD = {"search": "uniform", "finisher": "share_mrcm", "sims": 256, "seconds": 900.0}  # v1
 PUBLISHED = {**lb.LITERATURE, **lbf.METHODS}
@@ -141,7 +148,7 @@ def tasks(sets: list[str], goals: list[str], limit: int | None) -> list[dict[str
         {
             "set": s,
             "id": i.instance_id,
-            "cell": i.metadata["cell"],
+            "cell": i.metadata.get("cell") or i.metadata.get("stage", ""),
             "instance": i.to_json(),
             "goal": g,
         }
@@ -194,6 +201,8 @@ def run_task(task: dict[str, Any], opts: dict[str, Any]) -> dict[str, Any]:
     if goal == "fluid":
         out["published"] = {}
         for name, make in PUBLISHED.items():
+            if name not in opts.get("methods", PUBLISHED):
+                continue
             t0 = time.perf_counter()
             try:
                 st_ = stats(inst, name, emit(inst, make(inst)), time.perf_counter() - t0)
@@ -349,11 +358,11 @@ def summarise(path: Path) -> str:
                 r
                 for r in recs
                 if r["goal"] == goal
-                and _cost(fluid[(r["set"], r["id"])]["published"][m], goal) is not None
+                and _cost(fluid[(r["set"], r["id"])]["published"].get(m, {}), goal) is not None
             ]
             if not rs:
                 continue
-            theirs = [_cost(fluid[(r["set"], r["id"])]["published"][m], goal) for r in rs]
+            theirs = [_cost(fluid[(r["set"], r["id"])]["published"].get(m, {}), goal) for r in rs]
             cells = []
             for t in TIMES:
                 mine = [ours_at(r, t) for r in rs]
@@ -365,19 +374,60 @@ def summarise(path: Path) -> str:
             lines.append(f"| {m} | {goal} | {own} | {_fmt(p900)} | {cells[0][1]} | {cells[1][1]} |")
     lines += ["", "## Coverage: problems each published method accepts", ""]
     lines += ["| set | " + " | ".join(PUBLISHED) + " |", "|---" * (len(PUBLISHED) + 1) + "|"]
-    for s in SETS:
+    for s in sorted({k[0] for k in fluid}):
         rs = [r for k, r in fluid.items() if k[0] == s]
         if rs:
             lines.append(
                 f"| {s} ({len(rs)}) | "
                 + " | ".join(
-                    str(sum(r["published"][m].get("by_goal") is not None for r in rs))
+                    str(sum(r["published"].get(m, {}).get("by_goal") is not None for r in rs))
                     for m in PUBLISHED
                 )
                 + " |"
             )
-    lines += ["", f"Reading (fixed in advance, D-69): {reading(recs)}"]
+    if any(r["set"] == "test_emrcm_v1" for r in recs):
+        lines += ["", *emrcm_table(recs)]
+    lines += ["", "Reading (fixed in advance, D-69; per set, D-70):"]
+    for s in sorted({r["set"] for r in recs}):
+        lines.append(f"- {s}: {reading([r for r in recs if r['set'] == s])}")
     return "\n".join(lines)
+
+
+def emrcm_table(recs: list[dict[str, Any]]) -> list[str]:
+    """B2 (D-70): e-MRCM's protocol per (N, T) under the fluid goal; e-MRCM's printed mixes and
+    waste (its Table III, many targets) beside ours and e-MRCM (our reading), not graded (L-7)."""
+    rows = [
+        "## e-MRCM's protocol (`test_emrcm_v1`, fluid goal, our method at 900 s)",
+        "",
+        "| N-T | n | e-MRCM accepts | ours / e-MRCM (mean) | mixes: ours / e-MRCM / paper "
+        "| waste: ours / e-MRCM / paper | ours / bound |",
+        "|---|---|---|---|---|---|---|",
+    ]
+    groups: dict[str, list[dict[str, Any]]] = defaultdict(list)
+    for r in recs:
+        if r["set"] == "test_emrcm_v1" and r["goal"] == "fluid":
+            groups[r["cell"]].append(r)
+    for cell in sorted(groups):
+        rs = [r for r in groups[cell] if ours_at(r, TIMES[1]) is not None]
+        acc = [r for r in rs if r["published"]["emrcm"].get("by_goal")]
+        n, t = (int(x[1:]) for x in cell.split("-"))
+        paper = EMRCM_PAPER.get((n, t))
+
+        def mean(xs: list[float]) -> str:
+            return f"{np.mean(xs):.2f}" if xs else "-"
+
+        ratio = mean([ours_at(r, TIMES[1]) / _cost(r["published"]["emrcm"], "fluid") for r in acc])
+        rows.append(
+            f"| {cell} | {len(groups[cell])} | {len(acc)} | {ratio} | "
+            f"{mean([r['ours']['mixes'] for r in rs])} / "
+            f"{mean([r['published']['emrcm']['mixes'] for r in acc])} / "
+            f"{paper[4] if paper else '-'} | "
+            f"{mean([r['ours']['waste'] for r in rs])} / "
+            f"{mean([r['published']['emrcm']['waste'] for r in acc])} / "
+            f"{paper[5] if paper else '-'} | "
+            f"{mean([ours_at(r, TIMES[1]) / r['bound'] for r in rs])} |"
+        )
+    return rows
 
 
 def reading(recs: list[dict[str, Any]]) -> str:
@@ -389,7 +439,7 @@ def reading(recs: list[dict[str, Any]]) -> str:
             r
             for r in recs
             if r["goal"] == goal
-            and _cost(fluid[(r["set"], r["id"])]["published"][m], goal) is not None
+            and _cost(fluid[(r["set"], r["id"])]["published"].get(m, {}), goal) is not None
             and ours_at(r, TIMES[1]) is not None
         ]
         if len(rs) < 10:
@@ -397,7 +447,7 @@ def reading(recs: list[dict[str, Any]]) -> str:
             continue
         p = paired(
             [ours_at(r, TIMES[1]) for r in rs],
-            [_cost(fluid[(r["set"], r["id"])]["published"][m], goal) for r in rs],
+            [_cost(fluid[(r["set"], r["id"])]["published"].get(m, {}), goal) for r in rs],
         )
         out.append(f"{m} ({goal}) {verdict(p)} on {p['n']}")
     return "; ".join(out)
@@ -419,6 +469,7 @@ def main(argv: list[str]) -> None:
         "seconds": float(args.get("seconds", METHOD["seconds"])),
         "sims": int(args.get("sims", METHOD["sims"])),
         "commit": commit,
+        "methods": args.get("methods", ",".join(PUBLISHED)).split(","),
     }
     limit = int(args["limit"]) if "limit" in args else None
     todo = [

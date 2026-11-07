@@ -1,6 +1,10 @@
 # MEDA Design Automation — Codebase Specification
 
-Version 0.33 · 2026-11-07
+Version 0.34 · 2026-11-07
+
+Changes in 0.34 (paper benchmark B2, paper log D-70): tier 3 gains `test_emrcm_v1`, e-MRCM's
+own experiments rebuilt from its protocol (8.4); `litbench_paper_v1` is the tier 3 set for the
+FacDA, Generic, DFMM and MRCM papers. NFSP's experiments (1:1, M = 2) belong to tier 2.
 
 Changes in 0.33 (paper benchmarks, paper log D-67, D-68): tier 1 gains the paper test sets
 `test_s1_v1` … `test_s5_v1` and `test_heldout_v1` (8.4): fresh draws of track2_v1's stages,
@@ -1282,6 +1286,13 @@ Sets per tier:
   The val, lit-bench and E2 sets shaped the method (D-37 to D-66) and are development sets.
 - `dmfb_sweep_v1` — tier 2, see above.
 - `literature_<paper>_v1` — tier 3, one set per paper, filled manually from the PDF.
+  Built (0.34, D-70): `litbench_paper_v1` (Poddar's x/64 at 4X and 8X and the worked examples of
+  FacDA, Generic, DFMM and MRCM; seen in development, labelled so) and `test_emrcm_v1`
+  (e-MRCM's protocol: 1/512, 4X targets, mixes of at most 8, demand 1, storage 32; one target
+  N = 2 all 511, N = 3-5 512 random; many targets 50 random sets per (N, T), N, T in 2..5;
+  2,847 problems, seed 20261108; `make_benchmark.py:build_emrcm`). Our weights are per fluid
+  kind, e-MRCM's per reactant, so plans are graded under ours and its printed numbers are shown
+  beside, not graded.
 - `unseen_ratios_v1` — compositions excluded from training.
 - `larger_v1` — more targets / fluids than any training stage (generalisation test).
 - `frontier_v1` — tier 5, scaling axes over the MTMD + storage problem class.
