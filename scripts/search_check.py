@@ -647,6 +647,8 @@ def run_task(
         finish_fails=finish.fails if finish is not None else {},
         **{f"search_{k}": v for k, v in stats.items()},
     )
+    if opts.get("keep_plan"):  # bench.py: the plan itself, in-process only (not JSON)
+        rec["plan"] = out["plan"]
     return rec
 
 

@@ -494,6 +494,23 @@ def build_litbench(which: int) -> BenchmarkSet:
     )
 
 
+TEST_SEED, TEST_SIZE = 20261107, 100  # D-68: written down before the first draw
+
+
+def build_test(which: int | None) -> BenchmarkSet:
+    """Paper test set for track2_v1 stage `which`, or the held-out cell when None (benchmark
+    plan B1, D-68): 100 problems on a fresh seed, none the same problem as any non-test set in
+    `benchmarks/` (val, lit-bench, tiny), so a rebuild draws the same. Never used to tune the
+    method."""
+    paths = sorted((ROOT / "benchmarks").glob("*_v*.json"))
+    name = "test_heldout_v1" if which is None else f"test_s{which + 1}_v1"
+    held = frozenset().union(
+        *(BenchmarkSet.read(p.stem).hashes() for p in paths if not p.stem.startswith("test_"))
+    )
+    seed = TEST_SEED + (5 if which is None else which)
+    return build_design_set("track2_v1", which, name, seed, TEST_SIZE, held)
+
+
 BUILDERS: dict[str, Callable[[], BenchmarkSet]] = {
     "tiny_exact_v1": build_tiny_exact,
     "val_stage1_v1": build_val_stage1,
@@ -502,6 +519,8 @@ BUILDERS: dict[str, Callable[[], BenchmarkSet]] = {
     "litbench_s1_v1": functools.partial(build_litbench, 0),
     "litbench_s2_v1": functools.partial(build_litbench, 1),
     "litbench_paper_v1": build_litbench_paper,
+    **{f"test_s{k + 1}_v1": functools.partial(build_test, k) for k in range(5)},
+    "test_heldout_v1": functools.partial(build_test, None),
 }
 
 

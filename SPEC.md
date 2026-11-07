@@ -1,6 +1,11 @@
 # MEDA Design Automation — Codebase Specification
 
-Version 0.32 · 2026-11-06
+Version 0.33 · 2026-11-07
+
+Changes in 0.33 (paper benchmarks, paper log D-67, D-68): tier 1 gains the paper test sets
+`test_s1_v1` … `test_s5_v1` and `test_heldout_v1` (8.4): fresh draws of track2_v1's stages,
+never used to tune anything; the val sets become development sets and are not reported as
+results. The benchmark plan and its rules are in `notes/benchmark_plan.md`.
 
 Changes in 0.32 (stronger finisher, paper log D-64): `share.finish_from` takes `lookahead`
 (default 0) and `mrcm` (a per-problem MRCM cache, default None), as `share_plan` does; with the
@@ -1270,6 +1275,11 @@ Sets per tier:
   set). Much of that is integer draws: a target holding 1/195 of sample still needs one whole
   unit drawn, which the 0.21 bound counts (`_v2` sets). Promotion (8.3) uses
   `gap_to_best_known`, which the bound does not affect.
+- `test_s1_v1` … `test_s5_v1`, `test_heldout_v1` (0.33, D-68) — the paper's tier 1 and
+  held-out results: built as the val sets (`make_benchmark.py:build_test`), 100 problems each
+  (s5 105: 7 cells), seeds 20261107 + stage index (held-out + 5), no problem shared with any
+  non-test set. Answer key [lower bound, cheapest construction]; our method never feeds it.
+  The val, lit-bench and E2 sets shaped the method (D-37 to D-66) and are development sets.
 - `dmfb_sweep_v1` — tier 2, see above.
 - `literature_<paper>_v1` — tier 3, one set per paper, filled manually from the PDF.
 - `unseen_ratios_v1` — compositions excluded from training.

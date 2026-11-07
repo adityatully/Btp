@@ -263,3 +263,20 @@ def test_val_stage1_v2_is_v1_with_a_better_answer_key() -> None:
             assert new.lower_bound is not None and 0 < new.lower_bound <= new.cost
             assert new.detail["lower_bound_producer"].startswith("exact_search")
             assert Rational.parse(new.detail["naive_cost"]) == old.cost
+
+
+TEST_SETS = ("test_s1_v1", "test_s2_v1", "test_s3_v1", "test_s4_v1", "test_s5_v1")
+
+
+@pytest.mark.parametrize("name", [*TEST_SETS, "test_heldout_v1"])
+def test_paper_test_sets_share_no_problem_with_any_other_set(name: str) -> None:
+    """Benchmark plan B1 (D-68): the test sets are fresh; no problem in any other frozen set,
+    and an answer key of [bound, best known] with nothing produced by our method."""
+    bench = BenchmarkSet.read(name, BENCHMARKS_DIR)
+    assert len(bench) >= 100
+    others = [p.stem for p in BENCHMARKS_DIR.glob("*_v*.json") if p.stem != name]
+    for other in others:
+        assert not bench.hashes() & BenchmarkSet.read(other, BENCHMARKS_DIR).hashes(), other
+    for ref in bench.reference.values():
+        assert ref.producer == "cheapest_construction", ref  # naive or split tree, not ours
+        assert ref.lower_bound is None or ref.lower_bound <= ref.cost
