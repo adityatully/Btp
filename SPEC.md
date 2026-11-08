@@ -1,6 +1,10 @@
 # MEDA Design Automation — Codebase Specification
 
-Version 0.35 · 2026-11-08
+Version 0.36 · 2026-11-08
+
+Changes in 0.36 (literature coverage, paper log L-9 to L-11, Q-141): STWM and MTWM (`mtwm.py`)
+and robust split-less dilution (`robust.py`) join the published methods (10.4). `nfsp._Model`
+gains `run` (the raw `milp` result) and a time limit per solve, which MTWM uses with a node cap.
 
 Changes in 0.35 (paper benchmark B3, paper log D-71): `dmfb_sweep_v1` is built (8.4): every
 n/2^d, d = 4..8, on `dmfb_m2` with `max_denominator` 2^d (the DMFB accuracy level, not the
@@ -1703,6 +1707,14 @@ serves as tabular Q's value prior (11.3).
     trees in reactant cost (then mixes, then waste), each mixing model's children chosen with
     the least concentration-vector sum (the paper's ILP). Reproduces Fig. 3(a) and the ILP's
     children of section 3.1.
+  - `mtwm.py` (0.36): **STWM / MTWM** (Kundu & Roy, TODAES 28(6), 2023), any number of fluids,
+    one or many targets, one droplet each. The paper's SMT clauses over DFMM skeletons as an
+    exact ILP (HiGHS), least waste, then reagent, then mixes; stops at `NODE_LIMIT` = 2,000
+    branch-and-bound nodes with the best graph found. As good as or better than Fig. 15 and
+    Tables 1-2 on all but one count (paper log L-10).
+  - `robust.py` (0.36): **robust split-less** dilution (Poddar et al., TODAES 26(1), 2020), many
+    dyadic targets with demand, each one split-less mix of ECF aliquots from split-less 1:1
+    chains; every mix at most M. Reproduces Example 5 (paper log L-11).
 - `share.py` (0.24): the **sharing pass**. The targets are built one delivery group at a time
   on one chip; every leftover stays in a pool of idle droplets instead of going to waste. Per
   group it prices, on a copy of the plan, (1) a pool droplet within tolerance, (2) one mix of

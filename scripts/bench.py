@@ -95,6 +95,8 @@ OWN_GOAL = {
     "emrcm": "fluid",
     "nfsp": "fluid",
     "dfmm": "waste",
+    "mtwm": "waste",
+    "robust": "waste",
 }
 TIMES = (60.0, 900.0)  # Q-139: both are reported
 # Fixed in advance (D-69).

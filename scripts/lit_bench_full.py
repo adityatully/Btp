@@ -39,7 +39,9 @@ from meda.core.rules import IllegalActionError
 from meda.generators.benchmark_io import BenchmarkSet
 from meda.solvers.baselines import nfsp as nfsp_module
 from meda.solvers.baselines.emrcm import emrcm
+from meda.solvers.baselines.mtwm import mtwm
 from meda.solvers.baselines.paper_graph import NotApplicable, PaperGraph, emit
+from meda.solvers.baselines.robust import robust
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "scripts"))
@@ -51,6 +53,8 @@ SETS = ("val_s3_v2", "val_s4_v2", "val_s5_v2")
 METHODS: dict[str, Callable[[Instance], PaperGraph]] = {
     "nfsp": functools.partial(nfsp_module.nfsp, weights=WEIGHTS),
     "emrcm": functools.partial(emrcm, weights=WEIGHTS),
+    "mtwm": mtwm,  # STWM on a single target (the same model)
+    "robust": robust,
 }
 
 

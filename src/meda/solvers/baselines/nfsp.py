@@ -32,6 +32,7 @@ Our reading of what the paper leaves open (`notes/lit_bench/objectives.md`):
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+from typing import Any
 
 import numpy as np
 from scipy.optimize import LinearConstraint, milp
@@ -86,7 +87,18 @@ class _Model:
         self.lo.append(lo)
         self.hi.append(hi)
 
-    def solve(self, objective: dict[int, float], what: str) -> np.ndarray:
+    def solve(
+        self, objective: dict[int, float], what: str, time_limit: float = TIME_LIMIT
+    ) -> np.ndarray:
+        res = self.run(objective, {"time_limit": time_limit, "mip_rel_gap": 0.0})
+        if res.status == 1:
+            raise NotApplicable(f"{what}: the ILP was not solved within {time_limit:g} s")
+        if res.status != 0 or res.x is None:
+            raise NotApplicable(f"{what}: no flow ({res.message})")
+        return np.asarray(res.x)
+
+    def run(self, objective: dict[int, float], options: dict[str, Any]) -> Any:
+        """`scipy.optimize.milp` on the model, all variables integer; its raw result."""
         r, c, v = [], [], []
         for i, coef in enumerate(self.rows):
             for j, x in coef.items():
@@ -97,17 +109,12 @@ class _Model:
         cost = np.zeros(self.n)
         for j, x in objective.items():
             cost[j] = x
-        res = milp(
+        return milp(
             cost,
             constraints=LinearConstraint(a, np.array(self.lo), np.array(self.hi)),
             integrality=np.ones(self.n),
-            options={"time_limit": TIME_LIMIT, "mip_rel_gap": 0.0},
+            options=options,
         )
-        if res.status == 1:
-            raise NotApplicable(f"{what}: the ILP was not solved within {TIME_LIMIT:g} s")
-        if res.status != 0 or res.x is None:
-            raise NotApplicable(f"{what}: no flow ({res.message})")
-        return np.asarray(res.x)
 
 
 def flow(
