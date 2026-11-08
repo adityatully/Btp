@@ -39,11 +39,14 @@ from meda.core.rules import IllegalActionError
 from meda.generators.benchmark_io import BenchmarkSet
 from meda.solvers.baselines import nfsp as nfsp_module
 from meda.solvers.baselines.ddmt import ddmt
+from meda.solvers.baselines.dong import dong
 from meda.solvers.baselines.emrcm import emrcm
+from meda.solvers.baselines.fukui import fukui
 from meda.solvers.baselines.mtmd import mtmd
 from meda.solvers.baselines.mtwm import mtwm
 from meda.solvers.baselines.paper_graph import NotApplicable, PaperGraph, emit
 from meda.solvers.baselines.robust import robust
+from meda.solvers.baselines.simop import simop
 from meda.solvers.baselines.tvoda import tvoda
 from meda.solvers.baselines.wspm import wspm
 
@@ -63,6 +66,9 @@ METHODS: dict[str, Callable[[Instance], PaperGraph]] = {
     "ddmt": ddmt,  # MTC at demand 1
     "tvoda": tvoda,
     "wspm": wspm,
+    "dong": dong,  # one sample-buffer mix per droplet in our engine
+    "fukui": fukui,
+    "simop": simop,  # ordered waste > steps > sample > buffer
 }
 
 

@@ -26,13 +26,16 @@ from meda.solvers.baselines.paper_graph import In, NotApplicable, PaperGraph, si
 def dfmm(instance: Instance) -> PaperGraph:
     single_target(instance)
     target, chip = instance.targets[0], instance.chip
-    ratio, total = target.composition.num, target.composition.den
-    sets = factor_sets(total, chip.min_mix_volume, chip.max_mix_volume)
+    return best_graph(target.composition.num, chip.min_mix_volume, chip.max_mix_volume)
+
+
+def best_graph(ratio: tuple[int, ...], lo: int, hi: int) -> PaperGraph:
+    """DFMM's graph for `ratio` on mixers of [lo, hi] units: a shortest factor list of the
+    ratio-sum, ties by the fewest reagent units, then the least waste."""
+    total = sum(ratio)
+    sets = factor_sets(total, lo, hi)
     if not sets:
-        raise NotApplicable(
-            f"{target.composition}: ratio-sum {total} has no factors within "
-            f"[{chip.min_mix_volume}, {chip.max_mix_volume}]"
-        )
+        raise NotApplicable(f"{ratio}: ratio-sum {total} has no factors within [{lo}, {hi}]")
     shortest = min(len(f) for f in sets)
     best: tuple[tuple[int, int], PaperGraph] | None = None
     for factors in (f for f in sets if len(f) == shortest):

@@ -1,6 +1,10 @@
 # MEDA Design Automation — Codebase Specification
 
-Version 0.37 · 2026-11-08
+Version 0.38 · 2026-11-09
+
+Changes in 0.38 (literature coverage, paper log L-16 to L-18, Q-141): Dong's splitting trees
+(`dong.py`), Fukui's droplet reuse (`fukui.py`) and SIMOP (`simop.py`) join the published
+methods (10.4). `dfmm.best_graph` is DFMM's graph for a bare ratio (Fukui builds D_n with it).
 
 Changes in 0.37 (literature coverage, paper log L-12 to L-15, Q-141): MTCS/MTR/MTMD (`mtmd.py`),
 MTC/DDMT (`ddmt.py`), TVODA (`tvoda.py`) and WSPM (`wspm.py`) join the published methods (10.4).
@@ -1731,6 +1735,18 @@ serves as tabular Q's value prior (11.3).
   - `wspm.py` (0.37): **WSPM** with PD sharing and incremental preparation (Li et al., TBioCAS
     11(6), 2017), dilution, exact dilutions only (the paper rounds). Reproduces Figs. 6(c),
     12(a) and 12(d)'s operations and fluids (L-15).
+  - `dong.py` (0.38): **splitting-droplet sharing** (Dong et al., JETTA 40(1), 2024), dyadic
+    dilution targets x / 2^h, 2^h <= M. Its splitting tree cuts a sample droplet into pieces;
+    our engine dispenses exact units, so it is one sample-buffer mix per droplet (L-16).
+    Reproduces Fig. 10's and Fig. 8's sample (as units, not droplets).
+  - `fukui.py` (0.38): **droplet reuse on DFMM** (Fukui & Yamashita, ISOCC 2024), mixtures, many
+    targets: each target is plain DFMM or one leftover D_w mixed e_w : e_n with a DFMM droplet
+    D_n (the paper's Eq. 3), the fewest reagent units. Reproduces Fig. 3's D_n (L-17).
+  - `simop.py` (0.38): **SIMOP** (Bera et al., SN Comput. Sci. 2:84, 2021), one dyadic dilution
+    target, 1:1 chains, exhaustive depth-first search under a user-ordered criterion list (waste
+    first in the bench), CFs up to 2^`MAX_BITS` = 2^10 (the paper's accuracy; 11 bits takes
+    seconds a CF). Reproduces Table 5 and Table 6's sample,
+    buffer and step averages; its waste average not (L-18).
 - `share.py` (0.24): the **sharing pass**. The targets are built one delivery group at a time
   on one chip; every leftover stays in a pool of idle droplets instead of going to waste. Per
   group it prices, on a copy of the plan, (1) a pool droplet within tolerance, (2) one mix of

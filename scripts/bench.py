@@ -101,6 +101,9 @@ OWN_GOAL = {
     "ddmt": "steps",
     "tvoda": "fluid",
     "wspm": "fluid",
+    "dong": "fluid",
+    "fukui": "fluid",
+    "simop": "waste",
 }
 TIMES = (60.0, 900.0)  # Q-139: both are reported
 # Fixed in advance (D-69).
