@@ -1,6 +1,10 @@
 # MEDA Design Automation — Codebase Specification
 
-Version 0.36 · 2026-11-08
+Version 0.37 · 2026-11-08
+
+Changes in 0.37 (literature coverage, paper log L-12 to L-15, Q-141): MTCS/MTR/MTMD (`mtmd.py`),
+MTC/DDMT (`ddmt.py`), TVODA (`tvoda.py`) and WSPM (`wspm.py`) join the published methods (10.4).
+`mtwm.solve` takes an edge rule and a reagent-first objective (TVODA's).
 
 Changes in 0.36 (literature coverage, paper log L-9 to L-11, Q-141): STWM and MTWM (`mtwm.py`)
 and robust split-less dilution (`robust.py`) join the published methods (10.4). `nfsp._Model`
@@ -1715,6 +1719,18 @@ serves as tabular Q's value prior (11.3).
   - `robust.py` (0.36): **robust split-less** dilution (Poddar et al., TODAES 26(1), 2020), many
     dyadic targets with demand, each one split-less mix of ECF aliquots from split-less 1:1
     chains; every mix at most M. Reproduces Example 5 (paper log L-11).
+  - `mtmd.py` (0.37): **MTCS / MTR / MTMD** (Shalu et al., TODAES 23(4), 2018), mixtures, many
+    targets with demand, 1:1 Min-Mix trees with common subtrees, demand by cloning from kept
+    droplets; v:v mixes on MEDA. Reproduces Fig. 3 and Fig. 12(b) exactly (paper log L-12).
+  - `ddmt.py` (0.37): **MTC** (Mitra et al., TCAD 33(8), 2014) and **DDMT** (Poddar et al.,
+    TODAES 27(1), 2021), dilution, many targets with demand, one de Bruijn path (exact ATSP up to
+    14 targets) with DDMT's demand rule. Reproduces MTC Figs. 5-6 and DDMT Figs. 3-4 (L-13).
+  - `tvoda.py` (0.37): **TVODA** (Kundu et al., TCAD 41(3), 2022), one dilution target in
+    Vt = d v units, a forest of FacDA chains solved with `mtwm.solve`. Reproduces Fig. 9's
+    forest; its graph no dearer (L-14).
+  - `wspm.py` (0.37): **WSPM** with PD sharing and incremental preparation (Li et al., TBioCAS
+    11(6), 2017), dilution, exact dilutions only (the paper rounds). Reproduces Figs. 6(c),
+    12(a) and 12(d)'s operations and fluids (L-15).
 - `share.py` (0.24): the **sharing pass**. The targets are built one delivery group at a time
   on one chip; every leftover stays in a pool of idle droplets instead of going to waste. Per
   group it prices, on a copy of the plan, (1) a pool droplet within tolerance, (2) one mix of

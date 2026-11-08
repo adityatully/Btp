@@ -38,10 +38,14 @@ from meda.core.problem import Instance
 from meda.core.rules import IllegalActionError
 from meda.generators.benchmark_io import BenchmarkSet
 from meda.solvers.baselines import nfsp as nfsp_module
+from meda.solvers.baselines.ddmt import ddmt
 from meda.solvers.baselines.emrcm import emrcm
+from meda.solvers.baselines.mtmd import mtmd
 from meda.solvers.baselines.mtwm import mtwm
 from meda.solvers.baselines.paper_graph import NotApplicable, PaperGraph, emit
 from meda.solvers.baselines.robust import robust
+from meda.solvers.baselines.tvoda import tvoda
+from meda.solvers.baselines.wspm import wspm
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "scripts"))
@@ -55,6 +59,10 @@ METHODS: dict[str, Callable[[Instance], PaperGraph]] = {
     "emrcm": functools.partial(emrcm, weights=WEIGHTS),
     "mtwm": mtwm,  # STWM on a single target (the same model)
     "robust": robust,
+    "mtmd": mtmd,  # MTCS / MTR at demand 1
+    "ddmt": ddmt,  # MTC at demand 1
+    "tvoda": tvoda,
+    "wspm": wspm,
 }
 
 

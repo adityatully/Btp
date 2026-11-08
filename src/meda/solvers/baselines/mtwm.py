@@ -34,6 +34,7 @@ Our reading of what the paper leaves open (`notes/lit_bench/selection.md`):
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from dataclasses import dataclass, replace
 
 import numpy as np
@@ -100,7 +101,16 @@ def stwm(instance: Instance) -> PaperGraph:
     return mtwm(instance)
 
 
-def solve(nodes: list[Node], ratios: list[tuple[int, ...]], fluids: int, what: str) -> PaperGraph:
+def solve(
+    nodes: list[Node],
+    ratios: list[tuple[int, ...]],
+    fluids: int,
+    what: str,
+    rule: Callable[[Node, Node], bool] = allowed,
+    reagent_first: bool = False,
+) -> PaperGraph:
+    """`rule` says which sharing edges exist; the objective is least waste, then reagent, then
+    mixes (`reagent_first`: reagent, then waste, then mixes; TVODA's)."""
     """The paper's model over `nodes` as an ILP; the least-waste mixing graph it allows."""
     lp = _Model()
     n = len(nodes)
@@ -108,7 +118,7 @@ def solve(nodes: list[Node], ratios: list[tuple[int, ...]], fluids: int, what: s
     y = [lp.var() for _ in nodes]
     r = [[lp.var() for _ in range(fluids)] for _ in nodes]
     big_r = [[lp.var() for _ in range(fluids)] for _ in nodes]
-    edges = [(s, d) for d in range(n) for s in range(n) if s != d and allowed(nodes[s], nodes[d])]
+    edges = [(s, d) for d in range(n) for s in range(n) if s != d and rule(nodes[s], nodes[d])]
     # one-hot w: b[e][k - 1] == 1 iff edge e carries k units, k in 1..f_dst - 1
     b = [[lp.var() for _ in range(nodes[d].f - 1)] for _, d in edges]
     z = [[[lp.var() for _ in range(nodes[d].f - 1)] for _ in range(fluids)] for _, d in edges]
@@ -154,10 +164,13 @@ def solve(nodes: list[Node], ratios: list[tuple[int, ...]], fluids: int, what: s
             lp.row(ratio[i][t], 0, 0)
         if out[i]:
             lp.row({**out[i], y[i]: -float(nd.f)}, -np.inf, 0)
-    # lexicographic: waste, then reagent units, then mixes
+    # lexicographic: waste, then reagent units, then mixes (or reagent first)
     w_nm = 1.0
     w_nr = float(n + 1)
     w_nw = w_nr * float(sum(nd.f for nd in nodes) + 1)
+    if reagent_first:
+        w_nw = float(n + 1)
+        w_nr = w_nw * float(sum(nd.f for nd in nodes) + 1)
     objective: dict[int, float] = {}
     for i, nd in enumerate(nodes):
         objective[y[i]] = w_nm + (0.0 if root[i] else w_nw * nd.f)
