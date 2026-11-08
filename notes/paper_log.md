@@ -985,6 +985,24 @@ Format: date · decision · alternatives considered · why · evidence.
   Mac probe: `share_mrcm_look3` alone takes up to 6 min on N 5, T 5; time is reported. Mac
   trial (4 problems, 15 s, 8 sims): runs end to end; MRCM and e-MRCM decline N 5 ("search
   exceeded 2,000,000 candidates"), so coverage there is low.
+- **D-71 (2026-11-08) B3, the 1:1 engine check (tier 2): set and checks fixed before building.**
+  A test of the engine, never a win (SPEC 8.4). **`dmfb_sweep_v1`** as SPEC 8.4 defines it: every
+  n/2^d for d = 4..8 (15 + 31 + 63 + 127 + 255 = 491 targets), one 1-unit droplet, tolerance 0,
+  chip `dmfb_m2` at precision 2^d (so 2/32 at d = 5 is its own problem, as in the DMFB papers).
+  Producers: bit scanning, NFSP (600 s per solve), the other published methods where they
+  accept, our planner, our method, exact search (60 s); fluid goal (`costs/geometric`).
+  **Checks (any failure is a bug to fix before the paper):** (1) every plan replays and
+  validates, none below the bound or a proved optimum (runner); (2) bit scanning's mixes are
+  d - tz(n), the textbook count; (3) NFSP is optimal in fluid cost among 1:1 graphs and its
+  plans lie in our space, so no plan of ours uses less fluid cost (64 sample + buffer) than NFSP
+  where NFSP solves, and no proved optimum costs more than NFSP. **Reported, not graded:** our
+  method against bit scanning and NFSP. **NFSP's own tables are not rerun:** Table I is d = 10
+  (our HiGHS model does not solve one target at d = 8 in 120 s on the Mac, L-8), and Table II
+  does not give how its droplet counts are drawn and goes to 100 targets. What can be checked
+  of Table I is its bit-scanning column, offline over all 1023 targets at d = 10: sample 5.00
+  (paper 5.00), buffer 5.00 (4.01), waste 9.01 (8.01), mixes 9.01 (8.01). Sample matches; the
+  other three are exactly one higher here on every average, a counting convention the paper
+  does not state (likely the first S + B mix not counted), not an engine difference.
 ---
 
 ## 4. Experiments and results

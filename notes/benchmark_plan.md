@@ -82,7 +82,9 @@ so we can put our numbers next to its printed table:
 Answers: do we reproduce each paper's numbers, and do we beat it on its own problems and
 metric?
 
-**B3. DMFB sanity (tier 2).** `dmfb_sweep_v1`: every n/2^d, d = 4–8, at M = 2. A test of the
+**B3. DMFB sanity (tier 2).** *Built 2026-11-08 (D-71): `dmfb_sweep_v1`, checks against NFSP's
+fluid optimum; NFSP's own tables are not rerun (d = 10 does not solve; Table II's protocol is
+incomplete), only Table I's bit-scanning column (sample matches, the rest one higher).* `dmfb_sweep_v1`: every n/2^d, d = 4–8, at M = 2. A test of the
 engine against published 1:1 numbers, never reported as a win (SPEC 8.4).
 
 **B4. Scaling and generalisation (tiers 4–5).** `frontier_v1`: one base problem varied along

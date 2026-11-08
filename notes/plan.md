@@ -231,7 +231,7 @@ depth 2 is 10-18× faster but 7-10% dearer, parked (D-44). *Round 3 done 2026-10
 
 - **6.1 Paper checks:** robust-aliquot (Poddar 2020), Dong 2024, e-MRCM → claim wording
   (session `paper-checks`).
-- **6.2 Tier 2:** DMFB sanity sweep (`dmfb_sweep_v1`).
+- **6.2 Tier 2:** DMFB sanity sweep (`dmfb_sweep_v1`). *Built 2026-11-08 (B3, D-71); run on coe9 after B2.*
 - **6.3 Tier 3:** published baselines, one set per paper (WSPM, FacDA, MRCM, e-MRCM, MTWM, and
   single-target MEDA dilution methods such as Dong 2024 for stage 1), plus the plan
   translator. Needs the PDFs; SPEC 10.4 forbids rebuilding methods from memory. *Started
