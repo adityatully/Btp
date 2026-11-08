@@ -968,7 +968,7 @@ Format: date · decision · alternatives considered · why · evidence.
 - **D-70 (2026-11-07) B2, the papers' own experiments: sets and reading fixed before building.**
   Read from the PDFs: NFSP's experiments (its Tables I and II) are on 1:1 chips (M = 2), so they
   move to B3 (DMFB, a sanity check, never a win; SPEC 8.4). B2 has two parts. **(a)
-  `litbench_paper_v1`** as frozen (131 problems: Poddar's x/64 at 4X and 8X with M 4 and 8, and
+  `litbench_paper_v1`** as frozen (132 problems, written 131 at first: Poddar's x/64 at 4X and 8X with M 4 and 8, and
   the worked examples of FacDA, Generic, DFMM and MRCM), under all three goals. It was seen in
   development (E-29, E-62) and cannot be redrawn (the papers fix the problems), so it is labelled
   that way. **(b) `test_emrcm_v1`**, e-MRCM's protocol (TCAD 2020, Section VI): precision
@@ -1765,6 +1765,22 @@ MRCM's intermediates on val_s2: 4 of 28 covered (chain D4), 5 of 28 (premix D3).
   (an exact lower bound on mixes left, or a constructive method's recipes, which is a planner
   again). (3) Built as SPEC 0.28 `hint_source: problem` (depth-4 chain in the recipe columns)
   for a copy-test comparison on stages 1–2 against the planner's hints.
+
+### E-65 (2026-11-08) B2 part (a), the papers' worked problems (D-70): beats six, level with NFSP
+coe9, `scripts/bench.py` at `fbd4679` (SPEC 0.34), `outputs/bench/b2_paper.jsonl` (132
+problems of `litbench_paper_v1` × 3 goals), method-v1. **Reading (D-69 rule, own goal, 900 s):**
+beats DFM (steps, 120), Generic (steps, 128), FacDA (fluid, 120), MRCM (fluid, 131), e-MRCM
+(fluid, 131), DFMM (waste, 119); **level with NFSP** (fluid, 128: mean 1.000 [0.989, 1.017],
+median 0.992, 111 / 13 / 4). 60 s and 900 s are the same (every search ends early on these
+small problems). Coverage is high here (119-131 of 132): these are the papers' own problems.
+
+- **Against our planner:** fluid 0.932 (56 / 76 / 0), steps 0.998, waste 0.765; never dearer.
+- **Proved optima:** fluid 1.6% above on average (86 proved), steps exact (108), waste 2.6% (78).
+- **NFSP under waste reads "loses"** (mean 1.046 [1.015, 1.085]) although we win 110 of 128 and
+  lose 6: the mean ratio is pulled up by a few problems where the waste cost is tiny, so a
+  small absolute difference is a large ratio. Not NFSP's own goal (our NFSP is its fluid
+  variant), so not in the reading; reported as it is. The 4 fluid losses keep NFSP level.
+- The set was seen in development (E-29, E-62), as D-70 says.
 
 ### E-64 (2026-11-08) B1, the paper test sets (D-69): beats six published methods, level with NFSP
 coe9, `scripts/bench.py` at `91cb874` (SPEC 0.33), `outputs/bench/b1.jsonl` (1,815 problem-goal
