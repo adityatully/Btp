@@ -58,7 +58,7 @@ chats. Last updated 2026-11-03.*
 | Q-126 | Can a value head rank sibling moves if it reads the candidate moves (and hints), or is trained to rank instead of to hit the cost? | Closed → E-50: ranking helps (0.38 → 0.52), below the 0.55 bar |
 | Q-128 | Does the search improve a published planner (MRCM) put at its leaves, as it improves ours? | Closed → E-55: yes, below MRCM on 7 of 13 of set B (bar 5), 5.1% below on average |
 | Q-141 | Which of the 13 unbuilt methods in the folder do we build, and in what order (L-9)? | Closed → L-10 to L-18: all built, one by one (user); Dong collapses to one mix per droplet in our engine, Fukui and SIMOP partly reproduced |
-| Q-140 | Why does our method end dearer than our own planner on 27 of 100 held-out and 17 of 100 s4 test problems (E-64)? | Explained: `bench.py` reports the search alone, the frozen method takes the cheaper of planner and search (D-67 rule 1); report fix pending |
+| Q-140 | Why does our method end dearer than our own planner on 27 of 100 held-out and 17 of 100 s4 test problems (E-64)? | Closed → F-18: a reporting error (`bench.py` read the search alone); fixed, B1/B2 to be re-summarised on coe9 |
 | Q-139 | What time budget does our method get in the paper's headline tables (900 s, or a smaller fixed budget with 900 s as an extra column)? | Both reported (60 s and 900 s, user 2026-11-07); which one heads the tables is Tom's call |
 | Q-138 | Does any published method still beat our method (search over the greedy MRCM pass) on the lit-bench and val problems? | Closed → E-62: on 5 of 167 (FacDA 3, NFSP 1, DFMM 1); two by ~1.8x |
 | Q-137 | Does the search need the planner's lookahead, or does it make the recipe choice itself? | Closed → E-61: it makes it itself; greedy MRCM finishes 0.900 of the new planner (below on 79 of 99) vs lookahead 0.916 (72); no faster chooser needed |
@@ -632,12 +632,12 @@ Fukui (L-17), SIMOP (L-18). Closed 2026-11-09: every method in the folder that s
 preparation problem of ours is built (RASS stays out: impure stocks). The 1:1 baselines the
 papers cite (REMIA, DMRW, IDMA, GORMA, BS) are not on disk.
 
-**Q-140 Our method dearer than our own planner on held-out and s4 (E-64)?** · Explained
+**Q-140 Our method dearer than our own planner on held-out and s4 (E-64)?** · Closed → F-18
 (2026-11-08) B1 at 900 s: dearer on 27 of 100 held-out and 17 of 100 s4 (fluid). The search
 never sees the best planner's plan (its leaves use the greedy pass), and `bench.py` reports the
 search alone, while the frozen method (D-67 rule 1) and every earlier experiment take the
 cheaper of the planner and the search. Fix: report that, with the planner's time on the
-clock, from the stored records (no rerun). Pending the user's go-ahead.
+clock, from the stored records (no rerun). Done 2026-11-09 (user: "proceed"), F-18.
 
 **Q-139 Headline time budget for our method?** · **Both run (user, 2026-11-07); headline: Tom**
 (2026-11-07) Most s3-s5 searches use the whole 900 s (E-63); the published methods run in

@@ -1827,7 +1827,7 @@ Every published method is beaten under every goal except NFSP (fluid level, wast
   but 4 have a plan.
 - **Our method loses to our own planner** on 27 of 100 held-out (fluid; 24-25 under the other
   goals) and 17 of 100 s4 problems at 900 s: the search does not start from the best planner's
-  plan, its leaves use the weaker greedy pass (Q-140).
+  plan, its leaves use the weaker greedy pass (Q-140). *Reporting error, fixed by F-18: these rows read the search alone; re-summarise.*
 - An experiment, Q-125 stays open.
 
 ### E-63 (2026-11-07) Time of our method per stage (E-61 and E-62 records)
@@ -2968,6 +2968,17 @@ independent reference (oracle, optimum, bound, validator) catches it.**
   discarded when a later use was still to come). The run is redone in full. Also found: one
   strong finish can take minutes on s5, past the 900 s cap, so D-64's reading counts only
   the plans the search found by 900 s (its trace).
+- **F-18 (2026-11-09) B1's report showed the search alone, not our method (Q-140).** E-64's
+  tables read our method's cost from the search's trace only, while `method-v1` (D-67 rule 1)
+  is the cheaper of the best planner and the search. So on the problems where the search ended
+  dearer than the planner (27 of 100 held-out, 17 of 100 s4 under fluid at 900 s) the tables
+  showed a dearer number than the method delivers. **Fixed 2026-11-09** in `bench.py`'s
+  `ours_at`: the cheaper of the best planner (counted once the planners' time has passed) and
+  the search's plans, the search's trace timed after the planners; tests in
+  `tests/analysis/test_bench.py`. No rerun: both costs are in the stored records. E-64's
+  "dearer than our own planner" rows no longer hold and its tables are to be re-summarised from
+  `outputs/bench/b1.jsonl` on coe9 (and B2's from its records). Effect on the 60 s column: a
+  problem whose planners take longer than 60 s has no planner plan by then.
 - **Ops lessons (not for the paper):** Python stdout buffering hid a 10 h background check;
   pytest thrashed at 1,144% CPU without `OMP_NUM_THREADS=1`; parallel checks on the Mac
   overheated it (heavy jobs now run only on the workstation).
