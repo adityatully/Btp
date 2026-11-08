@@ -1766,6 +1766,36 @@ MRCM's intermediates on val_s2: 4 of 28 covered (chain D4), 5 of 28 (premix D3).
   again). (3) Built as SPEC 0.28 `hint_source: problem` (depth-4 chain in the recipe columns)
   for a copy-test comparison on stages 1–2 against the planner's hints.
 
+### E-64 (2026-11-08) B1, the paper test sets (D-69): beats six published methods, level with NFSP
+coe9, `scripts/bench.py` at `91cb874` (SPEC 0.33), `outputs/bench/b1.jsonl` (1,815 problem-goal
+pairs: 605 problems × 3 goals), method-v1 (flat prior, greedy MRCM finishes, 256 sims, 900 s).
+**Reading (D-69, own goal, 900 s):** beats DFM (steps, 88 problems), Generic (steps, 90), FacDA
+(fluid, 88), MRCM (fluid, 122), e-MRCM (fluid, 133), DFMM (waste, 113); **level with NFSP**
+(fluid, 80: mean ratio 1.009 [0.980, 1.044], median 0.991, 50 / 19 / 11). Same verdicts at 60 s.
+Every published method is beaten under every goal except NFSP (fluid level, waste level 1.049
+[0.943, 1.169]; steps 0.528).
+
+| set (900 s) | ours / planner: fluid | steps | waste | no plan | ours / bound (fluid) |
+|---|---|---|---|---|---|
+| s1 | 0.868 (57/43/0) | 0.974 | 0.737 | 0 | 1.428 |
+| s2 | 0.882 (54/46/0) | 0.911 | 0.812 | 0 | 1.818 |
+| s3 | 0.928 (68/32/0) | 0.863 | 0.757 | 0 | 1.293 |
+| s4 | 0.943 (67/13/17) | 0.957 | 0.825 | 3 | 1.420 |
+| s5 | 0.918 (57/40/7) | 0.946 | 0.812 | 1 | 1.502 |
+| held-out | 0.976 (60/13/27) | 0.967 | 0.822 | 0 | 1.042 |
+
+- **Coverage is low past stage 2:** the published methods accept s1 42-78 of 100, s2 0-54, s3
+  0-16, s4 0-9, s5 10-19, held-out 0-4. Stages 3-5 rest on the bound and our planner.
+- **Proved optima:** fluid s1 1.060 above the optimum (37 proved), s2 1.025 (10), s3 1.004 (14);
+  steps within 0.3% wherever proved; waste 8-14% above (s1, s2, s3, s5).
+- **At 60 s:** 11 / 17 / 20 problems of s3 / s4 / s5 have no plan yet, and on the held-out set
+  and s4 under waste our method is dearer than the planner alone (1.297, 1.191). By 900 s all
+  but 4 have a plan.
+- **Our method loses to our own planner** on 27 of 100 held-out (fluid; 24-25 under the other
+  goals) and 17 of 100 s4 problems at 900 s: the search does not start from the best planner's
+  plan, its leaves use the weaker greedy pass (Q-140).
+- An experiment, Q-125 stays open.
+
 ### E-63 (2026-11-07) Time of our method per stage (E-61 and E-62 records)
 One-off read on coe9 of `outputs/finish/{greedy_c,wins_w}.jsonl` (search over the greedy MRCM
 pass, flat prior, 256 sims, 900 s cap, one core per problem). Seconds: total = whole search;

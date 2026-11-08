@@ -227,7 +227,7 @@ depth 2 is 10-18× faster but 7-10% dearer, parked (D-44). *Round 3 done 2026-10
 
 ### Phase 6. Paper benchmarks and baselines
 
-*2026-11-07 (D-67): the full plan, rules and build order (B1–B5) are in `notes/benchmark_plan.md`. Now: B1, stage test sets. Sets built 2026-11-07 (D-68, 605 problems); runner `scripts/bench.py` and reading D-69; running on coe9 since 2026-11-07. B2 built the same day (D-70): `test_emrcm_v1` (e-MRCM's protocol, 2,847 problems) and `litbench_paper_v1`; run on coe9 after B1.*
+*2026-11-07 (D-67): the full plan, rules and build order (B1–B5) are in `notes/benchmark_plan.md`. Now: B1, stage test sets. Sets built 2026-11-07 (D-68, 605 problems); runner `scripts/bench.py` and reading D-69; done 2026-11-08 (E-64): beats six published methods, level with NFSP. B2 built the same day (D-70): `test_emrcm_v1` (e-MRCM's protocol, 2,847 problems) and `litbench_paper_v1`; run on coe9 after B1.*
 
 - **6.1 Paper checks:** robust-aliquot (Poddar 2020), Dong 2024, e-MRCM → claim wording
   (session `paper-checks`).
