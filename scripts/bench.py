@@ -15,10 +15,12 @@ Per problem and goal, in this order (the answer key is fixed before our method r
    A method that declines a problem records why (`na`).
 3. **Our planner alone:** `share`, `share_look3`, `share_orders`, `share_mrcm_look3` under the
    goal; the best planner is the cheapest.
-4. **Our method** (`METHOD`, frozen as `method-v1`): the flat-prior search with greedy MRCM
-   finishes (E-61), `sims` simulations per move, cap `seconds`. Its cost at any time t comes from
-   its trace (the cheapest whole plan found by t; before its first plan, none). The paper
-   reports t = 60 s and t = 900 s (Q-139).
+4. **Our method** (`METHOD`, frozen as `method-v1`): the cheaper of the best planner (step 3)
+   and the flat-prior search with greedy MRCM finishes (E-61), `sims` simulations per move, cap
+   `seconds`. Its cost at any time t is the cheapest of the best planner, once the planners'
+   time has passed, and the search's whole plans found by then, its trace timed after the
+   planners (`ours_at`, Q-140); before either, none. The paper reports t = 60 s and t = 900 s
+   (Q-139).
 
 Every plan is replayed by the engine and its DAG validated (rule 7); under `steps` and `waste`
 every plan is checked to keep the goal's first term first (`goal_check.check_first`).
@@ -290,8 +292,13 @@ def _star(args: tuple[dict[str, Any], dict[str, Any]]) -> dict[str, Any]:
 
 
 def ours_at(rec: dict[str, Any], t: float) -> float | None:
-    """Our method's cost if stopped at t seconds (None: no whole plan yet)."""
-    found = [c for s, c in rec["ours"].get("trace", []) if s <= t]
+    """Our method's cost if stopped at t seconds (None: no whole plan yet): the cheaper of the
+    best planner and the search (D-67 rule 1, Q-140). The planners run first, so the clock
+    starts with their time (`planner_seconds`); the search's trace is timed from its own start."""
+    off = rec.get("planner_seconds", 0.0)
+    found = [c for s, c in rec["ours"].get("trace", []) if off + s <= t]
+    if rec.get("best_planner") is not None and off <= t:
+        found.append(rec["best_planner"])
     return min(found) if found else None
 
 

@@ -53,7 +53,7 @@ def test_one_problem_under_each_goal_gives_a_whole_record() -> None:
     ours = rec["ours"]
     assert set(ours["by_goal"]) == set(B.GOALS)
     assert rec["bound"] - 1e-9 <= ours["by_goal"]["fluid"] <= rec["construction"] + 1e-9
-    assert B.ours_at(rec, 1e9) == min(c for _, c in ours["trace"])
+    assert B.ours_at(rec, 1e9) == min([c for _, c in ours["trace"]] + [rec["best_planner"]])
     for st in rec["planners"].values():
         assert st["sample"] >= 1 and st["mixes"] >= 1
     steps = B.run_task(B.tasks(["test_s1_v1"], ["steps"], 1)[0], OPTS)
@@ -79,6 +79,20 @@ def test_ours_at_reads_the_trace() -> None:
     rec = {"ours": {"trace": [(0.5, 100.0), (30.0, 90.0), (200.0, 80.0)]}}
     assert B.ours_at(rec, 0.1) is None
     assert B.ours_at(rec, 60.0) == 90.0
+    assert B.ours_at(rec, 900.0) == 80.0
+
+
+def test_ours_at_takes_the_planner_with_its_time() -> None:
+    """The cheaper of planner and search (Q-140); the search starts after the planners' 10 s."""
+    rec = {
+        "best_planner": 85.0,
+        "planner_seconds": 10.0,
+        "ours": {"trace": [(0.5, 100.0), (30.0, 90.0), (200.0, 80.0)]},
+    }
+    assert B.ours_at(rec, 5.0) is None
+    assert B.ours_at(rec, 11.0) == 85.0
+    assert B.ours_at(rec, 60.0) == 85.0
+    assert B.ours_at(rec, 205.0) == 85.0  # the 80 plan comes at 10 + 200 s
     assert B.ours_at(rec, 900.0) == 80.0
 
 
