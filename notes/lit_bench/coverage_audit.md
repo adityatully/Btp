@@ -27,8 +27,8 @@ They describe **about 25 methods**, of which **7 are built and benchmarked**.
 | **built (L-11)** | **Robust split-less** | Poddar, Banerjee, Wille, Bhattacharya, TODAES 26(1) 2020 (Robust Multi-Target... = Robust aliquot ILP, same file) | dilution, **many targets with copies (demand)**, no splits, zero waste, robust to split and dispensing errors | zero waste, robustness, then sample | ILP | Fig. 13, 18, 19 worked examples (accuracy 7); Tables 4-6, 8-9 (accuracy 7-9); Table 7 real gradients | s1, s3 |
 | **built (L-14)** | **TVODA** | Kundu et al., TCAD 2022 (same file as FacDA) | dilution, one target of total volume above M (demand by volume) | sample, then mixes | SMT | Fig. 9 (71:49, Vt 13) | s1 with demand |
 | **built (L-15)** | **WSPM** (+ incremental) | Li et al., TBioCAS 11(6) 2017 (WSPM.pdf) | dilution, one target (incremental: 2-4 in sequence) | sample, then mixes, waste | BFS | Fig. 10 (80/256), Table IV incremental | s1, s3 (tolerant targets only: it rounds intermediates) |
-| 2 | **Dong SDSA** | Dong, Chen, Chen, JETTA 40(1) 2024 | dilution, many targets on exponential gradients, dyadic only | sample, waste | none | Fig. 10 (848/1024); its tables against EDT | s3 (dyadic gradients only) |
-| 2 | **Fukui reuse** | Fukui & Yamashita, ISOCC 2024 (2024_kensuke...) | mixture, a second target reusing one leftover droplet of DFMM's graph | reagent | none | 2 pages: Fig. 2-3 example (4:3:5 from <3:0:1>), averages only (ratio sums 12, 16) | s4 ("our reading": the rule is only sketched) |
+| **built (L-16)** | **Dong SDSA** | Dong, Chen, Chen, JETTA 40(1) 2024 | dilution, many targets on exponential gradients, dyadic only | sample, waste | none | Fig. 10 (848/1024); its tables against EDT | s3 (dyadic gradients only) |
+| **built (L-17)** | **Fukui reuse** | Fukui & Yamashita, ISOCC 2024 (2024_kensuke...) | mixture, a second target reusing one leftover droplet of DFMM's graph | reagent | none | 2 pages: Fig. 2-3 example (4:3:5 from <3:0:1>), averages only (ratio sums 12, 16) | s4 ("our reading": the rule is only sketched) |
 | out | RASS (hRASS, cRASS, vRASS) | APCCAS 2023 (two copies, different files) | dilution from **impure** stock solutions with volume limits | stock cost | SMT | Fig. 1 (36/64) | none: our reservoirs are pure |
 
 ## 3. Not built: 1:1 (DMFB) methods, valid on MEDA as 1:1 mixes
@@ -38,7 +38,7 @@ They describe **about 25 methods**, of which **7 are built and benchmarked**.
 | **built (L-12)** | **MTCS / MTR / MTMD** | Kumar et al., TODAES 23(4) 2018 (MTCS : MTMD... = Demand-Driven Single- and Multitarget Mixture..., same file) | mixture, one target / many / **many with demand** | steps, waste | B4 frontier competitor; B3 |
 | **built (L-13)** | **DDMT** | Poddar et al., TODAES 27(1) 2021 (two copies) | dilution, many targets, **demand, k storage cells**, one mixer | steps given storage | B4 frontier competitor; B3 |
 | **built (L-13, as MTC)** | De Bruijn / ATSP multi-target | Bhattacharjee et al., 2014 (2014_Debasis...) | dilution, many targets within an error bound, no storage | mix-split steps | B3 |
-| 3 | SIMOP | 2021 (2021_subhashis...) | dilution, one target, user-ordered criteria; split errors studied | priority-ordered | B3 |
+| **built (L-18)** | SIMOP | 2021 (2021_subhashis...) | dilution, one target, user-ordered criteria; split errors studied | priority-ordered | B3 |
 
 ## 4. Cited by these papers, PDF not on disk
 

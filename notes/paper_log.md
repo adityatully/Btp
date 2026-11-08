@@ -3137,6 +3137,42 @@ independent reference (oracle, optimum, bound, validator) catches it.**
   **exact**; Fig. 12(a) (80/256: 4 ops, 1 sample) **exact**; Fig. 12(d) incremental 80 then 56:
   5 ops, 1 sample, 3 buffer **exact**, waste 2 units vs the paper's 4 droplets (it counts
   droplets later reused). Tests: `tests/solvers/test_wspm.py`.
+- **L-16 (2026-11-09) Dong's splitting-droplet sharing built (Dong, Chen & Chen, JETTA 2024;
+  Q-141; SPEC 0.38).** `src/meda/solvers/baselines/dong.py`, registered as `dong`, own goal
+  fluid. The paper's text is garbled; its numbers fix one reading: a piece of "CF x/1024" is
+  x/1024 of one sample droplet's volume, cut off by halving splits, and buffer tops each target
+  up (Fig. 8's piece counts are the targets' 1 bits; Table 3's 1 sample droplet and 9..1
+  operations and waste for x = 2..512 are one droplet's splits). Our engine dispenses exact
+  units, so the splitting tree costs nothing: Dong becomes one sample-buffer mix of 2^h units
+  per droplet (x / 2^h dyadic, 2^h <= M), demand packed into mixes up to M. Checks: Fig. 10
+  (848/1024) 848 sample + 176 buffer, no waste; Fig. 8's gradient 1408 sample units (the paper
+  counts ~1.5 droplets of 1024). The paper's droplet counts have no counterpart. Coverage
+  (B1 test sets, plan legal / 100): s1 3, s2 0, s3 3, s4 0, s5 2 (of 105), held-out 1; papers'
+  set 10 of 132. Tests: `tests/solvers/test_dong.py`.
+- **L-17 (2026-11-09) Fukui's droplet reuse built (Fukui & Yamashita, ISOCC 2024; Q-141; SPEC
+  0.38).** `src/meda/solvers/baselines/fukui.py`, registered as `fukui`, own goal fluid. A
+  target is plain DFMM, or e_w units of one leftover D_w mixed with e_n units of a DFMM droplet
+  D_n whose ratio solves the paper's Eq. 3; the paper does not say how e_w / es is chosen, ours
+  tries all es <= M and keeps the fewest reagent units, then waste. Targets in order, each
+  reusing one leftover of any earlier graph (`dfmm.best_graph` added for D_n). Check: Fig. 3
+  (4:3:5 from <3:0:1> at 1 : 2) gives D_n 1:3:4 **exact**. Table 1's averages (7.97 and 10.52
+  reagent droplets without reuse, ratio sums 12 and 16) are not reproduced: plain DFMM averages
+  4.7-7.4 over every M from 3 to 11 with 3 fluids, and the paper gives no M, fluid count or
+  cost rule. On 7:7:6 then a 12-sum target at M 5, reuse saves reagent on 50 of 52. Coverage:
+  s1 45, s2 54, s3 49, s4 26, s5 31, held-out 8; papers' set 119 of 132. Tests:
+  `tests/solvers/test_fukui.py`.
+- **L-18 (2026-11-09) SIMOP built (Bera et al., SN Comput. Sci. 2021, Part I; Q-141; SPEC
+  0.38).** `src/meda/solvers/baselines/simop.py`, registered as `simop` (waste > steps >
+  sample > buffer), own goal waste. Every 1:1 chain (each step mixes the newest droplet with
+  sample, buffer or an earlier step's spare droplet) by depth-first search with range and
+  lower-bound pruning, in place of the paper's look-up table. Checks: Table 5 (313/1024) buffer
+  first 2 sample / 3 buffer / 3 waste and sample first 1 / 4 / 3 **exact**; Fig. 1 (799/1024)
+  10 steps, waste 2 (the paper's 672 and 802) **exact**; Table 6 averages over the 1023 CFs at
+  10 bits: steps 9.01, sample 2.30, buffer 2.30 **exact**, waste 2.98 vs the paper's 2.59 (not
+  reproduced; a variant reusing any earlier CF without limit gives 1.98 and breaks the sample
+  average, so it is not that). 10 bits take 26 ms a CF on average; 11 bits over 9 s, so
+  `MAX_BITS` = 10. Demand d is the chain ceil(d / 2) times. Coverage: s1 32, s3 16, s5 11, the
+  rest 0; papers' set 2. Tests: `tests/solvers/test_simop.py`.
 
 ---
 
