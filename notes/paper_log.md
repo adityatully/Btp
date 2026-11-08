@@ -3093,6 +3093,50 @@ independent reference (oracle, optimum, bound, validator) catches it.**
   ceil(d v / M) mixes, an odd chain need leaves one unit (waste for us; the paper stores it).
   Non-dyadic exact targets are not applicable. The paper's SL_REMIA heuristic is not built (the
   ILP variant is its exact one). Tests: `tests/solvers/test_robust.py`.
+- **L-12 (2026-11-08) MTCS / MTR / MTMD built (Shalu et al., TODAES 2018; Q-141).**
+  `src/meda/solvers/baselines/mtmd.py`, registered as `mtmd` (MTCS/MTR at demand 1), own goal
+  waste. Min-Mix 1:1 trees from the ratios' bit columns, interleaved over targets (MTR); a kept
+  droplet replaces the leaves or the pair it mixes (common subtrees); demand by cloning the tree
+  top-down from the kept droplets (MTMD's CloneNode). The paper pairs at random; ours pairs
+  first what a later column wants (largest common subtree first). Paper checks: MTCS Fig. 3
+  (7:7:5:5:3:3:2) Tms 9, W 5 **exact**; MTMD Fig. 12(b) (5:3:2:10:12 x3, 14:6:5:1:6 x2)
+  Tms 13, W 7 **exact**; MTR Fig. 7 (39:13:12, 30:23:11) ours 14/9 vs 12/8 (random pairing).
+  The paper's W leaves out each root's second droplet. On MEDA every droplet is the target
+  volume v, mixes v:v; non-dyadic exact targets are not applicable; storage is the chip's (the
+  paper assumes none). Tests: `tests/solvers/test_mtmd.py`. With MTMD built, the claim's scope
+  is the narrower one in `coverage_audit.md` section 8.
+- **L-13 (2026-11-08) MTC and DDMT built (Mitra et al., TCAD 2014; Poddar et al., TODAES
+  2021; Q-141).** `src/meda/solvers/baselines/ddmt.py`, registered as `ddmt` (MTC at demand 1),
+  own goal steps. One de Bruijn path from CF 0 through the targets (ATSP, exact Held-Karp up to
+  14 targets), demand by DDMT's Algorithm 1 (D_i += ceil(D_{i+1} / 2)); SMkS storage schedule
+  not modelled. Paper checks, all **exact**: MTC Figs. 5-6 ({5, 11, 14}/16: 6 steps, 4 sample,
+  3 buffer); DDMT Fig. 4 ({3, 5} x {4, 8}: sequence {4, 6, 3, 5}, D {2, 4, 8, 8}); DDMT Fig. 3
+  ({3, 4, 5}/8 x {3, 2, 5}: 10 mix-splits, 7 sample). The papers' CFs are n-bit labels; a long
+  path's droplet drifts below 2^-n from its label, so an exact target off the path's exact
+  part is not applicable (our engine delivers the real droplet).
+  **Coverage on the B1 sets** (plan emitted and legal / problems): robust s1 31, s3 21, s4 4,
+  s5 14, held-out 2; MTMD s1 32, s2 26, s3 25, s4 1, s5 17, held-out 2; DDMT s1 32, s3 16,
+  s5 10, held-out 1 (of 100 or 105). Blockers: a v:v mix above M, targets of different droplet
+  volumes, non-dyadic targets. MTWM not counted here (slow; the bench run will).
+- **L-14 (2026-11-08) TVODA built (Kundu et al., TCAD 2022, Section IV; Q-141).**
+  `src/meda/solvers/baselines/tvoda.py`, registered as `tvoda`, own goal fluid. One dilution
+  target wanted in Vt = d v units: a forest of FacDA skeleton chains whose roots hold Vt, solved
+  with MTWM's ILP (`mtwm.solve`, now taking an edge rule and a reagent-first objective) under
+  TVODA's edges (any shallower node in a chain; between chains only P_src = P of the
+  destination's child). The forest ordering is in the paper's supplement (not on disk); ours
+  follows Fig. 9 and reproduces its forest **exactly** ([4,5,6], [4,5,6], [4,5,3,2] for 71:49,
+  M 6, Vt 13). Graph: ours nm 7, ns 9, nw 4 vs the paper's 9, 9, 6 (sample equal, the rest
+  lower). Tests: `tests/solvers/test_tvoda.py`.
+- **L-15 (2026-11-08) WSPM built (Li et al., TBioCAS 2017; Q-141).**
+  `src/meda/solvers/baselines/wspm.py`, registered as `wspm`, own goal fluid (sample first).
+  Primary droplets by search, the top-down choice (left a PD, right lower concentration) as an
+  exact recursion over (C, S) by (sample, operations, waste), PD sharing and incremental reuse
+  greedily from leftovers (a leftover also acts as a free primary droplet). The paper rounds
+  each mix to 1/delta (Eq. 1); our engine is exact, so only exact dilutions are taken (a loss
+  of options for WSPM). Paper checks: Fig. 6(c) (1/3 from 64(1) + 0(2): 1 op, 1 sample)
+  **exact**; Fig. 12(a) (80/256: 4 ops, 1 sample) **exact**; Fig. 12(d) incremental 80 then 56:
+  5 ops, 1 sample, 3 buffer **exact**, waste 2 units vs the paper's 4 droplets (it counts
+  droplets later reused). Tests: `tests/solvers/test_wspm.py`.
 
 ---
 

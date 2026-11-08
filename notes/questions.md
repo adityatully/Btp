@@ -57,7 +57,7 @@ chats. Last updated 2026-11-03.*
 | Q-125 | Change the claim to "search over a planner, with learning where the planner is weak", and stop trying to replace the planner on s3-s5? | Open, waiting on the user; after D-54 (plan 4.2) |
 | Q-126 | Can a value head rank sibling moves if it reads the candidate moves (and hints), or is trained to rank instead of to hit the cost? | Closed → E-50: ranking helps (0.38 → 0.52), below the 0.55 bar |
 | Q-128 | Does the search improve a published planner (MRCM) put at its leaves, as it improves ours? | Closed → E-55: yes, below MRCM on 7 of 13 of set B (bar 5), 5.1% below on average |
-| Q-141 | Which of the 13 unbuilt methods in the folder do we build, and in what order (L-9)? | Open; user: build all, one by one. Built: STWM, MTWM (L-10), robust split-less (L-11); next MTCS/MTR/MTMD |
+| Q-141 | Which of the 13 unbuilt methods in the folder do we build, and in what order (L-9)? | Open; user: build all, one by one. Built: STWM, MTWM (L-10), robust split-less (L-11), MTCS/MTR/MTMD (L-12), MTC/DDMT (L-13), TVODA (L-14), WSPM (L-15); left: Dong, Fukui, SIMOP |
 | Q-140 | Why does our method end dearer than our own planner on 27 of 100 held-out and 17 of 100 s4 test problems (E-64)? | Explained: `bench.py` reports the search alone, the frozen method takes the cheaper of planner and search (D-67 rule 1); report fix pending |
 | Q-139 | What time budget does our method get in the paper's headline tables (900 s, or a smaller fixed budget with 900 s as an extra column)? | Both reported (60 s and 900 s, user 2026-11-07); which one heads the tables is Tom's call |
 | Q-138 | Does any published method still beat our method (search over the greedy MRCM pass) on the lit-bench and val problems? | Closed → E-62: on 5 of 167 (FacDA 3, NFSP 1, DFMM 1); two by ~1.8x |
@@ -627,7 +627,8 @@ global token (Q-111).
 folder with no implementation. Suggested: MTWM, STWM, robust split-less (MEDA, our home
 ground); then MTMD, DDMT (1:1 with demand and storage, B4); then TVODA, WSPM, Dong, Fukui.
 User (2026-11-08): "build all one by one". Done: STWM and MTWM (L-10), robust split-less
-(L-11).
+(L-11), MTCS/MTR/MTMD (L-12), MTC/DDMT (L-13), TVODA (L-14), WSPM (L-15). Left: Dong SDSA
+(exponential-gradient droplet sets, model hard to map), Fukui 2024 (two-page sketch), SIMOP.
 
 **Q-140 Our method dearer than our own planner on held-out and s4 (E-64)?** · Explained
 (2026-11-08) B1 at 900 s: dearer on 27 of 100 held-out and 17 of 100 s4 (fluid). The search
