@@ -591,6 +591,42 @@ def build_emrcm() -> BenchmarkSet:
     )
 
 
+def build_dmfb_sweep() -> BenchmarkSet:
+    """Tier 2 engine check (SPEC 8.4; benchmark plan B3, D-71): every n/2^d for d = 4..8 on the
+    1:1 chip `dmfb_m2` at precision 2^d, one 1-unit droplet each (491 problems). The chip's
+    `max_denominator` is 2^d, not the reduced target's denominator, so 2/32 at d = 5 is its own
+    problem, as in the DMFB papers' accuracy levels."""
+    chip = load_chip("dmfb_m2")
+    sweep = [(n, d) for d in range(4, 9) for n in range(1, 2**d)]
+    instances = [
+        replace(
+            inst,
+            chip=replace(chip, max_denominator=2**d),
+            metadata={**inst.metadata, "generator": "dmfb_sweep", "cell": f"d{d}"},
+        )
+        for k, (n, d) in enumerate(sweep)
+        for inst in [dilution(f"dmfb_sweep-{k:03d}", [(n, 2**d)], chip)]
+    ]
+    return BenchmarkSet(
+        name="dmfb_sweep",
+        version=1,
+        instances=tuple(instances),
+        reference=answer_key(instances, load_weights("geometric")),
+        generator={
+            "builder": "scripts/make_benchmark.py:build_dmfb_sweep",
+            "chip": "dmfb_m2",
+            "costs": "geometric",
+            "answer_key": "[root conservation bound (SPEC 0.21), cheaper of naive and tree]",
+        },
+        seeds=(),
+        description=(
+            "Tier 2 engine check (D-71): every n/2^d, d = 4..8, on the 1:1 chip at precision "
+            "2^d. A test of the engine against the DMFB literature, never reported as a win. "
+            "Graded under costs/geometric."
+        ),
+    )
+
+
 BUILDERS: dict[str, Callable[[], BenchmarkSet]] = {
     "tiny_exact_v1": build_tiny_exact,
     "val_stage1_v1": build_val_stage1,
@@ -602,6 +638,7 @@ BUILDERS: dict[str, Callable[[], BenchmarkSet]] = {
     **{f"test_s{k + 1}_v1": functools.partial(build_test, k) for k in range(5)},
     "test_heldout_v1": functools.partial(build_test, None),
     "test_emrcm_v1": build_emrcm,
+    "dmfb_sweep_v1": build_dmfb_sweep,
 }
 
 

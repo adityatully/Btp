@@ -1,6 +1,10 @@
 # MEDA Design Automation — Codebase Specification
 
-Version 0.34 · 2026-11-07
+Version 0.35 · 2026-11-08
+
+Changes in 0.35 (paper benchmark B3, paper log D-71): `dmfb_sweep_v1` is built (8.4): every
+n/2^d, d = 4..8, on `dmfb_m2` with `max_denominator` 2^d (the DMFB accuracy level, not the
+reduced target's denominator). Its checks against NFSP's fluid optimum are fixed in D-71.
 
 Changes in 0.34 (paper benchmark B2, paper log D-70): tier 3 gains `test_emrcm_v1`, e-MRCM's
 own experiments rebuilt from its protocol (8.4); `litbench_paper_v1` is the tier 3 set for the
@@ -1284,7 +1288,8 @@ Sets per tier:
   (s5 105: 7 cells), seeds 20261107 + stage index (held-out + 5), no problem shared with any
   non-test set. Answer key [lower bound, cheapest construction]; our method never feeds it.
   The val, lit-bench and E2 sets shaped the method (D-37 to D-66) and are development sets.
-- `dmfb_sweep_v1` — tier 2, see above.
+- `dmfb_sweep_v1` — tier 2, see above. Built (0.35, D-71; `make_benchmark.py:build_dmfb_sweep`):
+  491 problems, one 1-unit droplet each, chip precision 2^d, answer key as the other sets.
 - `literature_<paper>_v1` — tier 3, one set per paper, filled manually from the PDF.
   Built (0.34, D-70): `litbench_paper_v1` (Poddar's x/64 at 4X and 8X and the worked examples of
   FacDA, Generic, DFMM and MRCM; seen in development, labelled so) and `test_emrcm_v1`

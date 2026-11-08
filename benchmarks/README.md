@@ -13,7 +13,7 @@ used as evidence for another tier's question.
 |---|---|---|
 | 0 Correctness | proved optimum reached? | `tiny_exact_v1` (built) |
 | 1 In-distribution | training stage learned? | **paper results:** `test_s1_v1` … `test_s5_v1`, `test_heldout_v1` (fresh, never tuned on; D-68); development: `val_s1_v2` … `val_s5_v2` (stages of `track2_v1`, SPEC 8.3; [bound, best known] under costs/geometric; `_v1`: same problems, the bound before SPEC 0.21 and the `depth` step limits before SPEC 0.22); `val_stage1_v1` (naive costs only), `val_stage1_v2` (same instances: 3 optima, 5 intervals), both on the v1 ladder |
-| 2 Engine check (DMFB) | core matches published 1:1 results? never a "win" | `dmfb_sweep_v1` |
+| 2 Engine check (DMFB) | core matches published 1:1 results? never a "win" | `dmfb_sweep_v1` (built, D-71: every n/2^d, d = 4..8, 491 problems) |
 | 3 Literature | reproduce, then beat, MEDA methods on their own problems | `litbench_paper_v1` (papers' worked problems), `test_emrcm_v1` (e-MRCM's protocol, D-70) |
 | 4 Generalisation | unseen and larger problems, unseen constraint combination | `heldout_combo_v2` (the held-out cell of `track2_v1`; `_v1` as above), `unseen_ratios_v1`, `larger_v1` |
 | 5 Frontier | MTMD + N >= 3 + demand + binding storage; scaling axes | `frontier_v1` |

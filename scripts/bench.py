@@ -36,6 +36,8 @@ B2 (D-70), the papers' own experiments: `sets=litbench_paper_v1` under all three
 `sets=test_emrcm_v1 goals=fluid methods=dfm,facda,generic,dfmm,mrcm,emrcm` (e-MRCM's
 protocol, its own table `emrcm_table`; NFSP's experiments are 1:1, so B3's).
 
+B3 (D-71), the 1:1 engine check: `sets=dmfb_sweep_v1 goals=fluid` (`dmfb_checks`).
+
 Reading, fixed in advance (D-69), is in `reading()`; it is given per set (D-70).
 """
 
@@ -63,6 +65,8 @@ from meda.generators.benchmark_io import BenchmarkSet
 from meda.solvers.base import SolveBudget
 from meda.solvers.baselines import nfsp as nfsp_module
 from meda.solvers.baselines import share
+from meda.solvers.baselines.bitscan import applies_to as bitscan_applies
+from meda.solvers.baselines.naive import naive_plan
 from meda.solvers.baselines.paper_graph import NotApplicable, emit
 from meda.solvers.exact_search import ExactSearch
 
@@ -215,6 +219,10 @@ def run_task(task: dict[str, Any], opts: dict[str, Any]) -> dict[str, Any]:
             except (IllegalActionError, ValueError, AssertionError) as e:  # recorded, never hidden
                 st_ = {"cost": None, "error": f"{type(e).__name__}: {e}"[:200]}
             out["published"][name] = st_
+
+    # 2b. Bit scanning, the 1:1 floor (B3, D-71): the naive construction under M = 2.
+    if goal == "fluid" and bitscan_applies(inst) is None:
+        out["bitscan"] = stats(inst, "bitscan", naive_plan(inst), 0.0)
 
     # 3. Our planner alone.
     makers = {
@@ -385,12 +393,67 @@ def summarise(path: Path) -> str:
                 )
                 + " |"
             )
+    if any(r["set"] == "dmfb_sweep_v1" for r in recs):
+        lines += ["", *dmfb_checks(recs)]
     if any(r["set"] == "test_emrcm_v1" for r in recs):
         lines += ["", *emrcm_table(recs)]
     lines += ["", "Reading (fixed in advance, D-69; per set, D-70):"]
     for s in sorted({r["set"] for r in recs}):
         lines.append(f"- {s}: {reading([r for r in recs if r['set'] == s])}")
     return "\n".join(lines)
+
+
+def fluid_units(st: dict[str, Any]) -> float:
+    """A plan's fluid cost alone under `costs/geometric` (what NFSP minimises)."""
+    w = WEIGHTS_BY_GOAL["fluid"]
+    return float(
+        st["sample"] * w.w_sample + st["reagent"] * w.w_reagent + st["buffer"] * w.w_buffer
+    )
+
+
+def dmfb_checks(recs: list[dict[str, Any]]) -> list[str]:
+    """B3 (D-71): the 1:1 engine check. NFSP is optimal in fluid cost among 1:1 graphs and its
+    plans lie in our space, so no plan of ours may use less fluid cost than NFSP, and no proved
+    optimum may cost more than NFSP's plan. Ours against bit scanning and NFSP is reported, never
+    graded (SPEC 8.4)."""
+    rs = [r for r in recs if r["set"] == "dmfb_sweep_v1" and r["goal"] == "fluid"]
+    solved = [r for r in rs if r["published"].get("nfsp", {}).get("by_goal")]
+    below, dearer = [], []
+    for r in solved:
+        nf = r["published"]["nfsp"]
+        for name, st in [("method", r["ours"]), *r["planners"].items()]:
+            if st.get("by_goal") and fluid_units(st) < fluid_units(nf) - 1e-9:
+                below.append(f"{r['id']} {name} {fluid_units(st):g} < NFSP {fluid_units(nf):g}")
+        if r["optimum"] is not None and r["optimum"] > nf["by_goal"]["fluid"] + 1e-9:
+            dearer.append(f"{r['id']} optimum {r['optimum']:g} > NFSP {nf['by_goal']['fluid']:g}")
+    lines = [
+        "## 1:1 engine check (`dmfb_sweep_v1`, D-71; a test, never a win)",
+        "",
+        f"NFSP solved {len(solved)} of {len(rs)} within its time limit.",
+        f"- Check 3a, plans of ours with less fluid cost than NFSP: {len(below)} (must be 0)"
+        + "".join(f"\n  - {x}" for x in below[:20]),
+        f"- Check 3b, proved optima dearer than NFSP: {len(dearer)} (must be 0)"
+        + "".join(f"\n  - {x}" for x in dearer[:20]),
+        "",
+        "| d | n | NFSP solved | ours / bit scanning | ours / NFSP | NFSP / bit scanning |",
+        "|---|---|---|---|---|---|",
+    ]
+    for cell in sorted({r["cell"] for r in rs}, key=lambda c: int(c[1:])):
+        group = [r for r in rs if r["cell"] == cell and ours_at(r, TIMES[1]) is not None]
+        sv = [r for r in group if r in solved]
+
+        def mean(xs: list[float]) -> str:
+            return f"{np.mean(xs):.3f}" if xs else "-"
+
+        bits = [r["bitscan"]["by_goal"]["fluid"] for r in group]
+        nf = [r["published"]["nfsp"]["by_goal"]["fluid"] for r in sv]
+        lines.append(
+            f"| {cell[1:]} | {len(group)} | {len(sv)} | "
+            f"{mean([ours_at(r, TIMES[1]) / b for r, b in zip(group, bits, strict=True)])} | "
+            f"{mean([ours_at(r, TIMES[1]) / c for r, c in zip(sv, nf, strict=True)])} | "
+            f"{mean([c / r['bitscan']['by_goal']['fluid'] for r, c in zip(sv, nf, strict=True)])} |"
+        )
+    return lines
 
 
 def emrcm_table(recs: list[dict[str, Any]]) -> list[str]:

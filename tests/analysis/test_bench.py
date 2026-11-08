@@ -100,3 +100,27 @@ def test_run_task_runs_only_the_methods_asked_for() -> None:
     task = B.tasks(["test_s1_v1"], ["fluid"], 1)[0]
     rec = B.run_task(task, OPTS | {"methods": ["mrcm"]})
     assert set(rec["published"]) == {"mrcm"}
+
+
+def test_dmfb_checks_flag_a_plan_below_nfsp() -> None:
+    """B3 (D-71): NFSP is fluid-optimal among 1:1 graphs, so a plan of ours with less fluid cost
+    is a bug, and the check names it."""
+
+    def st(sample: int, buffer: int, cost: float) -> dict[str, Any]:
+        return {"by_goal": {"fluid": cost}, "sample": sample, "reagent": 0, "buffer": buffer}
+
+    rec = {
+        "set": "dmfb_sweep_v1",
+        "goal": "fluid",
+        "id": "dmfb_sweep-007",
+        "cell": "d4",
+        "optimum": None,
+        "published": {"nfsp": st(2, 2, 140.0)},
+        "bitscan": st(3, 2, 210.0),
+        "planners": {"share": st(2, 2, 141.0)},
+        "ours": {**st(1, 2, 70.0), "trace": [(1.0, 70.0)]},
+    }
+    text = "\n".join(B.dmfb_checks([rec]))
+    assert "less fluid cost than NFSP: 1 (must be 0)" in text
+    assert "dmfb_sweep-007 method 66 < NFSP 130" in text
+    assert "dearer than NFSP: 0" in text

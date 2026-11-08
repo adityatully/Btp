@@ -295,3 +295,24 @@ def test_emrcm_protocol_set_follows_the_paper() -> None:
     assert cells.pop("N2-T1") == 511
     assert all(cells.pop(f"N{n}-T1") == 512 for n in (3, 4, 5))
     assert cells == {f"N{n}-T{t}": 50 for n in range(2, 6) for t in range(2, 6)}
+
+
+def test_dmfb_sweep_is_every_dyadic_target_with_textbook_bit_scanning() -> None:
+    """Benchmark plan B3 (D-71, SPEC 8.4): every n/2^d, d = 4..8, on the 1:1 chip at precision
+    2^d; bit scanning (the naive plan under M = 2) takes d - tz(n) mixes, one sample unit per
+    set bit of n."""
+    bench = BenchmarkSet.read("dmfb_sweep_v1", BENCHMARKS_DIR)
+    assert len(bench) == 15 + 31 + 63 + 127 + 255
+    seen = set()
+    for inst in bench.instances:
+        d = int(inst.metadata["cell"][1:])
+        assert inst.chip.max_mix_volume == inst.chip.min_mix_volume == 2
+        assert inst.chip.max_denominator == 2**d
+        (target,) = inst.targets
+        n = target.composition.num[0] * 2**d // target.composition.den
+        seen.add((n, d))
+        _, totals, _ = replay(inst, naive_plan(inst))
+        tz = (n & -n).bit_length() - 1
+        assert totals.mix_ops == d - tz
+        assert totals.reagent_by_fluid[0] == bin(n).count("1")
+    assert seen == {(n, d) for d in range(4, 9) for n in range(1, 2**d)}
