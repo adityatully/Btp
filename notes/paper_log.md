@@ -3056,6 +3056,43 @@ independent reference (oracle, optimum, bound, validator) catches it.**
   solved in 600 s". Runner `scripts/lit_bench_full.py`: NFSP and e-MRCM on all of val_s3-s5_v2
   (122) against the best planner, set C marked, E-36's search optional; tried on 9 problems at
   60 s on the Mac (runs end to end). Numbers when the workstation run is back.
+- **L-9 (2026-11-08) Coverage audit: 7 of about 25 methods in the folder are benchmarked**
+  (user: "we cover and test against all of them"; `notes/lit_bench/coverage_audit.md`). 25 PDFs,
+  21 distinct papers (4 duplicates). Built: DFM, FacDA, Generic, DFMM, MRCM, e-MRCM, NFSP. Not
+  built, MEDA: **MTWM** (many-target mixture, waste; the paper compares against e-MRCM), **STWM**
+  (single-target mixture, waste; DFMM's paper's own optimiser), **robust split-less**
+  (Poddar 2020: many dilution targets with copies, zero waste, ILP; the only MEDA method with
+  demand), TVODA, WSPM, Dong SDSA, Fukui 2024 (a two-page sketch); RASS is out (impure stocks).
+  Not built, 1:1: **MTMD, DDMT** (demand, storage; B4), the 2014 de Bruijn method, SIMOP. Cited
+  but not on disk: REMIA, DMRW, IDMA, GORMA, WARA, CoDOS and the other 1:1 baselines. Out of
+  scope: flow-based, placement, hardware, the survey. Found on the way: real assay ratio sets
+  for B5 (robust paper Table 7; MTWM Tables 1-2). Suggested order: MTWM, STWM, robust
+  split-less; then MTMD, DDMT; then the narrow ones (Q-141).
+- **L-10 (2026-11-08) STWM and MTWM built (Kundu & Roy, TODAES 2023; Q-141).**
+  `src/meda/solvers/baselines/mtwm.py`, registered in `lit_bench_full.METHODS` as `mtwm` (STWM is
+  the same model on one target), own goal waste. The paper's SMT clauses (1)-(14) over DFMM
+  skeletons, written as an exact ILP (w one-hot, products linear) on HiGHS; the clauses state no
+  objective, so we minimise nw, then nr, then nm. HiGHS cannot prove the optimum on M 7 cases
+  in minutes (weak linearisation), so the solve stops at 2,000 branch-and-bound nodes and keeps
+  the best graph (deterministic: two runs equal; the paper too caps edges on large cases and
+  takes sub-optimal graphs). Paper checks (ours vs printed nw/nr/nm):
+  Fig. 15 (M 5) 4/15/7 vs 8/20/8, and the paper's own graph fits our model (it is really
+  nw 9: node 0:3:2 makes 5, passes 2, drawn with 2 waste dots). Table 2 (M 7):
+  5/26/7 vs 28/49/11; 7/28/7 vs 31/52/11; 5/26/7 vs 28/49/12; 12:12:1 x3 2/17/4 vs 8/23/6;
+  97:97:6 x3 3/18/9 vs 5/20/12; 49:49:2 x3 **5**/20/6 vs **4**/22/6 (more waste, less reagent;
+  not proven optimal). STWM Table 1 (M 5): ChIP 9/13/5 vs 14/18/7; Plasmid 10/14/6 vs 12/16/7;
+  Splinkerette 7/11/5 vs 11/15/6; Silver 11/15/6 equal; Colorimetric (M 4) 6/10/3 equal.
+  Solve times 0.5-47 s on the Mac. Tests: `tests/solvers/test_mtwm.py`.
+- **L-11 (2026-11-08) Robust split-less built (Poddar et al., TODAES 2020; Q-141).**
+  `src/meda/solvers/baselines/robust.py`, registered as `robust`, own goal waste. Each target
+  droplet is one split-less mix of aliquots of ECFs 2^j/2^n; the paper's ILP (least aliquots k)
+  has a closed form (k powers of two up to 2^n sum to T = C k 2^n iff q + popcount(r) <= k <= T),
+  so no solver. Paper check: Example 5 (71/128) gives {2, 8, 32, 128}/128 in 1, 1, 1, 3, k 6,
+  as printed. ECFs from split-less 1:1 chains shared by all targets (the paper's reservoirs).
+  Our reading: one aliquot = one unit, every mix <= M (the paper has no M), demand split over
+  ceil(d v / M) mixes, an odd chain need leaves one unit (waste for us; the paper stores it).
+  Non-dyadic exact targets are not applicable. The paper's SL_REMIA heuristic is not built (the
+  ILP variant is its exact one). Tests: `tests/solvers/test_robust.py`.
 
 ---
 

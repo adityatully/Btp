@@ -238,7 +238,7 @@ depth 2 is 10-18× faster but 7-10% dearer, parked (D-44). *Round 3 done 2026-10
   2026-10-31 (L-6, L-7):* all PDFs now on disk; e-MRCM built and matches its worked example;
   its Table III does not reproduce under our reading (Q-117); reported as "our reading" (user). NFSP built 2026-10-31 (L-8):
   matches its Fig. 2; 600 s per solve on the workstation (user, Q-118 closed, L-8); runner
-  `scripts/lit_bench_full.py` run 2026-11-03 (E-51): NFSP applies to 17 of 122, e-MRCM to 13; together they beat our planner on 13.
+  `scripts/lit_bench_full.py` run 2026-11-03 (E-51): NFSP applies to 17 of 122, e-MRCM to 13; together they beat our planner on 13. *Audit 2026-11-08 (L-9, `notes/lit_bench/coverage_audit.md`): 7 of about 25 methods in the folder built; 13 to build (Q-141).*
 - **6.4 Tier 4:** generalisation probes (with 5.2).
 - **6.5 Tier 5:** frontier set `frontier_v1`.
 - **6.6 Tier 6:** assay ratios from real protocols.
