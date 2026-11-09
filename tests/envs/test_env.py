@@ -100,6 +100,26 @@ def test_step_after_end_raises() -> None:
         env.step(np.int64(0))
 
 
+def test_step_action_matches_step_by_index_and_checks_the_rules() -> None:
+    """D-73: an Action given directly steps as its candidate index does; an illegal one
+    raises, and so does a step after the end."""
+    by_index, direct = make_env([CASE3]), make_env([CASE3])
+    by_index.reset(seed=0)
+    direct.reset(seed=0)
+    for act in [*CASE3_PLAN, Output(Source.droplet(3), 0)]:
+        a = by_index.step(np.int64(index_of(by_index, act)))
+        b = direct.step_action(act)
+        assert a[1:4] == b[1:4] and direct.legal == by_index.legal
+        assert all(np.array_equal(a[0][k], b[0][k]) for k in a[0])
+    assert b[2] and b[4]["success"]
+    with pytest.raises(RuntimeError, match="reset"):
+        direct.step_action(Output(Source.droplet(3), 0))
+    fresh = make_env([CASE3])
+    fresh.reset(seed=0)
+    with pytest.raises(IllegalActionError):
+        fresh.step_action(Output(Source.droplet(9), 0))
+
+
 def test_success_episode_reward_cost_and_dag() -> None:
     env = make_env([CASE3])
     env.reset(seed=0)

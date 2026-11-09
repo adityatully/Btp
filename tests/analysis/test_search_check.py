@@ -384,3 +384,36 @@ def test_auto_finisher_switches_to_the_plain_pass_when_mrcm_is_slow(
     opts = OPTS | {"seconds": 10.0, "switch_seconds": limit, "root_switch_seconds": root_limit}
     rec = SC.run_task(task, "uniform", 2, opts, "auto")
     assert rec["search_cost"] is not None and rec["search_cost"] <= float(got[1]) + 1e-9
+
+
+def test_planner_jumps_hold_the_planners_first_decision() -> None:
+    """D-73: from the empty chip the jumps include the plain planner's first delivery group,
+    one run of actions per (target, candidate), each longer than one action."""
+    task = SC.tasks({"C"}, 1)[0]
+    inst = SC.Instance.from_json(task["instance"])
+    start = SC.PrepState.initial(inst)
+    jumps = SC.PlannerJumps(inst, 3, None)(start)
+    assert jumps and all(len(j) > 1 for j in jumps) and len(set(jumps)) == len(jumps)
+    plan = finish_from(start, inst, SC.WEIGHTS)
+    assert plan is not None
+    assert any(plan[0][: len(j)] == j for j in jumps)
+
+
+def test_search_with_jumps_is_never_dearer_than_its_finisher() -> None:
+    """D-73: jumps are extra moves; the root's first leaf is still the finisher's own plan."""
+    task = SC.tasks({"C"}, 1)[0]
+    inst = SC.Instance.from_json(task["instance"])
+    root = SC.StrongFinish(inst, lookahead=0)(SC.PrepState.initial(inst))
+    assert root is not None
+    opts = OPTS | {"seconds": 20.0, "jumps": 3, "jump_share": 0.5}
+    rec = SC.run_task(task, "uniform", 4, opts, "share_mrcm")
+    assert rec["jumps"] == 3 and rec["leaves"] > 1
+    assert rec["search_cost"] is not None and rec["search_cost"] <= float(root[1]) + 1e-9
+
+
+def test_jumps_take_their_share_of_the_prior() -> None:
+    search = SC.Search.__new__(SC.Search)
+    search.jump_share = 0.25
+    p = search._with_jumps(SC.np.full(6, 1 / 6), 2)
+    assert p.sum() == pytest.approx(1.0) and p[-1] == pytest.approx(0.125)
+    assert search._with_jumps(SC.np.zeros(0), 4).tolist() == [0.25] * 4

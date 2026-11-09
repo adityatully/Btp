@@ -139,7 +139,7 @@ import math
 import sys
 import time
 from collections import defaultdict
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from multiprocessing import Pool
 from pathlib import Path
 from typing import Any
@@ -151,9 +151,11 @@ from meda.analysis.evaluate import build_env
 from meda.core.actions import Action
 from meda.core.composition import Rational
 from meda.core.problem import Instance
+from meda.core.rules import IllegalActionError
 from meda.core.state import PrepState
 from meda.envs.sample_prep_env import EnvSnapshot, SamplePrepEnv
 from meda.generators.benchmark_io import BenchmarkSet
+from meda.solvers.baselines import share
 from meda.solvers.baselines.dfmm import dfmm
 from meda.solvers.baselines.facda import dfm, facda
 from meda.solvers.baselines.generic import generic
@@ -361,6 +363,9 @@ class Node:
     visits: np.ndarray = field(init=False)
     total: np.ndarray = field(init=False)
     children: dict[int, Node] = field(default_factory=dict)
+    # D-73: planner jumps, the moves after the env's candidates (index len(legal) + j);
+    # None until the search first comes back to the node (most leaves are never revisited)
+    jumps: tuple[tuple[Action, ...], ...] | None = None
 
     def __post_init__(self) -> None:
         self.visits = np.zeros(len(self.prior), dtype=np.int64)
@@ -381,10 +386,15 @@ class Search:
         rng: np.random.Generator | None = None,
         collect: int | None = None,
         finish: Any = None,
+        jumps: Any = None,
+        jump_share: float = 0.5,
     ) -> None:
         self.env, self.inst, self.agent, self.deadline = env, inst, agent, deadline
         # the leaf finisher (D-55): state -> (actions, cost) or None; the sharing pass by default
         self.finish = finish or (lambda state: finish_from(state, inst, WEIGHTS))
+        # D-73: state -> the planner's next moves as action runs (None: single actions only),
+        # and the share of a node's prior they get together
+        self.jumps, self.jump_share = jumps, jump_share
         self.planner_leaf, self.reward_scale = planner_leaf, reward_scale
         self.rng = rng  # breaks ties at random; without it ties go in candidate order (E-33)
         self.best: tuple[float, tuple[Action, ...], int] | None = None  # cost, plan, tail
@@ -444,19 +454,58 @@ class Search:
             value = self.score(cost)
         return Node(snap, actions, prior, value, False, best)
 
+    def add_jumps(self, node: Node) -> None:
+        """Give `node` its planner jumps (D-73) the first time the search comes back to it, so
+        a leaf never revisited costs no more than in v1, and the finisher (at the root, the
+        MRCM switch) has run before the jumps choose their recipes."""
+        if self.jumps is None or node.jumps is not None or node.terminal:
+            node.jumps = node.jumps or ()
+            return
+        self.env.restore(node.snap)
+        node.jumps = tuple(self.jumps(self.env.state))
+        m = len(node.jumps)
+        if m:
+            node.prior = self._with_jumps(node.prior, m)
+            node.visits = np.concatenate([node.visits, np.zeros(m, dtype=np.int64)])
+            node.total = np.concatenate([node.total, np.zeros(m)])
+
+    def _with_jumps(self, prior: np.ndarray, m: int) -> np.ndarray:
+        """The env's candidates keep 1 - `jump_share` of the prior, the `m` jumps share the
+        rest evenly (all of it when there are no candidates)."""
+        if m == 0:
+            return prior
+        if len(prior) == 0:
+            return np.full(m, 1.0 / m)
+        return np.concatenate([prior * (1 - self.jump_share), np.full(m, self.jump_share / m)])
+
     def score(self, cost: float) -> float:
         return max(-1.0, (self.c0 - cost) / self.c0)
 
     def child(self, node: Node, i: int) -> Node:
         self.env.restore(node.snap)
-        action = self.env.legal[i]
-        obs, _, term, trunc, info = self.env.step(i)
-        return self.leaf(obs, (*node.actions, action), info if (term or trunc) else None)
+        n = len(self.env.legal)
+        if i < n:
+            action = self.env.legal[i]
+            obs, _, term, trunc, info = self.env.step(i)
+            return self.leaf(obs, (*node.actions, action), info if (term or trunc) else None)
+        done: list[Action] = []  # a planner jump (D-73): its actions, until the episode ends
+        try:
+            assert node.jumps is not None
+            for action in node.jumps[i - n]:
+                obs, _, term, trunc, info = self.env.step_action(action)
+                done.append(action)
+                if term or trunc:
+                    break
+        except IllegalActionError:  # the planner's relaxed step limit, or a bug: a dead end
+            return Node(self.env.snapshot(), (*node.actions, *done), np.zeros(0), -1.0, True)
+        return self.leaf(obs, (*node.actions, *done), info if (term or trunc) else None)
 
     def simulate(self, root: Node) -> None:
         path: list[tuple[Node, int]] = []
         node = root
         while True:
+            if node.jumps is None:
+                self.add_jumps(node)
             n = node.visits.sum()
             q = np.where(node.visits > 0, node.total / np.maximum(node.visits, 1), node.value)
             u = C_PUCT * node.prior * math.sqrt(n + 1) / (1 + node.visits)
@@ -498,6 +547,16 @@ class Search:
             if capped or root.visits.sum() == 0:
                 break
             i = int(np.argmax(root.visits))
+            if self.jumps is not None:  # D-73: a jump can end the plan; its cost is kept as
+                # an answer, but the search moves on along the busiest unfinished move
+                open_ = [
+                    j
+                    for j in np.argsort(-root.visits, kind="stable")
+                    if root.visits[j] > 0 and not root.children[int(j)].terminal
+                ]
+                if not open_:
+                    break
+                i = int(open_[0])
             if self.collect is not None:  # the other branches are never visited again
                 for j, other in root.children.items():
                     if j != i:
@@ -616,6 +675,43 @@ class AutoFinish:
         return found
 
 
+class PlannerJumps:
+    """The search's planner jumps (D-73): from a state, for each open target, the planner's
+    `k` cheapest candidates for that target's next delivery group (`share._options`), each as
+    the run of actions that makes it. With them the search can take the planner's decisions
+    (which target next, which recipe) as single moves, besides single actions; the 4 planner
+    runs are paths of such moves. MRCM's tree is a recipe only while `finish` uses it (pilot
+    A's switch, D-72), so a slow MRCM never slows the jumps."""
+
+    def __init__(self, inst: Instance, k: int, finish: Any) -> None:
+        self.inst, self.k, self.finish = inst, k, finish
+        self.relaxed = replace(inst, step_limit=share.RELAXED_STEP_LIMIT)
+
+    def _cache(self) -> dict[Any, list[Any]] | None:
+        if isinstance(self.finish, AutoFinish):
+            return self.finish.mrcm.cache if self.finish.mode == "share_mrcm" else None
+        if isinstance(self.finish, StrongFinish):
+            return self.finish.cache
+        return None
+
+    def __call__(self, state: PrepState) -> list[tuple[Action, ...]]:
+        pool = {d.uid for d in state.droplets}
+        b = share._Builder(self.relaxed, state, [], WEIGHTS, pool, mrcm=self._cache())
+        out: list[tuple[Action, ...]] = []
+        for tid in range(len(self.inst.targets)):
+            if not state.remaining_demand[tid]:
+                continue
+            try:
+                options = share._options(b, tid)
+            except IllegalActionError:
+                continue
+            for _, _, trial in options[: self.k]:
+                run = tuple(trial.actions)
+                if len(run) > 1 and run not in out:  # one action is already a candidate
+                    out.append(run)
+        return out
+
+
 def run_task(
     task: dict[str, Any], kind: str, sims: int, opts: dict[str, Any], finisher: str = "share"
 ) -> dict[str, Any]:
@@ -676,8 +772,17 @@ def run_task(
             float(opts.get("switch_seconds", AUTO_LIMIT)),
             float(opts.get("root_switch_seconds", AUTO_ROOT_LIMIT)),
         )
+    k = int(opts.get("jumps", 0))  # D-73: planner jumps per open target (0: none, v1)
     search = Search(
-        env, inst, agent, t0 + opts["seconds"], kind != "zero", opts["reward_scale"], finish=finish
+        env,
+        inst,
+        agent,
+        t0 + opts["seconds"],
+        kind != "zero",
+        opts["reward_scale"],
+        finish=finish,
+        jumps=PlannerJumps(inst, k, finish) if k > 0 else None,
+        jump_share=float(opts.get("jump_share", 0.5)),
     )
     out = search.run(sims)
     stats = hs.plan_stats(inst, f"search_{kind}", out["plan"], time.perf_counter() - t0)
@@ -701,6 +806,8 @@ def run_task(
         finish_mode=finish.mode if isinstance(finish, AutoFinish) else finisher,
         root_finish_seconds=finish.root_seconds if isinstance(finish, AutoFinish) else None,
         switched_at=finish.switched_at if isinstance(finish, AutoFinish) else None,
+        jumps=k,
+        jump_share=float(opts.get("jump_share", 0.5)) if k > 0 else None,
         **{f"search_{k}": v for k, v in stats.items()},
     )
     if opts.get("keep_plan"):  # bench.py: the plan itself, in-process only (not JSON)

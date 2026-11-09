@@ -296,7 +296,21 @@ class SamplePrepEnv(gym.Env[Obs, np.int64]):
                 f"instance '{inst.instance_id}' step {state.step}: candidate index {idx} is "
                 f"masked ({len(self._legal)} legal candidates)"
             )
-        nxt, cost, delta = apply(state, self._legal[idx], inst)
+        return self._advance(self._legal[idx])
+
+    def step_action(self, action: Action) -> tuple[Obs, float, bool, bool, dict[str, Any]]:
+        """`step` for an `Action` given directly rather than by candidate index (the search's
+        planner jumps, D-73). The candidate list keeps one of two identical droplets, so a
+        planner's action may name the other; `apply` checks it against the rules all the
+        same and raises IllegalActionError if it breaks one."""
+        if self._done or self._state is None or self._instance is None:
+            raise RuntimeError("episode is over (or not started); call reset()")
+        return self._advance(action)
+
+    def _advance(self, action: Action) -> tuple[Obs, float, bool, bool, dict[str, Any]]:
+        inst, state = self._instance, self._state
+        assert inst is not None and state is not None
+        nxt, cost, delta = apply(state, action, inst)
         for node in delta.nodes:
             if node.type is NodeType.MIX:
                 self._born[node.id] = nxt.step  # age 0 right after the action that made it

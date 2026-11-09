@@ -38,6 +38,9 @@ Arguments are key=value: `sets` (default all six), `goals` (default fluid,steps,
 `AUTO_ROOT_LIMIT`) are for the leaf-finisher pilot (D-72) only: `auto` is pilot A, greedy MRCM
 at the leaves until one MRCM finish is slower than the switch (the root's has its own), then
 the plain sharing pass. Records keep `finish_mode`, `root_finish_seconds` and `switched_at`.
+`jumps=k` (D-73, v3 trial) adds the planner's k cheapest next moves per open target to the
+search as single moves, with `jump_share` (default 0.5) of each node's prior; the planner runs
+still run, as the reference the trial is read against (search alone, from `ours.trace`).
 
 B2 (D-70), the papers' own experiments: `sets=litbench_paper_v1` under all three goals and
 `sets=test_emrcm_v1 goals=fluid methods=dfm,facda,generic,dfmm,mrcm,emrcm` (e-MRCM's
@@ -275,9 +278,11 @@ def run_task(task: dict[str, Any], opts: dict[str, Any]) -> dict[str, Any]:
         "keep_plan": True,
         "switch_seconds": opts.get("switch_seconds", sc.AUTO_LIMIT),
         "root_switch_seconds": opts.get("root_switch_seconds", sc.AUTO_ROOT_LIMIT),
+        "jumps": opts.get("jumps", 0),
+        "jump_share": opts.get("jump_share", 0.5),
     }
     finisher = opts.get("finisher", METHOD["finisher"])
-    out["method"] = {**METHOD, "finisher": finisher}
+    out["method"] = {**METHOD, "finisher": finisher, "jumps": opts.get("jumps", 0)}
     rec = sc.run_task(task_, METHOD["search"], opts["sims"], sopts, finisher)
     plan = rec["plan"]
     ours = stats(inst, "method", plan, rec["search_seconds"]) if plan else {"cost": None}
@@ -569,6 +574,9 @@ def main(argv: list[str]) -> None:
         "finisher": args.get("finisher", METHOD["finisher"]),
         "switch_seconds": float(args.get("switch_seconds", sc.AUTO_LIMIT)),
         "root_switch_seconds": float(args.get("root_switch_seconds", sc.AUTO_ROOT_LIMIT)),
+        # D-73: planner jumps per open target in the search (0: v1) and their prior share
+        "jumps": int(args.get("jumps", 0)),
+        "jump_share": float(args.get("jump_share", 0.5)),
     }
     limit = int(args["limit"]) if "limit" in args else None
     todo = [

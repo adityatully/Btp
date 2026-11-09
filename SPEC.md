@@ -7,7 +7,10 @@ Changes in 0.39 (leaf-finisher pilot, paper log D-72, Q-142): tier 1 development
 the builder now takes the cells and seed). `scripts/search_check.py` gains the `auto` leaf
 finisher (greedy MRCM until one finish is slower than 2 s, the root's 60 s, then the plain
 sharing pass),
-run by `bench.py finisher=auto`. Method-v1 is unchanged.
+run by `bench.py finisher=auto`. `SamplePrepEnv.step_action(action)` steps an `Action` given
+directly (checked by `apply`; D-73) for the search's planner jumps (`bench.py jumps=k`: the
+planner's k cheapest next delivery groups per open target as single moves). Method-v1 is
+unchanged.
 
 Changes in 0.38 (literature coverage, paper log L-16 to L-18, Q-141): Dong's splitting trees
 (`dong.py`), Fukui's droplet reuse (`fukui.py`) and SIMOP (`simop.py`) join the published
