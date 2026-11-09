@@ -1030,6 +1030,37 @@ Format: date · decision · alternatives considered · why · evidence.
   **Pass:** A becomes method-v2 for the B1 / B2 rerun. **Fail:** report N = 4-5 as a limit
   of the method and go to the architecture question.
 
+- **D-73 (2026-11-09) Trial v3: planner jumps in the search, to drop the 4 planner runs.**
+  E-68: the search alone loses to the 4 runs on 8-27 of 100 s4 / s5 / held-out problems, where
+  target order and later recipes decide; it spends its sims on single actions early in the
+  plan. User asked for a middle ground between single actions and a search over the
+  planner's decisions only ("not search planners move and also not tiny decisions"). **v3** =
+  pilot A plus **jumps**: at every node, besides the env's single actions, the planner's 3
+  cheapest next delivery groups for each open target (`share._options`), each one move that
+  plays its run of actions (`search_check.PlannerJumps`; `SamplePrepEnv.step_action`).
+  Jumps get half of each node's prior (flat over them), single actions the other half. Each
+  leaf is still scored by finishing with the planner. The search keeps every single action,
+  so nothing it can reach now is lost; the 4 runs are paths of jumps (run 3: the target
+  order; runs 2 and 4: a recipe among the 3 cheapest). Risk: the sims spread over more moves.
+  Fixed before any run: k = 3, share 0.5, `finisher=auto`, 900 s, 256 sims.
+  **Run:** `bench.py ... finisher=auto jumps=3` on pilot A's sets (`val_emrcm_v1`, `val_s3_v2`
+  to `val_s5_v2`), read against pilot A's v1 and A records. **v3's answer is the search alone**
+  (its trace); the planner runs are computed only as the reference.
+  **Pass bar, fixed in advance:** (1) v3's search alone is dearer than the best of the 4 runs
+  on at most 2% of the problems; (2) v3's search alone against v1's method (cheaper of runs and
+  search): mean ratio at most 1.00, 95% CI upper end below 1.01. **Both:** v3 without the
+  planner runs is method-v2's candidate (one search, no best of 5). **(2) only:** keep the runs
+  and the cheaper of the two. **Neither:** jumps do not pay; report and keep A.
+  *Mac trial before the run (5 problems of val_s4_v2 / val_s5_v2, 60 s, with and without jumps),
+  two fixes, both mechanics, the bar unchanged:* (a) jumps are computed when the search first
+  comes back to a node, not for every leaf (most leaves are never revisited; the finisher's
+  MRCM switch then runs before any jump picks a recipe); (b) a jump can finish the plan, and
+  the search was committing to such finished moves and stopping early (val_s5-000: 463 vs
+  338, run over in 14 of 30 s): with jumps on, the search commits to the busiest unfinished
+  move. After both: same cost on 3 of 5, val_s5-000 339 vs 338, **val_s4-007 534 vs 271**
+  (jumps dearer); more leaves with jumps on all 5. No gain seen at 60 s on these small
+  problems (T 1-3, where E-68 finds the runs add nothing); the coe9 run decides.
+
 ## 4. Experiments and results
 
 ### E-1 (2026-10-13) Exact search on the hand-checked cases (M5)
@@ -1808,6 +1839,23 @@ MRCM's intermediates on val_s2: 4 of 28 covered (chain D4), 5 of 28 (premix D3).
   (an exact lower bound on mixes left, or a constructive method's recipes, which is a planner
   again). (3) Built as SPEC 0.28 `hint_source: problem` (depth-4 chain in the recipe columns)
   for a copy-test comparison on stages 1–2 against the planner's hints.
+
+### E-68 (2026-11-09) Can the search drop the 4 planner runs? Not on s4, s5, held-out
+B1 records (E-64, `outputs/bench/b1.jsonl`, coe9), search alone (cheapest plan in its trace,
+any time) against the best of the 4 planner runs, per set and goal. A diagnosis for the
+architecture question (user: "could we possibly try to skip the planners 4 methods"); nothing
+tuned on these numbers.
+- **s1, s2, s3: the runs add nothing** (search alone dearer on 0 of 100 under every goal;
+  s3 waste 6, by under 0.1%).
+- **s4, s5, held-out: the runs still win** on 8-27 of 100 per goal. Fluid: 27 / 19 / 8
+  (held-out / s4 / s5), by 1.3% / 2.0% / 6.4% on those; steps: 25 / 21 / 14, by 3.8-7.2%;
+  waste: 24 / 24 / 11, by 17-27%.
+- **Which run wins there:** `share_mrcm_look3` (recipe lookahead with MRCM's tree) most
+  often (fluid 29 of 54, waste 34 of 59), `share_orders` (32 target orders) under steps
+  (36 of 60); `share_look3` 2-6, `share` 3.
+- **Reading:** on the big many-target problems the search spends its sims on single actions
+  early in the plan; the target order and the recipe choice of later targets are left to its
+  greedy finish, and those are exactly what the winning runs search over.
 
 ### E-67 (2026-11-09) B3, the 1:1 engine check (D-71): passes; 3-5% above the best on d 7-8
 coe9, `scripts/bench.py` (summarised at `e43ec98`), `outputs/bench/b3.jsonl` (`dmfb_sweep_v1`,

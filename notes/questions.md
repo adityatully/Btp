@@ -57,6 +57,7 @@ chats. Last updated 2026-11-03.*
 | Q-125 | Change the claim to "search over a planner, with learning where the planner is weak", and stop trying to replace the planner on s3-s5? | Open, waiting on the user; after D-54 (plan 4.2) |
 | Q-126 | Can a value head rank sibling moves if it reads the candidate moves (and hints), or is trained to rank instead of to hit the cost? | Closed → E-50: ranking helps (0.38 → 0.52), below the 0.55 bar |
 | Q-128 | Does the search improve a published planner (MRCM) put at its leaves, as it improves ours? | Closed → E-55: yes, below MRCM on 7 of 13 of set B (bar 5), 5.1% below on average |
+| Q-143 | Can the search drop the 4 planner runs if the planner's decisions are moves in it (planner jumps, E-68)? | Open; trial v3 (D-73) on pilot A's sets |
 | Q-142 | Why is our method 5-9x the bound on 4-5-fluid mixtures at 1/512, and why does DFMM beat it on 660 of 2,046 (E-66)? | Open: bound loose there (DFMM also 5-6x) and the search adds ~nothing over the planner at N 4-5 (E-67); cause: the finisher is too slow, so few leaves (E-67); pilot A (finisher by speed) under way, D-72 |
 | Q-141 | Which of the 13 unbuilt methods in the folder do we build, and in what order (L-9)? | Closed → L-10 to L-18: all built, one by one (user); Dong collapses to one mix per droplet in our engine, Fukui and SIMOP partly reproduced |
 | Q-140 | Why does our method end dearer than our own planner on 27 of 100 held-out and 17 of 100 s4 test problems (E-64)? | Closed → F-18: a reporting error (`bench.py` read the search alone); fixed, B1/B2 to be re-summarised on coe9 |
@@ -622,6 +623,11 @@ the point of no return) and re-tests with D-45's bar plus a cliff check.
 hopeless positions as dearer on average (1,361 vs 1,197) but not the move into one. Candidate
 causes left: dead ends are a small share of the value data, and the value head reads only the
 global token (Q-111).
+
+**Q-143 Can the search drop the 4 planner runs (E-68)?** · Open
+(2026-11-09) The search alone loses to the runs on 8-27 of 100 s4 / s5 / held-out problems
+(never on s1-s3); target order and recipe lookahead win. Trial v3 (D-73): the planner's next
+moves as jumps in the search, besides single actions; bar in D-73.
 
 **Q-142 Our method on 4-5-fluid mixtures at 1/512 (E-66)?** · Open
 (2026-11-09) On e-MRCM's protocol our method is 5.4-9.3x the bound at N 4-5 (1.0-1.3 at N 2,
