@@ -227,11 +227,11 @@ depth 2 is 10-18× faster but 7-10% dearer, parked (D-44). *Round 3 done 2026-10
 
 ### Phase 6. Paper benchmarks and baselines
 
-*2026-11-07 (D-67): the full plan, rules and build order (B1–B5) are in `notes/benchmark_plan.md`. Now: B1, stage test sets. Sets built 2026-11-07 (D-68, 605 problems); runner `scripts/bench.py` and reading D-69; done 2026-11-08 (E-64): beats six published methods, level with NFSP. B2 built the same day (D-70): `test_emrcm_v1` (e-MRCM's protocol, 2,847 problems) and `litbench_paper_v1`; part (a) done 2026-11-08 (E-65), e-MRCM part running on coe9.*
+*2026-11-07 (D-67): the full plan, rules and build order (B1–B5) are in `notes/benchmark_plan.md`. Now: B1, stage test sets. Sets built 2026-11-07 (D-68, 605 problems); runner `scripts/bench.py` and reading D-69; done 2026-11-08 (E-64): beats six published methods, level with NFSP. B2 built the same day (D-70): `test_emrcm_v1` (e-MRCM's protocol, 2,847 problems) and `litbench_paper_v1`; part (a) done 2026-11-08 (E-65), part (b) done 2026-11-09 (E-66: beats FacDA, MRCM, e-MRCM; weak at N = 4-5, Q-142). B3 done 2026-11-09 (E-67: checks pass). E-67 also finds why N = 4-5 is weak: the search's finisher is too slow there. *Now (D-72, user 2026-11-09): pilot A*, finisher picked by speed, v1 vs A on `val_emrcm_v1` and val s3-s5 on coe9; pass → A is method-v2 for the B1/B2 rerun with all 16 published methods; fail → N = 4-5 is a reported limit, then the architecture question.*
 
 - **6.1 Paper checks:** robust-aliquot (Poddar 2020), Dong 2024, e-MRCM → claim wording
   (session `paper-checks`).
-- **6.2 Tier 2:** DMFB sanity sweep (`dmfb_sweep_v1`). *Built 2026-11-08 (B3, D-71); run on coe9 after B2.*
+- **6.2 Tier 2:** DMFB sanity sweep (`dmfb_sweep_v1`). *Built 2026-11-08 (B3, D-71); done 2026-11-09 (E-67): checks pass.*
 - **6.3 Tier 3:** published baselines, one set per paper (WSPM, FacDA, MRCM, e-MRCM, MTWM, and
   single-target MEDA dilution methods such as Dong 2024 for stage 1), plus the plan
   translator. Needs the PDFs; SPEC 10.4 forbids rebuilding methods from memory. *Started

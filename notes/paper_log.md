@@ -1005,6 +1005,31 @@ Format: date · decision · alternatives considered · why · evidence.
   does not state (likely the first S + B mix not counted), not an engine difference.
 ---
 
+- **D-72 (2026-11-09) Pilot A: the search's leaf finisher picked by speed (Q-142, E-67).**
+  User: "lets try A first and then we can think about alternate architectures". E-67: at N = 4-5
+  the greedy MRCM finisher takes 9 s to 400 s a leaf, so v1's search finishes 2-105 leaves in
+  900 s and adds almost nothing over the planner. **A** = v1 with one change: each finish
+  with MRCM's tree is timed, and once one takes more than 2 s (`AUTO_LIMIT`; the root's, which
+  fills MRCM's cache, more than 60 s, `AUTO_ROOT_LIMIT`) every later leaf uses the plain
+  sharing pass (`search_check.AutoFinish`, `bench.py finisher=auto`). Otherwise A is v1.
+  Mac timing on `val_emrcm_v1` (one problem each, root finish): MRCM N3-T1 37 s, N4-T1 42 s,
+  N5-T1 73 s, N4-T3 301 s, N5-T3 378 s; the plain pass 0.01-1.2 s, the **same cost on all
+  five**. A root-only switch would have moved N = 3 off MRCM too, hence the two limits. The
+  planner stage and the final "cheaper of planner and search" are unchanged. Considered and
+  set aside for now: dropping the 4 planner runs (the search alone lost to them on 27 of 100
+  held-out, Q-140) and a search over the planner's decisions (target, recipe) instead of
+  single moves (user: think about architectures after A).
+  **Problems:** `val_emrcm_v1` (new development set, 120 problems: e-MRCM's protocol, seed
+  20261109, N3-T1 20, N4-T1 30, N5-T1 30, N3-T3 / N4-T3 / N5-T3 10 each, N4-T5 / N5-T5 5 each,
+  none in any frozen set) and `val_s3_v2` + `val_s4_v2` + `val_s5_v2` (stages 3-5, 120: A must
+  not hurt where v1 works). B2's `test_emrcm_v1` is test data and is not used to tune A.
+  **Runs:** `bench.py` fluid goal, v1 and A side by side, same machine, 900 s.
+  **Pass bar, fixed in advance:** on `val_emrcm_v1` N = 4-5, A is cheaper than v1 on average
+  (mean ratio A / v1 below 0.98 with its 95% CI below 1) and loses to DFMM on fewer problems;
+  on the stage 3-5 sets A is level with v1 (mean A / v1 CI contains 1 or lies below it).
+  **Pass:** A becomes method-v2 for the B1 / B2 rerun. **Fail:** report N = 4-5 as a limit
+  of the method and go to the architecture question.
+
 ## 4. Experiments and results
 
 ### E-1 (2026-10-13) Exact search on the hand-checked cases (M5)
@@ -1784,6 +1809,56 @@ MRCM's intermediates on val_s2: 4 of 28 covered (chain D4), 5 of 28 (premix D3).
   again). (3) Built as SPEC 0.28 `hint_source: problem` (depth-4 chain in the recipe columns)
   for a copy-test comparison on stages 1–2 against the planner's hints.
 
+### E-67 (2026-11-09) B3, the 1:1 engine check (D-71): passes; 3-5% above the best on d 7-8
+coe9, `scripts/bench.py` (summarised at `e43ec98`), `outputs/bench/b3.jsonl` (`dmfb_sweep_v1`,
+491 dyadic dilutions d 4-8, one 1-unit droplet, fluid goal), method-v1. A test, never a win.
+**Checks pass:** 3a (ours cheaper than NFSP) 0, 3b (proved optima dearer than NFSP) 0.
+- Ours / NFSP (441 solved): d 4-6 1.000, d 7 1.007, d 8 1.053; ours / bit scanning 0.86 to 0.60.
+  Ours / proved optimum 1.073 (180). 60 s and 900 s the same.
+- On 1:1 one-target dilution DFM, Generic, DFMM, MRCM, e-MRCM, MTMD, DDMT and Fukui all give the
+  same plans (436 / 55 / 0, 0.641). FacDA (74 losses, 1.036), NFSP (58, 1.027), SIMOP (73,
+  1.032), MTWM (68, 1.012) and TVODA (67, 1.011) are cheaper on some problems: our method is not
+  optimal on deep 1:1 dilutions. Not a claim either way (D-71), reported as it is.
+
+**Q-142 breakdown (E-66 records, by N-T, 900 s).** DFMM is also far above the bound where we are
+(N4-T1 5.41, N5-T1 6.27), so **the bound is loose on 4-5 fluids**. But at N 4-5 **the search adds
+almost nothing over the planner** (ours / bound 5.43-9.25 vs planner 5.63-9.25; at N 3 it takes
+4.67 to 1.67), and DFMM beats us on 307 of 512 (N4-T1, ours / DFMM 1.02) and 353 of 512 (N5-T1,
+1.10): the 660 of E-66. Both causes hold; the search's failure at N 4-5 is the one to explain.
+
+**Why the search stalls at N 4-5 (same records):** it is starved of leaves. Every N 4-5
+problem hits the time cap, but the search finishes only 105 leaves on N4-T1 and 28 on N5-T1
+(2,779 on N2-T1, 1,779 on N3-T1), and 2-10 on N 4-5 with T >= 2. That is about 9 s a leaf on
+N4-T1 and over 400 s on N5-T5: the greedy MRCM finisher is slow on 4-5-fluid mixtures at 1/512
+(MRCM's own tree search declines most of these, E-66). The trace holds about one entry, and the
+search beats the planner on 44 of 512 (N4-T1), 3 of 512 (N5-T1) and 0-8 of 50 elsewhere (N 3:
+484 of 512). The planners also take longer (N5-T5 716 s), so search time runs past 900 s.
+
+### E-66 (2026-11-09) B2 part (b), e-MRCM's protocol: beats FacDA, MRCM, e-MRCM; weak on 4-5 fluids
+coe9, `scripts/bench.py` (SPEC 0.34 run, summarised at `e43ec98` with F-18's rule),
+`outputs/bench/b2_emrcm.jsonl` (`test_emrcm_v1`, 2,847 problems, fluid goal), method-v1.
+**Reading (D-69, own goal, 900 s; same at 60 s):** beats FacDA (510: 502 / 8 / 0, mean 0.637),
+MRCM (653: 504 / 149 / 0, 0.835), e-MRCM (863: 714 / 149 / 0, 0.802). DFM, Generic and DFMM
+are not graded (fluid is not their goal) but read: DFM 0.375, Generic 0.520, **DFMM 0.708 with
+660 losses of 2,046** (level, not beaten). No plan on 4 problems.
+
+- **Against our planner:** 0.848 [0.839, 0.857], 1,296 / 1,547 / 0. **Proved optima:** 12.7%
+  above on average (65 proved). **Ours / bound: 4.0 overall.**
+- **By N (fluids) and T (targets), ours / bound:** N2 1.03-1.31; N3 1.67-1.76; **N4 5.4-7.2;
+  N5 6.7-9.3.** e-MRCM (our reading) accepts N2 all, N3 142 of 712, N4 10, N5 none.
+- **Next to e-MRCM's printed Table III (not graded, L-7):** our mixes and waste are below the
+  paper's at N2, above at N3 (N3-T5 mixes 29.9 vs 23.8), and far above at N4-N5 (N5-T5 mixes 64
+  vs 23, waste 173 vs 33). Our weights are per kind (every reagent 8), not e-MRCM's, so this is
+  not like for like, but the gap at N4-N5 is too large to be the weights alone.
+- **Weak spot (Q-142):** many-reagent mixtures at precision 1/512. Either the bound is loose
+  there or our plans are poor; DFMM's 660 wins say at least part is our plans.
+
+**Also (B1, E-64 records): every "no plan by 900 s" is planner time.** All 97 problem-goal pairs
+with no plan at 900 s have a planner plan, but the four planner variants' summed time is 903 s
+to 20,640 s (s4-075, s4-088, s5-096 above 16,000 s). So the gap is how F-18 counts time (the
+variants run one after another, each on the clock), not a failure to find a plan. Pairs: s4 40,
+s5 33, held-out 24, as E-64's re-summarised table counts them.
+
 ### E-65 (2026-11-08) B2 part (a), the papers' worked problems (D-70): beats six, level with NFSP
 coe9, `scripts/bench.py` at `fbd4679` (SPEC 0.34), `outputs/bench/b2_paper.jsonl` (132
 problems of `litbench_paper_v1` × 3 goals), method-v1. **Reading (D-69 rule, own goal, 900 s):**
@@ -1827,8 +1902,27 @@ Every published method is beaten under every goal except NFSP (fluid level, wast
   but 4 have a plan.
 - **Our method loses to our own planner** on 27 of 100 held-out (fluid; 24-25 under the other
   goals) and 17 of 100 s4 problems at 900 s: the search does not start from the best planner's
-  plan, its leaves use the weaker greedy pass (Q-140). *Reporting error, fixed by F-18: these rows read the search alone; re-summarise.*
+  plan, its leaves use the weaker greedy pass (Q-140). *Reporting error, fixed by F-18: these rows read the search alone; re-summarised below.*
 - An experiment, Q-125 stays open.
+- **Re-summarised 2026-11-09 (F-18, `bench.py` at `e43ec98`, same records):** our method =
+  the cheaper of the best planner and the search, the planners' time on the clock. At 900 s:
+
+  | set (900 s) | ours / planner: fluid | steps | waste | no plan (fluid / steps / waste) | ours / bound (fluid) |
+  |---|---|---|---|---|---|
+  | s1 | 0.868 (57/43/0) | 0.974 | 0.737 | 0 / 0 / 0 | 1.428 |
+  | s2 | 0.882 (54/46/0) | 0.911 | 0.812 | 0 / 0 / 0 | 1.818 |
+  | s3 | 0.928 (68/32/0) | 0.863 | 0.757 | 0 / 0 / 0 | 1.293 |
+  | s4 | 0.936 (62/25/0) | 0.942 | 0.751 | 13 / 14 / 13 | 1.394 |
+  | s5 | 0.908 (54/40/0) | 0.932 | 0.780 | 11 / 11 / 11 | 1.450 |
+  | held-out | 0.971 (53/41/0) | 0.956 | 0.753 | 6 / 10 / 8 | 1.040 |
+
+  No losses to our own planner anywhere (was 27 held-out, 17 s4, 7 s5). But **more problems
+  have no plan by 900 s** (s4 13, s5 11, held-out 6-10; was 3, 1, 0): the four planner variants
+  run first and their summed time is now on the clock, so where they take most of the 900 s
+  neither the planner's plan nor the search's later plans count. Published-method verdicts
+  unchanged (six beaten under their own goal, NFSP level: fluid 1.009 [0.980, 1.044], waste
+  1.048 [0.941, 1.168]); the comparisons are paired on problems where we have a plan. The 60 s
+  table was not pasted; to be re-read.
 
 ### E-63 (2026-11-07) Time of our method per stage (E-61 and E-62 records)
 One-off read on coe9 of `outputs/finish/{greedy_c,wins_w}.jsonl` (search over the greedy MRCM

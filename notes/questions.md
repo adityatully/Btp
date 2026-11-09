@@ -57,6 +57,7 @@ chats. Last updated 2026-11-03.*
 | Q-125 | Change the claim to "search over a planner, with learning where the planner is weak", and stop trying to replace the planner on s3-s5? | Open, waiting on the user; after D-54 (plan 4.2) |
 | Q-126 | Can a value head rank sibling moves if it reads the candidate moves (and hints), or is trained to rank instead of to hit the cost? | Closed → E-50: ranking helps (0.38 → 0.52), below the 0.55 bar |
 | Q-128 | Does the search improve a published planner (MRCM) put at its leaves, as it improves ours? | Closed → E-55: yes, below MRCM on 7 of 13 of set B (bar 5), 5.1% below on average |
+| Q-142 | Why is our method 5-9x the bound on 4-5-fluid mixtures at 1/512, and why does DFMM beat it on 660 of 2,046 (E-66)? | Open: bound loose there (DFMM also 5-6x) and the search adds ~nothing over the planner at N 4-5 (E-67); cause: the finisher is too slow, so few leaves (E-67); pilot A (finisher by speed) under way, D-72 |
 | Q-141 | Which of the 13 unbuilt methods in the folder do we build, and in what order (L-9)? | Closed → L-10 to L-18: all built, one by one (user); Dong collapses to one mix per droplet in our engine, Fukui and SIMOP partly reproduced |
 | Q-140 | Why does our method end dearer than our own planner on 27 of 100 held-out and 17 of 100 s4 test problems (E-64)? | Closed → F-18: a reporting error (`bench.py` read the search alone); fixed, B1/B2 to be re-summarised on coe9 |
 | Q-139 | What time budget does our method get in the paper's headline tables (900 s, or a smaller fixed budget with 900 s as an extra column)? | Both reported (60 s and 900 s, user 2026-11-07); which one heads the tables is Tom's call |
@@ -621,6 +622,19 @@ the point of no return) and re-tests with D-45's bar plus a cliff check.
 hopeless positions as dearer on average (1,361 vs 1,197) but not the move into one. Candidate
 causes left: dead ends are a small share of the value data, and the value head reads only the
 global token (Q-111).
+
+**Q-142 Our method on 4-5-fluid mixtures at 1/512 (E-66)?** · Open
+(2026-11-09) On e-MRCM's protocol our method is 5.4-9.3x the bound at N 4-5 (1.0-1.3 at N 2,
+1.7 at N 3), and DFMM beats it on 660 of the 2,046 problems DFMM accepts. Is the bound loose
+there, or are our plans poor? First step: the losses to DFMM and ours/bound by N-T from the
+stored records (no rerun).
+*2026-11-09 (E-67):* both. DFMM is also 5.4-6.3x the bound (loose bound), but at N 4-5 the
+search adds almost nothing over the planner (at N 3 it cuts 4.67 to 1.67), and DFMM beats us
+on 307 + 353 single targets. Next: is the search stopped by time, its caps, or few leaves?
+Same day: few leaves. At the time cap it has finished 105 (N4-T1) and 28 (N5-T1) leaves, against
+1,779 on N3-T1; the greedy MRCM finisher takes ~9 s to 400+ s a leaf at N 4-5. A faster
+finisher there would change method-v1: the user's call. User chose pilot A (D-72): finisher by
+speed, tested on the new `val_emrcm_v1` and stages 3-5 val.
 
 **Q-141 Which unbuilt methods do we build, in what order?** · Closed → L-10 to L-18
 (2026-11-08) The audit (L-9, `notes/lit_bench/coverage_audit.md`) finds 13 methods in the
