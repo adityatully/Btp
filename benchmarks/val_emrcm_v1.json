@@ -1,0 +1,10921 @@
+{
+ "format": "meda-benchmark/1",
+ "name": "val_emrcm",
+ "version": 1,
+ "description": "Development set for the leaf-finisher pilot (D-72): e-MRCM's protocol, fresh draws (none in test_emrcm_v1), weighted to N = 4-5 where v1's search stalls (E-67). Graded under costs/geometric.",
+ "generator": {
+  "builder": "scripts/make_benchmark.py:build_emrcm:build_emrcm_val",
+  "protocol": "e-MRCM (Liang et al., TCAD 39(10) 2020), Section VI",
+  "precision": 512,
+  "costs": "geometric",
+  "answer_key": "[root conservation bound (SPEC 0.21), cheaper of naive and tree]",
+  "cells": {
+   "N3-T1": 20,
+   "N4-T1": 30,
+   "N5-T1": 30,
+   "N3-T3": 10,
+   "N4-T3": 10,
+   "N5-T3": 10,
+   "N4-T5": 5,
+   "N5-T5": 5
+  },
+  "avoids": "test_emrcm_v1"
+ },
+ "seeds": [
+  20261109
+ ],
+ "reference": {
+  "val_emrcm-0000": {
+   "cost": "309",
+   "status": "feasible",
+   "producer": "cheapest_construction",
+   "detail": {
+    "lower_bound_producer": "exact_search fluid_bound at the root (SPEC 0.21)",
+    "mix_ops": 8
+   },
+   "lower_bound": "149"
+  },
+  "val_emrcm-0001": {
+   "cost": "999",
+   "status": "feasible",
+   "producer": "cheapest_construction",
+   "detail": {
+    "lower_bound_producer": "exact_search fluid_bound at the root (SPEC 0.21)",
+    "mix_ops": 8
+   },
+   "lower_bound": "203"
+  },
+  "val_emrcm-0002": {
+   "cost": "587",
+   "status": "feasible",
+   "producer": "cheapest_construction",
+   "detail": {
+    "lower_bound_producer": "exact_search fluid_bound at the root (SPEC 0.21)",
+    "mix_ops": 7
+   },
+   "lower_bound": "142"
+  },
+  "val_emrcm-0003": {
+   "cost": "497",
+   "status": "feasible",
+   "producer": "cheapest_construction",
+   "detail": {
+    "lower_bound_producer": "exact_search fluid_bound at the root (SPEC 0.21)",
+    "mix_ops": 8
+   },
+   "lower_bound": "147"
+  },
+  "val_emrcm-0004": {
+   "cost": "760",
+   "status": "feasible",
+   "producer": "cheapest_construction",
+   "detail": {
+    "lower_bound_producer": "exact_search fluid_bound at the root (SPEC 0.21)",
+    "mix_ops": 6
+   },
+   "lower_bound": "268"
+  },
+  "val_emrcm-0005": {
+   "cost": "1022",
+   "status": "feasible",
+   "producer": "cheapest_construction",
+   "detail": {
+    "lower_bound_producer": "exact_search fluid_bound at the root (SPEC 0.21)",
+    "mix_ops": 9
+   },
+   "lower_bound": "212"
+  },
+  "val_emrcm-0006": {
+   "cost": "860",
+   "status": "feasible",
+   "producer": "cheapest_construction",
+   "detail": {
+    "lower_bound_producer": "exact_search fluid_bound at the root (SPEC 0.21)",
+    "mix_ops": 9
+   },
+   "lower_bound": "147"
+  },
+  "val_emrcm-0007": {
+   "cost": "734",
+   "status": "feasible",
+   "producer": "cheapest_construction",
+   "detail": {
+    "lower_bound_producer": "exact_search fluid_bound at the root (SPEC 0.21)",
+    "mix_ops": 8
+   },
+   "lower_bound": "100"
+  },
+  "val_emrcm-0008": {
+   "cost": "748",
+   "status": "feasible",
+   "producer": "cheapest_construction",
+   "detail": {
+    "lower_bound_producer": "exact_search fluid_bound at the root (SPEC 0.21)",
+    "mix_ops": 8
+   },
+   "lower_bound": "147"
+  },
+  "val_emrcm-0009": {
+   "cost": "749",
+   "status": "feasible",
+   "producer": "cheapest_construction",
+   "detail": {
+    "lower_bound_producer": "exact_search fluid_bound at the root (SPEC 0.21)",
+    "mix_ops": 7
+   },
+   "lower_bound": "93"
+  },
+  "val_emrcm-0010": {
+   "cost": "888",
+   "status": "feasible",
+   "producer": "cheapest_construction",
+   "detail": {
+    "lower_bound_producer": "exact_search fluid_bound at the root (SPEC 0.21)",
+    "mix_ops": 9
+   },
+   "lower_bound": "149"
+  },
+  "val_emrcm-0011": {
+   "cost": "874",
+   "status": "feasible",
+   "producer": "cheapest_construction",
+   "detail": {
+    "lower_bound_producer": "exact_search fluid_bound at the root (SPEC 0.21)",
+    "mix_ops": 8
+   },
+   "lower_bound": "140"
+  },
+  "val_emrcm-0012": {
+   "cost": "599",
+   "status": "feasible",
+   "producer": "cheapest_construction",
+   "detail": {
+    "lower_bound_producer": "exact_search fluid_bound at the root (SPEC 0.21)",
+    "mix_ops": 8
+   },
+   "lower_bound": "156"
+  },
+  "val_emrcm-0013": {
+   "cost": "317",
+   "status": "feasible",
+   "producer": "cheapest_construction",
+   "detail": {
+    "lower_bound_producer": "exact_search fluid_bound at the root (SPEC 0.21)",
+    "mix_ops": 4
+   },
+   "lower_bound": "140"
+  },
+  "val_emrcm-0014": {
+   "cost": "684",
+   "status": "feasible",
+   "producer": "cheapest_construction",
+   "detail": {
+    "lower_bound_producer": "exact_search fluid_bound at the root (SPEC 0.21)",
+    "mix_ops": 7
+   },
+   "lower_bound": "205"
+  },
+  "val_emrcm-0015": {
+   "cost": "517",
+   "status": "feasible",
+   "producer": "cheapest_construction",
+   "detail": {
+    "lower_bound_producer": "exact_search fluid_bound at the root (SPEC 0.21)",
+    "mix_ops": 8
+   },
+   "lower_bound": "77"
+  },
+  "val_emrcm-0016": {
+   "cost": "316",
+   "status": "feasible",
+   "producer": "cheapest_construction",
+   "detail": {
+    "lower_bound_producer": "exact_search fluid_bound at the root (SPEC 0.21)",
+    "mix_ops": 3
+   },
+   "lower_bound": "79"
+  },
+  "val_emrcm-0017": {
+   "cost": "914",
+   "status": "feasible",
+   "producer": "cheapest_construction",
+   "detail": {
+    "lower_bound_producer": "exact_search fluid_bound at the root (SPEC 0.21)",
+    "mix_ops": 7
+   },
+   "lower_bound": "212"
+  },
+  "val_emrcm-0018": {
+   "cost": "671",
+   "status": "feasible",
+   "producer": "cheapest_construction",
+   "detail": {
+    "lower_bound_producer": "exact_search fluid_bound at the root (SPEC 0.21)",
+    "mix_ops": 9
+   },
+   "lower_bound": "86"
+  },
+  "val_emrcm-0019": {
+   "cost": "603",
+   "status": "feasible",
+   "producer": "cheapest_construction",
+   "detail": {
+    "lower_bound_producer": "exact_search fluid_bound at the root (SPEC 0.21)",
+    "mix_ops": 10
+   },
+   "lower_bound": "140"
+  },
+  "val_emrcm-0020": {
+   "cost": "766",
+   "status": "feasible",
+   "producer": "cheapest_construction",
+   "detail": {
+    "lower_bound_producer": "exact_search fluid_bound at the root (SPEC 0.21)",
+    "mix_ops": 10
+   },
+   "lower_bound": "86"
+  },
+  "val_emrcm-0021": {
+   "cost": "772",
+   "status": "feasible",
+   "producer": "cheapest_construction",
+   "detail": {
+    "lower_bound_producer": "exact_search fluid_bound at the root (SPEC 0.21)",
+    "mix_ops": 10
+   },
+   "lower_bound": "102"
+  },
+  "val_emrcm-0022": {
+   "cost": "611",
+   "status": "feasible",
+   "producer": "cheapest_construction",
+   "detail": {
+    "lower_bound_producer": "exact_search fluid_bound at the root (SPEC 0.21)",
+    "mix_ops": 11
+   },
+   "lower_bound": "102"
+  },
+  "val_emrcm-0023": {
+   "cost": "1017",
+   "status": "feasible",
+   "producer": "cheapest_construction",
+   "detail": {
+    "lower_bound_producer": "exact_search fluid_bound at the root (SPEC 0.21)",
+    "mix_ops": 12
+   },
+   "lower_bound": "93"
+  },
+  "val_emrcm-0024": {
+   "cost": "684",
+   "status": "feasible",
+   "producer": "cheapest_construction",
+   "detail": {
+    "lower_bound_producer": "exact_search fluid_bound at the root (SPEC 0.21)",
+    "mix_ops": 8
+   },
+   "lower_bound": "95"
+  },
+  "val_emrcm-0025": {
+   "cost": "569",
+   "status": "feasible",
+   "producer": "cheapest_construction",
+   "detail": {
+    "lower_bound_producer": "exact_search fluid_bound at the root (SPEC 0.21)",
+    "mix_ops": 13
+   },
+   "lower_bound": "93"
+  },
+  "val_emrcm-0026": {
+   "cost": "1008",
+   "status": "feasible",
+   "producer": "cheapest_construction",
+   "detail": {
+    "lower_bound_producer": "exact_search fluid_bound at the root (SPEC 0.21)",
+    "mix_ops": 10
+   },
+   "lower_bound": "158"
+  },
+  "val_emrcm-0027": {
+   "cost": "904",
+   "status": "feasible",
+   "producer": "cheapest_construction",
+   "detail": {
+    "lower_bound_producer": "exact_search fluid_bound at the root (SPEC 0.21)",
+    "mix_ops": 10
+   },
+   "lower_bound": "100"
+  },
+  "val_emrcm-0028": {
+   "cost": "854",
+   "status": "feasible",
+   "producer": "cheapest_construction",
+   "detail": {
+    "lower_bound_producer": "exact_search fluid_bound at the root (SPEC 0.21)",
+    "mix_ops": 11
+   },
+   "lower_bound": "212"
+  },
+  "val_emrcm-0029": {
+   "cost": "749",
+   "status": "feasible",
+   "producer": "cheapest_construction",
+   "detail": {
+    "lower_bound_producer": "exact_search fluid_bound at the root (SPEC 0.21)",
+    "mix_ops": 9
+   },
+   "lower_bound": "214"
+  },
+  "val_emrcm-0030": {
+   "cost": "1306",
+   "status": "feasible",
+   "producer": "cheapest_construction",
+   "detail": {
+    "lower_bound_producer": "exact_search fluid_bound at the root (SPEC 0.21)",
+    "mix_ops": 14
+   },
+   "lower_bound": "156"
+  },
+  "val_emrcm-0031": {
+   "cost": "947",
+   "status": "feasible",
+   "producer": "cheapest_construction",
+   "detail": {
+    "lower_bound_producer": "exact_search fluid_bound at the root (SPEC 0.21)",
+    "mix_ops": 13
+   },
+   "lower_bound": "91"
+  },
+  "val_emrcm-0032": {
+   "cost": "624",
+   "status": "feasible",
+   "producer": "cheapest_construction",
+   "detail": {
+    "lower_bound_producer": "exact_search fluid_bound at the root (SPEC 0.21)",
+    "mix_ops": 8
+   },
+   "lower_bound": "165"
+  },
+  "val_emrcm-0033": {
+   "cost": "903",
+   "status": "feasible",
+   "producer": "cheapest_construction",
+   "detail": {
+    "lower_bound_producer": "exact_search fluid_bound at the root (SPEC 0.21)",
+    "mix_ops": 10
+   },
+   "lower_bound": "212"
+  },
+  "val_emrcm-0034": {
+   "cost": "726",
+   "status": "feasible",
+   "producer": "cheapest_construction",
+   "detail": {
+    "lower_bound_producer": "exact_search fluid_bound at the root (SPEC 0.21)",
+    "mix_ops": 12
+   },
+   "lower_bound": "165"
+  },
+  "val_emrcm-0035": {
+   "cost": "877",
+   "status": "feasible",
+   "producer": "cheapest_construction",
+   "detail": {
+    "lower_bound_producer": "exact_search fluid_bound at the root (SPEC 0.21)",
+    "mix_ops": 10
+   },
+   "lower_bound": "149"
+  },
+  "val_emrcm-0036": {
+   "cost": "673",
+   "status": "feasible",
+   "producer": "cheapest_construction",
+   "detail": {
+    "lower_bound_producer": "exact_search fluid_bound at the root (SPEC 0.21)",
+    "mix_ops": 10
+   },
+   "lower_bound": "156"
+  },
+  "val_emrcm-0037": {
+   "cost": "683",
+   "status": "feasible",
+   "producer": "cheapest_construction",
+   "detail": {
+    "lower_bound_producer": "exact_search fluid_bound at the root (SPEC 0.21)",
+    "mix_ops": 15
+   },
+   "lower_bound": "91"
+  },
+  "val_emrcm-0038": {
+   "cost": "635",
+   "status": "feasible",
+   "producer": "cheapest_construction",
+   "detail": {
+    "lower_bound_producer": "exact_search fluid_bound at the root (SPEC 0.21)",
+    "mix_ops": 12
+   },
+   "lower_bound": "158"
+  },
+  "val_emrcm-0039": {
+   "cost": "703",
+   "status": "feasible",
+   "producer": "cheapest_construction",
+   "detail": {
+    "lower_bound_producer": "exact_search fluid_bound at the root (SPEC 0.21)",
+    "mix_ops": 11
+   },
+   "lower_bound": "93"
+  },
+  "val_emrcm-0040": {
+   "cost": "610",
+   "status": "feasible",
+   "producer": "cheapest_construction",
+   "detail": {
+    "lower_bound_producer": "exact_search fluid_bound at the root (SPEC 0.21)",
+    "mix_ops": 12
+   },
+   "lower_bound": "109"
+  },
+  "val_emrcm-0041": {
+   "cost": "891",
+   "status": "feasible",
+   "producer": "cheapest_construction",
+   "detail": {
+    "lower_bound_producer": "exact_search fluid_bound at the root (SPEC 0.21)",
+    "mix_ops": 12
+   },
+   "lower_bound": "212"
+  },
+  "val_emrcm-0042": {
+   "cost": "958",
+   "status": "feasible",
+   "producer": "cheapest_construction",
+   "detail": {
+    "lower_bound_producer": "exact_search fluid_bound at the root (SPEC 0.21)",
+    "mix_ops": 13
+   },
+   "lower_bound": "147"
+  },
+  "val_emrcm-0043": {
+   "cost": "613",
+   "status": "feasible",
+   "producer": "cheapest_construction",
+   "detail": {
+    "lower_bound_producer": "exact_search fluid_bound at the root (SPEC 0.21)",
+    "mix_ops": 12
+   },
+   "lower_bound": "156"
+  },
+  "val_emrcm-0044": {
+   "cost": "872",
+   "status": "feasible",
+   "producer": "cheapest_construction",
+   "detail": {
+    "lower_bound_producer": "exact_search fluid_bound at the root (SPEC 0.21)",
+    "mix_ops": 12
+   },
+   "lower_bound": "100"
+  },
+  "val_emrcm-0045": {
+   "cost": "741",
+   "status": "feasible",
+   "producer": "cheapest_construction",
+   "detail": {
+    "lower_bound_producer": "exact_search fluid_bound at the root (SPEC 0.21)",
+    "mix_ops": 9
+   },
+   "lower_bound": "277"
+  },
+  "val_emrcm-0046": {
+   "cost": "583",
+   "status": "feasible",
+   "producer": "cheapest_construction",
+   "detail": {
+    "lower_bound_producer": "exact_search fluid_bound at the root (SPEC 0.21)",
+    "mix_ops": 12
+   },
+   "lower_bound": "100"
+  },
+  "val_emrcm-0047": {
+   "cost": "563",
+   "status": "feasible",
+   "producer": "cheapest_construction",
+   "detail": {
+    "lower_bound_producer": "exact_search fluid_bound at the root (SPEC 0.21)",
+    "mix_ops": 11
+   },
+   "lower_bound": "102"
+  },
+  "val_emrcm-0048": {
+   "cost": "379",
+   "status": "feasible",
+   "producer": "cheapest_construction",
+   "detail": {
+    "lower_bound_producer": "exact_search fluid_bound at the root (SPEC 0.21)",
+    "mix_ops": 11
+   },
+   "lower_bound": "86"
+  },
+  "val_emrcm-0049": {
+   "cost": "609",
+   "status": "feasible",
+   "producer": "cheapest_construction",
+   "detail": {
+    "lower_bound_producer": "exact_search fluid_bound at the root (SPEC 0.21)",
+    "mix_ops": 10
+   },
+   "lower_bound": "212"
+  },
+  "val_emrcm-0050": {
+   "cost": "1003",
+   "status": "feasible",
+   "producer": "cheapest_construction",
+   "detail": {
+    "lower_bound_producer": "exact_search fluid_bound at the root (SPEC 0.21)",
+    "mix_ops": 16
+   },
+   "lower_bound": "165"
+  },
+  "val_emrcm-0051": {
+   "cost": "840",
+   "status": "feasible",
+   "producer": "cheapest_construction",
+   "detail": {
+    "lower_bound_producer": "exact_search fluid_bound at the root (SPEC 0.21)",
+    "mix_ops": 16
+   },
+   "lower_bound": "165"
+  },
+  "val_emrcm-0052": {
+   "cost": "1071",
+   "status": "feasible",
+   "producer": "cheapest_construction",
+   "detail": {
+    "lower_bound_producer": "exact_search fluid_bound at the root (SPEC 0.21)",
+    "mix_ops": 17
+   },
+   "lower_bound": "165"
+  },
+  "val_emrcm-0053": {
+   "cost": "895",
+   "status": "feasible",
+   "producer": "cheapest_construction",
+   "detail": {
+    "lower_bound_producer": "exact_search fluid_bound at the root (SPEC 0.21)",
+    "mix_ops": 16
+   },
+   "lower_bound": "109"
+  },
+  "val_emrcm-0054": {
+   "cost": "578",
+   "status": "feasible",
+   "producer": "cheapest_construction",
+   "detail": {
+    "lower_bound_producer": "exact_search fluid_bound at the root (SPEC 0.21)",
+    "mix_ops": 14
+   },
+   "lower_bound": "102"
+  },
+  "val_emrcm-0055": {
+   "cost": "1228",
+   "status": "feasible",
+   "producer": "cheapest_construction",
+   "detail": {
+    "lower_bound_producer": "exact_search fluid_bound at the root (SPEC 0.21)",
+    "mix_ops": 13
+   },
+   "lower_bound": "109"
+  },
+  "val_emrcm-0056": {
+   "cost": "950",
+   "status": "feasible",
+   "producer": "cheapest_construction",
+   "detail": {
+    "lower_bound_producer": "exact_search fluid_bound at the root (SPEC 0.21)",
+    "mix_ops": 14
+   },
+   "lower_bound": "109"
+  },
+  "val_emrcm-0057": {
+   "cost": "1117",
+   "status": "feasible",
+   "producer": "cheapest_construction",
+   "detail": {
+    "lower_bound_producer": "exact_search fluid_bound at the root (SPEC 0.21)",
+    "mix_ops": 13
+   },
+   "lower_bound": "165"
+  },
+  "val_emrcm-0058": {
+   "cost": "384",
+   "status": "feasible",
+   "producer": "cheapest_construction",
+   "detail": {
+    "lower_bound_producer": "exact_search fluid_bound at the root (SPEC 0.21)",
+    "mix_ops": 15
+   },
+   "lower_bound": "102"
+  },
+  "val_emrcm-0059": {
+   "cost": "935",
+   "status": "feasible",
+   "producer": "cheapest_construction",
+   "detail": {
+    "lower_bound_producer": "exact_search fluid_bound at the root (SPEC 0.21)",
+    "mix_ops": 16
+   },
+   "lower_bound": "93"
+  },
+  "val_emrcm-0060": {
+   "cost": "1229",
+   "status": "feasible",
+   "producer": "cheapest_construction",
+   "detail": {
+    "lower_bound_producer": "exact_search fluid_bound at the root (SPEC 0.21)",
+    "mix_ops": 14
+   },
+   "lower_bound": "100"
+  },
+  "val_emrcm-0061": {
+   "cost": "827",
+   "status": "feasible",
+   "producer": "cheapest_construction",
+   "detail": {
+    "lower_bound_producer": "exact_search fluid_bound at the root (SPEC 0.21)",
+    "mix_ops": 12
+   },
+   "lower_bound": "109"
+  },
+  "val_emrcm-0062": {
+   "cost": "1035",
+   "status": "feasible",
+   "producer": "cheapest_construction",
+   "detail": {
+    "lower_bound_producer": "exact_search fluid_bound at the root (SPEC 0.21)",
+    "mix_ops": 15
+   },
+   "lower_bound": "158"
+  },
+  "val_emrcm-0063": {
+   "cost": "585",
+   "status": "feasible",
+   "producer": "cheapest_construction",
+   "detail": {
+    "lower_bound_producer": "exact_search fluid_bound at the root (SPEC 0.21)",
+    "mix_ops": 13
+   },
+   "lower_bound": "109"
+  },
+  "val_emrcm-0064": {
+   "cost": "1072",
+   "status": "feasible",
+   "producer": "cheapest_construction",
+   "detail": {
+    "lower_bound_producer": "exact_search fluid_bound at the root (SPEC 0.21)",
+    "mix_ops": 15
+   },
+   "lower_bound": "102"
+  },
+  "val_emrcm-0065": {
+   "cost": "740",
+   "status": "feasible",
+   "producer": "cheapest_construction",
+   "detail": {
+    "lower_bound_producer": "exact_search fluid_bound at the root (SPEC 0.21)",
+    "mix_ops": 15
+   },
+   "lower_bound": "156"
+  },
+  "val_emrcm-0066": {
+   "cost": "634",
+   "status": "feasible",
+   "producer": "cheapest_construction",
+   "detail": {
+    "lower_bound_producer": "exact_search fluid_bound at the root (SPEC 0.21)",
+    "mix_ops": 13
+   },
+   "lower_bound": "93"
+  },
+  "val_emrcm-0067": {
+   "cost": "814",
+   "status": "feasible",
+   "producer": "cheapest_construction",
+   "detail": {
+    "lower_bound_producer": "exact_search fluid_bound at the root (SPEC 0.21)",
+    "mix_ops": 11
+   },
+   "lower_bound": "102"
+  },
+  "val_emrcm-0068": {
+   "cost": "963",
+   "status": "feasible",
+   "producer": "cheapest_construction",
+   "detail": {
+    "lower_bound_producer": "exact_search fluid_bound at the root (SPEC 0.21)",
+    "mix_ops": 15
+   },
+   "lower_bound": "100"
+  },
+  "val_emrcm-0069": {
+   "cost": "625",
+   "status": "feasible",
+   "producer": "cheapest_construction",
+   "detail": {
+    "lower_bound_producer": "exact_search fluid_bound at the root (SPEC 0.21)",
+    "mix_ops": 13
+   },
+   "lower_bound": "165"
+  },
+  "val_emrcm-0070": {
+   "cost": "822",
+   "status": "feasible",
+   "producer": "cheapest_construction",
+   "detail": {
+    "lower_bound_producer": "exact_search fluid_bound at the root (SPEC 0.21)",
+    "mix_ops": 13
+   },
+   "lower_bound": "165"
+  },
+  "val_emrcm-0071": {
+   "cost": "911",
+   "status": "feasible",
+   "producer": "cheapest_construction",
+   "detail": {
+    "lower_bound_producer": "exact_search fluid_bound at the root (SPEC 0.21)",
+    "mix_ops": 16
+   },
+   "lower_bound": "100"
+  },
+  "val_emrcm-0072": {
+   "cost": "946",
+   "status": "feasible",
+   "producer": "cheapest_construction",
+   "detail": {
+    "lower_bound_producer": "exact_search fluid_bound at the root (SPEC 0.21)",
+    "mix_ops": 17
+   },
+   "lower_bound": "165"
+  },
+  "val_emrcm-0073": {
+   "cost": "594",
+   "status": "feasible",
+   "producer": "cheapest_construction",
+   "detail": {
+    "lower_bound_producer": "exact_search fluid_bound at the root (SPEC 0.21)",
+    "mix_ops": 16
+   },
+   "lower_bound": "109"
+  },
+  "val_emrcm-0074": {
+   "cost": "553",
+   "status": "feasible",
+   "producer": "cheapest_construction",
+   "detail": {
+    "lower_bound_producer": "exact_search fluid_bound at the root (SPEC 0.21)",
+    "mix_ops": 17
+   },
+   "lower_bound": "100"
+  },
+  "val_emrcm-0075": {
+   "cost": "795",
+   "status": "feasible",
+   "producer": "cheapest_construction",
+   "detail": {
+    "lower_bound_producer": "exact_search fluid_bound at the root (SPEC 0.21)",
+    "mix_ops": 16
+   },
+   "lower_bound": "109"
+  },
+  "val_emrcm-0076": {
+   "cost": "657",
+   "status": "feasible",
+   "producer": "cheapest_construction",
+   "detail": {
+    "lower_bound_producer": "exact_search fluid_bound at the root (SPEC 0.21)",
+    "mix_ops": 13
+   },
+   "lower_bound": "118"
+  },
+  "val_emrcm-0077": {
+   "cost": "1119",
+   "status": "feasible",
+   "producer": "cheapest_construction",
+   "detail": {
+    "lower_bound_producer": "exact_search fluid_bound at the root (SPEC 0.21)",
+    "mix_ops": 15
+   },
+   "lower_bound": "156"
+  },
+  "val_emrcm-0078": {
+   "cost": "889",
+   "status": "feasible",
+   "producer": "cheapest_construction",
+   "detail": {
+    "lower_bound_producer": "exact_search fluid_bound at the root (SPEC 0.21)",
+    "mix_ops": 16
+   },
+   "lower_bound": "93"
+  },
+  "val_emrcm-0079": {
+   "cost": "886",
+   "status": "feasible",
+   "producer": "cheapest_construction",
+   "detail": {
+    "lower_bound_producer": "exact_search fluid_bound at the root (SPEC 0.21)",
+    "mix_ops": 15
+   },
+   "lower_bound": "118"
+  },
+  "val_emrcm-0080": {
+   "cost": "1705",
+   "status": "feasible",
+   "producer": "cheapest_construction",
+   "detail": {
+    "lower_bound_producer": "exact_search fluid_bound at the root (SPEC 0.21)",
+    "mix_ops": 19
+   },
+   "lower_bound": "191"
+  },
+  "val_emrcm-0081": {
+   "cost": "1999",
+   "status": "feasible",
+   "producer": "cheapest_construction",
+   "detail": {
+    "lower_bound_producer": "exact_search fluid_bound at the root (SPEC 0.21)",
+    "mix_ops": 26
+   },
+   "lower_bound": "305"
+  },
+  "val_emrcm-0082": {
+   "cost": "1233",
+   "status": "feasible",
+   "producer": "cheapest_construction",
+   "detail": {
+    "lower_bound_producer": "exact_search fluid_bound at the root (SPEC 0.21)",
+    "mix_ops": 20
+   },
+   "lower_bound": "100"
+  },
+  "val_emrcm-0083": {
+   "cost": "1864",
+   "status": "feasible",
+   "producer": "cheapest_construction",
+   "detail": {
+    "lower_bound_producer": "exact_search fluid_bound at the root (SPEC 0.21)",
+    "mix_ops": 18
+   },
+   "lower_bound": "487"
+  },
+  "val_emrcm-0084": {
+   "cost": "1479",
+   "status": "feasible",
+   "producer": "cheapest_construction",
+   "detail": {
+    "lower_bound_producer": "exact_search fluid_bound at the root (SPEC 0.21)",
+    "mix_ops": 23
+   },
+   "lower_bound": "177"
+  },
+  "val_emrcm-0085": {
+   "cost": "1827",
+   "status": "feasible",
+   "producer": "cheapest_construction",
+   "detail": {
+    "lower_bound_producer": "exact_search fluid_bound at the root (SPEC 0.21)",
+    "mix_ops": 23
+   },
+   "lower_bound": "424"
+  },
+  "val_emrcm-0086": {
+   "cost": "1725",
+   "status": "feasible",
+   "producer": "cheapest_construction",
+   "detail": {
+    "lower_bound_producer": "exact_search fluid_bound at the root (SPEC 0.21)",
+    "mix_ops": 24
+   },
+   "lower_bound": "312"
+  },
+  "val_emrcm-0087": {
+   "cost": "1892",
+   "status": "feasible",
+   "producer": "cheapest_construction",
+   "detail": {
+    "lower_bound_producer": "exact_search fluid_bound at the root (SPEC 0.21)",
+    "mix_ops": 23
+   },
+   "lower_bound": "242"
+  },
+  "val_emrcm-0088": {
+   "cost": "1643",
+   "status": "feasible",
+   "producer": "cheapest_construction",
+   "detail": {
+    "lower_bound_producer": "exact_search fluid_bound at the root (SPEC 0.21)",
+    "mix_ops": 24
+   },
+   "lower_bound": "296"
+  },
+  "val_emrcm-0089": {
+   "cost": "2672",
+   "status": "feasible",
+   "producer": "cheapest_construction",
+   "detail": {
+    "lower_bound_producer": "exact_search fluid_bound at the root (SPEC 0.21)",
+    "mix_ops": 23
+   },
+   "lower_bound": "485"
+  },
+  "val_emrcm-0090": {
+   "cost": "1999",
+   "status": "feasible",
+   "producer": "cheapest_construction",
+   "detail": {
+    "lower_bound_producer": "exact_search fluid_bound at the root (SPEC 0.21)",
+    "mix_ops": 34
+   },
+   "lower_bound": "272"
+  },
+  "val_emrcm-0091": {
+   "cost": "1702",
+   "status": "feasible",
+   "producer": "cheapest_construction",
+   "detail": {
+    "lower_bound_producer": "exact_search fluid_bound at the root (SPEC 0.21)",
+    "mix_ops": 34
+   },
+   "lower_bound": "205"
+  },
+  "val_emrcm-0092": {
+   "cost": "1536",
+   "status": "feasible",
+   "producer": "cheapest_construction",
+   "detail": {
+    "lower_bound_producer": "exact_search fluid_bound at the root (SPEC 0.21)",
+    "mix_ops": 34
+   },
+   "lower_bound": "249"
+  },
+  "val_emrcm-0093": {
+   "cost": "1573",
+   "status": "feasible",
+   "producer": "cheapest_construction",
+   "detail": {
+    "lower_bound_producer": "exact_search fluid_bound at the root (SPEC 0.21)",
+    "mix_ops": 32
+   },
+   "lower_bound": "186"
+  },
+  "val_emrcm-0094": {
+   "cost": "2144",
+   "status": "feasible",
+   "producer": "cheapest_construction",
+   "detail": {
+    "lower_bound_producer": "exact_search fluid_bound at the root (SPEC 0.21)",
+    "mix_ops": 30
+   },
+   "lower_bound": "335"
+  },
+  "val_emrcm-0095": {
+   "cost": "2152",
+   "status": "feasible",
+   "producer": "cheapest_construction",
+   "detail": {
+    "lower_bound_producer": "exact_search fluid_bound at the root (SPEC 0.21)",
+    "mix_ops": 39
+   },
+   "lower_bound": "263"
+  },
+  "val_emrcm-0096": {
+   "cost": "2061",
+   "status": "feasible",
+   "producer": "cheapest_construction",
+   "detail": {
+    "lower_bound_producer": "exact_search fluid_bound at the root (SPEC 0.21)",
+    "mix_ops": 37
+   },
+   "lower_bound": "256"
+  },
+  "val_emrcm-0097": {
+   "cost": "2460",
+   "status": "feasible",
+   "producer": "cheapest_construction",
+   "detail": {
+    "lower_bound_producer": "exact_search fluid_bound at the root (SPEC 0.21)",
+    "mix_ops": 29
+   },
+   "lower_bound": "263"
+  },
+  "val_emrcm-0098": {
+   "cost": "1784",
+   "status": "feasible",
+   "producer": "cheapest_construction",
+   "detail": {
+    "lower_bound_producer": "exact_search fluid_bound at the root (SPEC 0.21)",
+    "mix_ops": 28
+   },
+   "lower_bound": "216"
+  },
+  "val_emrcm-0099": {
+   "cost": "2123",
+   "status": "feasible",
+   "producer": "cheapest_construction",
+   "detail": {
+    "lower_bound_producer": "exact_search fluid_bound at the root (SPEC 0.21)",
+    "mix_ops": 34
+   },
+   "lower_bound": "256"
+  },
+  "val_emrcm-0100": {
+   "cost": "2699",
+   "status": "feasible",
+   "producer": "cheapest_construction",
+   "detail": {
+    "lower_bound_producer": "exact_search fluid_bound at the root (SPEC 0.21)",
+    "mix_ops": 40
+   },
+   "lower_bound": "158"
+  },
+  "val_emrcm-0101": {
+   "cost": "2608",
+   "status": "feasible",
+   "producer": "cheapest_construction",
+   "detail": {
+    "lower_bound_producer": "exact_search fluid_bound at the root (SPEC 0.21)",
+    "mix_ops": 46
+   },
+   "lower_bound": "270"
+  },
+  "val_emrcm-0102": {
+   "cost": "3640",
+   "status": "feasible",
+   "producer": "cheapest_construction",
+   "detail": {
+    "lower_bound_producer": "exact_search fluid_bound at the root (SPEC 0.21)",
+    "mix_ops": 44
+   },
+   "lower_bound": "501"
+  },
+  "val_emrcm-0103": {
+   "cost": "2045",
+   "status": "feasible",
+   "producer": "cheapest_construction",
+   "detail": {
+    "lower_bound_producer": "exact_search fluid_bound at the root (SPEC 0.21)",
+    "mix_ops": 40
+   },
+   "lower_bound": "216"
+  },
+  "val_emrcm-0104": {
+   "cost": "2284",
+   "status": "feasible",
+   "producer": "cheapest_construction",
+   "detail": {
+    "lower_bound_producer": "exact_search fluid_bound at the root (SPEC 0.21)",
+    "mix_ops": 44
+   },
+   "lower_bound": "263"
+  },
+  "val_emrcm-0105": {
+   "cost": "2358",
+   "status": "feasible",
+   "producer": "cheapest_construction",
+   "detail": {
+    "lower_bound_producer": "exact_search fluid_bound at the root (SPEC 0.21)",
+    "mix_ops": 47
+   },
+   "lower_bound": "333"
+  },
+  "val_emrcm-0106": {
+   "cost": "2228",
+   "status": "feasible",
+   "producer": "cheapest_construction",
+   "detail": {
+    "lower_bound_producer": "exact_search fluid_bound at the root (SPEC 0.21)",
+    "mix_ops": 42
+   },
+   "lower_bound": "249"
+  },
+  "val_emrcm-0107": {
+   "cost": "1871",
+   "status": "feasible",
+   "producer": "cheapest_construction",
+   "detail": {
+    "lower_bound_producer": "exact_search fluid_bound at the root (SPEC 0.21)",
+    "mix_ops": 41
+   },
+   "lower_bound": "225"
+  },
+  "val_emrcm-0108": {
+   "cost": "2460",
+   "status": "feasible",
+   "producer": "cheapest_construction",
+   "detail": {
+    "lower_bound_producer": "exact_search fluid_bound at the root (SPEC 0.21)",
+    "mix_ops": 42
+   },
+   "lower_bound": "438"
+  },
+  "val_emrcm-0109": {
+   "cost": "2447",
+   "status": "feasible",
+   "producer": "cheapest_construction",
+   "detail": {
+    "lower_bound_producer": "exact_search fluid_bound at the root (SPEC 0.21)",
+    "mix_ops": 43
+   },
+   "lower_bound": "247"
+  },
+  "val_emrcm-0110": {
+   "cost": "3519",
+   "status": "feasible",
+   "producer": "cheapest_construction",
+   "detail": {
+    "lower_bound_producer": "exact_search fluid_bound at the root (SPEC 0.21)",
+    "mix_ops": 52
+   },
+   "lower_bound": "428"
+  },
+  "val_emrcm-0111": {
+   "cost": "3036",
+   "status": "feasible",
+   "producer": "cheapest_construction",
+   "detail": {
+    "lower_bound_producer": "exact_search fluid_bound at the root (SPEC 0.21)",
+    "mix_ops": 54
+   },
+   "lower_bound": "426"
+  },
+  "val_emrcm-0112": {
+   "cost": "3166",
+   "status": "feasible",
+   "producer": "cheapest_construction",
+   "detail": {
+    "lower_bound_producer": "exact_search fluid_bound at the root (SPEC 0.21)",
+    "mix_ops": 53
+   },
+   "lower_bound": "522"
+  },
+  "val_emrcm-0113": {
+   "cost": "3469",
+   "status": "feasible",
+   "producer": "cheapest_construction",
+   "detail": {
+    "lower_bound_producer": "exact_search fluid_bound at the root (SPEC 0.21)",
+    "mix_ops": 54
+   },
+   "lower_bound": "517"
+  },
+  "val_emrcm-0114": {
+   "cost": "4425",
+   "status": "feasible",
+   "producer": "cheapest_construction",
+   "detail": {
+    "lower_bound_producer": "exact_search fluid_bound at the root (SPEC 0.21)",
+    "mix_ops": 55
+   },
+   "lower_bound": "496"
+  },
+  "val_emrcm-0115": {
+   "cost": "4569",
+   "status": "feasible",
+   "producer": "cheapest_construction",
+   "detail": {
+    "lower_bound_producer": "exact_search fluid_bound at the root (SPEC 0.21)",
+    "mix_ops": 71
+   },
+   "lower_bound": "302"
+  },
+  "val_emrcm-0116": {
+   "cost": "3800",
+   "status": "feasible",
+   "producer": "cheapest_construction",
+   "detail": {
+    "lower_bound_producer": "exact_search fluid_bound at the root (SPEC 0.21)",
+    "mix_ops": 70
+   },
+   "lower_bound": "384"
+  },
+  "val_emrcm-0117": {
+   "cost": "3735",
+   "status": "feasible",
+   "producer": "cheapest_construction",
+   "detail": {
+    "lower_bound_producer": "exact_search fluid_bound at the root (SPEC 0.21)",
+    "mix_ops": 69
+   },
+   "lower_bound": "272"
+  },
+  "val_emrcm-0118": {
+   "cost": "4112",
+   "status": "feasible",
+   "producer": "cheapest_construction",
+   "detail": {
+    "lower_bound_producer": "exact_search fluid_bound at the root (SPEC 0.21)",
+    "mix_ops": 76
+   },
+   "lower_bound": "307"
+  },
+  "val_emrcm-0119": {
+   "cost": "3044",
+   "status": "feasible",
+   "producer": "cheapest_construction",
+   "detail": {
+    "lower_bound_producer": "exact_search fluid_bound at the root (SPEC 0.21)",
+    "mix_ops": 66
+   },
+   "lower_bound": "442"
+  }
+ },
+ "instances": [
+  {
+   "instance_id": "val_emrcm-0000",
+   "fluids": [
+    {
+     "id": 0,
+     "name": "S",
+     "kind": "SAMPLE"
+    },
+    {
+     "id": 1,
+     "name": "R1",
+     "kind": "REAGENT"
+    },
+    {
+     "id": 2,
+     "name": "B",
+     "kind": "BUFFER"
+    }
+   ],
+   "targets": [
+    {
+     "id": 0,
+     "experiment_id": 0,
+     "composition": {
+      "num": [
+       160,
+       209,
+       143
+      ],
+      "den": 512
+     },
+     "tolerance": {
+      "num": 0,
+      "den": 1
+     },
+     "droplet_volume": 4,
+     "demand": 1
+    }
+   ],
+   "chip": {
+    "name": "meda_m8-M8-S32",
+    "max_mix_volume": 8,
+    "min_mix_volume": 2,
+    "unit_volume": 1,
+    "min_droplet_volume": 1,
+    "allow_partial_take": true,
+    "storage_capacity": 32,
+    "max_denominator": 512,
+    "allow_same_composition_merge": false
+   },
+   "step_limit": 24,
+   "metadata": {
+    "generator": "emrcm_protocol",
+    "cell": "N3-T1",
+    "witness_actions": 12,
+    "witness_source": "tree"
+   }
+  },
+  {
+   "instance_id": "val_emrcm-0001",
+   "fluids": [
+    {
+     "id": 0,
+     "name": "S",
+     "kind": "SAMPLE"
+    },
+    {
+     "id": 1,
+     "name": "R1",
+     "kind": "REAGENT"
+    },
+    {
+     "id": 2,
+     "name": "B",
+     "kind": "BUFFER"
+    }
+   ],
+   "targets": [
+    {
+     "id": 0,
+     "experiment_id": 0,
+     "composition": {
+      "num": [
+       366,
+       23,
+       123
+      ],
+      "den": 512
+     },
+     "tolerance": {
+      "num": 0,
+      "den": 1
+     },
+     "droplet_volume": 4,
+     "demand": 1
+    }
+   ],
+   "chip": {
+    "name": "meda_m8-M8-S32",
+    "max_mix_volume": 8,
+    "min_mix_volume": 2,
+    "unit_volume": 1,
+    "min_droplet_volume": 1,
+    "allow_partial_take": true,
+    "storage_capacity": 32,
+    "max_denominator": 512,
+    "allow_same_composition_merge": false
+   },
+   "step_limit": 26,
+   "metadata": {
+    "generator": "emrcm_protocol",
+    "cell": "N3-T1",
+    "witness_actions": 13,
+    "witness_source": "tree"
+   }
+  },
+  {
+   "instance_id": "val_emrcm-0002",
+   "fluids": [
+    {
+     "id": 0,
+     "name": "S",
+     "kind": "SAMPLE"
+    },
+    {
+     "id": 1,
+     "name": "R1",
+     "kind": "REAGENT"
+    },
+    {
+     "id": 2,
+     "name": "B",
+     "kind": "BUFFER"
+    }
+   ],
+   "targets": [
+    {
+     "id": 0,
+     "experiment_id": 0,
+     "composition": {
+      "num": [
+       99,
+       9,
+       148
+      ],
+      "den": 256
+     },
+     "tolerance": {
+      "num": 0,
+      "den": 1
+     },
+     "droplet_volume": 4,
+     "demand": 1
+    }
+   ],
+   "chip": {
+    "name": "meda_m8-M8-S32",
+    "max_mix_volume": 8,
+    "min_mix_volume": 2,
+    "unit_volume": 1,
+    "min_droplet_volume": 1,
+    "allow_partial_take": true,
+    "storage_capacity": 32,
+    "max_denominator": 512,
+    "allow_same_composition_merge": false
+   },
+   "step_limit": 22,
+   "metadata": {
+    "generator": "emrcm_protocol",
+    "cell": "N3-T1",
+    "witness_actions": 11,
+    "witness_source": "tree"
+   }
+  },
+  {
+   "instance_id": "val_emrcm-0003",
+   "fluids": [
+    {
+     "id": 0,
+     "name": "S",
+     "kind": "SAMPLE"
+    },
+    {
+     "id": 1,
+     "name": "R1",
+     "kind": "REAGENT"
+    },
+    {
+     "id": 2,
+     "name": "B",
+     "kind": "BUFFER"
+    }
+   ],
+   "targets": [
+    {
+     "id": 0,
+     "experiment_id": 0,
+     "composition": {
+      "num": [
+       84,
+       119,
+       53
+      ],
+      "den": 256
+     },
+     "tolerance": {
+      "num": 0,
+      "den": 1
+     },
+     "droplet_volume": 4,
+     "demand": 1
+    }
+   ],
+   "chip": {
+    "name": "meda_m8-M8-S32",
+    "max_mix_volume": 8,
+    "min_mix_volume": 2,
+    "unit_volume": 1,
+    "min_droplet_volume": 1,
+    "allow_partial_take": true,
+    "storage_capacity": 32,
+    "max_denominator": 512,
+    "allow_same_composition_merge": false
+   },
+   "step_limit": 26,
+   "metadata": {
+    "generator": "emrcm_protocol",
+    "cell": "N3-T1",
+    "witness_actions": 13,
+    "witness_source": "tree"
+   }
+  },
+  {
+   "instance_id": "val_emrcm-0004",
+   "fluids": [
+    {
+     "id": 0,
+     "name": "S",
+     "kind": "SAMPLE"
+    },
+    {
+     "id": 1,
+     "name": "R1",
+     "kind": "REAGENT"
+    },
+    {
+     "id": 2,
+     "name": "B",
+     "kind": "BUFFER"
+    }
+   ],
+   "targets": [
+    {
+     "id": 0,
+     "experiment_id": 0,
+     "composition": {
+      "num": [
+       451,
+       24,
+       37
+      ],
+      "den": 512
+     },
+     "tolerance": {
+      "num": 0,
+      "den": 1
+     },
+     "droplet_volume": 4,
+     "demand": 1
+    }
+   ],
+   "chip": {
+    "name": "meda_m8-M8-S32",
+    "max_mix_volume": 8,
+    "min_mix_volume": 2,
+    "unit_volume": 1,
+    "min_droplet_volume": 1,
+    "allow_partial_take": true,
+    "storage_capacity": 32,
+    "max_denominator": 512,
+    "allow_same_composition_merge": false
+   },
+   "step_limit": 20,
+   "metadata": {
+    "generator": "emrcm_protocol",
+    "cell": "N3-T1",
+    "witness_actions": 10,
+    "witness_source": "tree"
+   }
+  },
+  {
+   "instance_id": "val_emrcm-0005",
+   "fluids": [
+    {
+     "id": 0,
+     "name": "S",
+     "kind": "SAMPLE"
+    },
+    {
+     "id": 1,
+     "name": "R1",
+     "kind": "REAGENT"
+    },
+    {
+     "id": 2,
+     "name": "B",
+     "kind": "BUFFER"
+    }
+   ],
+   "targets": [
+    {
+     "id": 0,
+     "experiment_id": 0,
+     "composition": {
+      "num": [
+       349,
+       130,
+       33
+      ],
+      "den": 512
+     },
+     "tolerance": {
+      "num": 0,
+      "den": 1
+     },
+     "droplet_volume": 4,
+     "demand": 1
+    }
+   ],
+   "chip": {
+    "name": "meda_m8-M8-S32",
+    "max_mix_volume": 8,
+    "min_mix_volume": 2,
+    "unit_volume": 1,
+    "min_droplet_volume": 1,
+    "allow_partial_take": true,
+    "storage_capacity": 32,
+    "max_denominator": 512,
+    "allow_same_composition_merge": false
+   },
+   "step_limit": 28,
+   "metadata": {
+    "generator": "emrcm_protocol",
+    "cell": "N3-T1",
+    "witness_actions": 14,
+    "witness_source": "tree"
+   }
+  },
+  {
+   "instance_id": "val_emrcm-0006",
+   "fluids": [
+    {
+     "id": 0,
+     "name": "S",
+     "kind": "SAMPLE"
+    },
+    {
+     "id": 1,
+     "name": "R1",
+     "kind": "REAGENT"
+    },
+    {
+     "id": 2,
+     "name": "B",
+     "kind": "BUFFER"
+    }
+   ],
+   "targets": [
+    {
+     "id": 0,
+     "experiment_id": 0,
+     "composition": {
+      "num": [
+       238,
+       147,
+       127
+      ],
+      "den": 512
+     },
+     "tolerance": {
+      "num": 0,
+      "den": 1
+     },
+     "droplet_volume": 4,
+     "demand": 1
+    }
+   ],
+   "chip": {
+    "name": "meda_m8-M8-S32",
+    "max_mix_volume": 8,
+    "min_mix_volume": 2,
+    "unit_volume": 1,
+    "min_droplet_volume": 1,
+    "allow_partial_take": true,
+    "storage_capacity": 32,
+    "max_denominator": 512,
+    "allow_same_composition_merge": false
+   },
+   "step_limit": 28,
+   "metadata": {
+    "generator": "emrcm_protocol",
+    "cell": "N3-T1",
+    "witness_actions": 14,
+    "witness_source": "tree"
+   }
+  },
+  {
+   "instance_id": "val_emrcm-0007",
+   "fluids": [
+    {
+     "id": 0,
+     "name": "S",
+     "kind": "SAMPLE"
+    },
+    {
+     "id": 1,
+     "name": "R1",
+     "kind": "REAGENT"
+    },
+    {
+     "id": 2,
+     "name": "B",
+     "kind": "BUFFER"
+    }
+   ],
+   "targets": [
+    {
+     "id": 0,
+     "experiment_id": 0,
+     "composition": {
+      "num": [
+       29,
+       414,
+       69
+      ],
+      "den": 512
+     },
+     "tolerance": {
+      "num": 0,
+      "den": 1
+     },
+     "droplet_volume": 4,
+     "demand": 1
+    }
+   ],
+   "chip": {
+    "name": "meda_m8-M8-S32",
+    "max_mix_volume": 8,
+    "min_mix_volume": 2,
+    "unit_volume": 1,
+    "min_droplet_volume": 1,
+    "allow_partial_take": true,
+    "storage_capacity": 32,
+    "max_denominator": 512,
+    "allow_same_composition_merge": false
+   },
+   "step_limit": 26,
+   "metadata": {
+    "generator": "emrcm_protocol",
+    "cell": "N3-T1",
+    "witness_actions": 13,
+    "witness_source": "tree"
+   }
+  },
+  {
+   "instance_id": "val_emrcm-0008",
+   "fluids": [
+    {
+     "id": 0,
+     "name": "S",
+     "kind": "SAMPLE"
+    },
+    {
+     "id": 1,
+     "name": "R1",
+     "kind": "REAGENT"
+    },
+    {
+     "id": 2,
+     "name": "B",
+     "kind": "BUFFER"
+    }
+   ],
+   "targets": [
+    {
+     "id": 0,
+     "experiment_id": 0,
+     "composition": {
+      "num": [
+       205,
+       246,
+       61
+      ],
+      "den": 512
+     },
+     "tolerance": {
+      "num": 0,
+      "den": 1
+     },
+     "droplet_volume": 4,
+     "demand": 1
+    }
+   ],
+   "chip": {
+    "name": "meda_m8-M8-S32",
+    "max_mix_volume": 8,
+    "min_mix_volume": 2,
+    "unit_volume": 1,
+    "min_droplet_volume": 1,
+    "allow_partial_take": true,
+    "storage_capacity": 32,
+    "max_denominator": 512,
+    "allow_same_composition_merge": false
+   },
+   "step_limit": 26,
+   "metadata": {
+    "generator": "emrcm_protocol",
+    "cell": "N3-T1",
+    "witness_actions": 13,
+    "witness_source": "tree"
+   }
+  },
+  {
+   "instance_id": "val_emrcm-0009",
+   "fluids": [
+    {
+     "id": 0,
+     "name": "S",
+     "kind": "SAMPLE"
+    },
+    {
+     "id": 1,
+     "name": "R1",
+     "kind": "REAGENT"
+    },
+    {
+     "id": 2,
+     "name": "B",
+     "kind": "BUFFER"
+    }
+   ],
+   "targets": [
+    {
+     "id": 0,
+     "experiment_id": 0,
+     "composition": {
+      "num": [
+       31,
+       321,
+       160
+      ],
+      "den": 512
+     },
+     "tolerance": {
+      "num": 0,
+      "den": 1
+     },
+     "droplet_volume": 4,
+     "demand": 1
+    }
+   ],
+   "chip": {
+    "name": "meda_m8-M8-S32",
+    "max_mix_volume": 8,
+    "min_mix_volume": 2,
+    "unit_volume": 1,
+    "min_droplet_volume": 1,
+    "allow_partial_take": true,
+    "storage_capacity": 32,
+    "max_denominator": 512,
+    "allow_same_composition_merge": false
+   },
+   "step_limit": 22,
+   "metadata": {
+    "generator": "emrcm_protocol",
+    "cell": "N3-T1",
+    "witness_actions": 11,
+    "witness_source": "tree"
+   }
+  },
+  {
+   "instance_id": "val_emrcm-0010",
+   "fluids": [
+    {
+     "id": 0,
+     "name": "S",
+     "kind": "SAMPLE"
+    },
+    {
+     "id": 1,
+     "name": "R1",
+     "kind": "REAGENT"
+    },
+    {
+     "id": 2,
+     "name": "B",
+     "kind": "BUFFER"
+    }
+   ],
+   "targets": [
+    {
+     "id": 0,
+     "experiment_id": 0,
+     "composition": {
+      "num": [
+       190,
+       171,
+       151
+      ],
+      "den": 512
+     },
+     "tolerance": {
+      "num": 0,
+      "den": 1
+     },
+     "droplet_volume": 4,
+     "demand": 1
+    }
+   ],
+   "chip": {
+    "name": "meda_m8-M8-S32",
+    "max_mix_volume": 8,
+    "min_mix_volume": 2,
+    "unit_volume": 1,
+    "min_droplet_volume": 1,
+    "allow_partial_take": true,
+    "storage_capacity": 32,
+    "max_denominator": 512,
+    "allow_same_composition_merge": false
+   },
+   "step_limit": 28,
+   "metadata": {
+    "generator": "emrcm_protocol",
+    "cell": "N3-T1",
+    "witness_actions": 14,
+    "witness_source": "tree"
+   }
+  },
+  {
+   "instance_id": "val_emrcm-0011",
+   "fluids": [
+    {
+     "id": 0,
+     "name": "S",
+     "kind": "SAMPLE"
+    },
+    {
+     "id": 1,
+     "name": "R1",
+     "kind": "REAGENT"
+    },
+    {
+     "id": 2,
+     "name": "B",
+     "kind": "BUFFER"
+    }
+   ],
+   "targets": [
+    {
+     "id": 0,
+     "experiment_id": 0,
+     "composition": {
+      "num": [
+       249,
+       50,
+       213
+      ],
+      "den": 512
+     },
+     "tolerance": {
+      "num": 0,
+      "den": 1
+     },
+     "droplet_volume": 4,
+     "demand": 1
+    }
+   ],
+   "chip": {
+    "name": "meda_m8-M8-S32",
+    "max_mix_volume": 8,
+    "min_mix_volume": 2,
+    "unit_volume": 1,
+    "min_droplet_volume": 1,
+    "allow_partial_take": true,
+    "storage_capacity": 32,
+    "max_denominator": 512,
+    "allow_same_composition_merge": false
+   },
+   "step_limit": 26,
+   "metadata": {
+    "generator": "emrcm_protocol",
+    "cell": "N3-T1",
+    "witness_actions": 13,
+    "witness_source": "tree"
+   }
+  },
+  {
+   "instance_id": "val_emrcm-0012",
+   "fluids": [
+    {
+     "id": 0,
+     "name": "S",
+     "kind": "SAMPLE"
+    },
+    {
+     "id": 1,
+     "name": "R1",
+     "kind": "REAGENT"
+    },
+    {
+     "id": 2,
+     "name": "B",
+     "kind": "BUFFER"
+    }
+   ],
+   "targets": [
+    {
+     "id": 0,
+     "experiment_id": 0,
+     "composition": {
+      "num": [
+       90,
+       159,
+       7
+      ],
+      "den": 256
+     },
+     "tolerance": {
+      "num": 0,
+      "den": 1
+     },
+     "droplet_volume": 4,
+     "demand": 1
+    }
+   ],
+   "chip": {
+    "name": "meda_m8-M8-S32",
+    "max_mix_volume": 8,
+    "min_mix_volume": 2,
+    "unit_volume": 1,
+    "min_droplet_volume": 1,
+    "allow_partial_take": true,
+    "storage_capacity": 32,
+    "max_denominator": 512,
+    "allow_same_composition_merge": false
+   },
+   "step_limit": 26,
+   "metadata": {
+    "generator": "emrcm_protocol",
+    "cell": "N3-T1",
+    "witness_actions": 13,
+    "witness_source": "tree"
+   }
+  },
+  {
+   "instance_id": "val_emrcm-0013",
+   "fluids": [
+    {
+     "id": 0,
+     "name": "S",
+     "kind": "SAMPLE"
+    },
+    {
+     "id": 1,
+     "name": "R1",
+     "kind": "REAGENT"
+    },
+    {
+     "id": 2,
+     "name": "B",
+     "kind": "BUFFER"
+    }
+   ],
+   "targets": [
+    {
+     "id": 0,
+     "experiment_id": 0,
+     "composition": {
+      "num": [
+       256,
+       3,
+       253
+      ],
+      "den": 512
+     },
+     "tolerance": {
+      "num": 0,
+      "den": 1
+     },
+     "droplet_volume": 4,
+     "demand": 1
+    }
+   ],
+   "chip": {
+    "name": "meda_m8-M8-S32",
+    "max_mix_volume": 8,
+    "min_mix_volume": 2,
+    "unit_volume": 1,
+    "min_droplet_volume": 1,
+    "allow_partial_take": true,
+    "storage_capacity": 32,
+    "max_denominator": 512,
+    "allow_same_composition_merge": false
+   },
+   "step_limit": 16,
+   "metadata": {
+    "generator": "emrcm_protocol",
+    "cell": "N3-T1",
+    "witness_actions": 7,
+    "witness_source": "tree"
+   }
+  },
+  {
+   "instance_id": "val_emrcm-0014",
+   "fluids": [
+    {
+     "id": 0,
+     "name": "S",
+     "kind": "SAMPLE"
+    },
+    {
+     "id": 1,
+     "name": "R1",
+     "kind": "REAGENT"
+    },
+    {
+     "id": 2,
+     "name": "B",
+     "kind": "BUFFER"
+    }
+   ],
+   "targets": [
+    {
+     "id": 0,
+     "experiment_id": 0,
+     "composition": {
+      "num": [
+       289,
+       8,
+       215
+      ],
+      "den": 512
+     },
+     "tolerance": {
+      "num": 0,
+      "den": 1
+     },
+     "droplet_volume": 4,
+     "demand": 1
+    }
+   ],
+   "chip": {
+    "name": "meda_m8-M8-S32",
+    "max_mix_volume": 8,
+    "min_mix_volume": 2,
+    "unit_volume": 1,
+    "min_droplet_volume": 1,
+    "allow_partial_take": true,
+    "storage_capacity": 32,
+    "max_denominator": 512,
+    "allow_same_composition_merge": false
+   },
+   "step_limit": 22,
+   "metadata": {
+    "generator": "emrcm_protocol",
+    "cell": "N3-T1",
+    "witness_actions": 11,
+    "witness_source": "tree"
+   }
+  },
+  {
+   "instance_id": "val_emrcm-0015",
+   "fluids": [
+    {
+     "id": 0,
+     "name": "S",
+     "kind": "SAMPLE"
+    },
+    {
+     "id": 1,
+     "name": "R1",
+     "kind": "REAGENT"
+    },
+    {
+     "id": 2,
+     "name": "B",
+     "kind": "BUFFER"
+    }
+   ],
+   "targets": [
+    {
+     "id": 0,
+     "experiment_id": 0,
+     "composition": {
+      "num": [
+       89,
+       46,
+       377
+      ],
+      "den": 512
+     },
+     "tolerance": {
+      "num": 0,
+      "den": 1
+     },
+     "droplet_volume": 4,
+     "demand": 1
+    }
+   ],
+   "chip": {
+    "name": "meda_m8-M8-S32",
+    "max_mix_volume": 8,
+    "min_mix_volume": 2,
+    "unit_volume": 1,
+    "min_droplet_volume": 1,
+    "allow_partial_take": true,
+    "storage_capacity": 32,
+    "max_denominator": 512,
+    "allow_same_composition_merge": false
+   },
+   "step_limit": 26,
+   "metadata": {
+    "generator": "emrcm_protocol",
+    "cell": "N3-T1",
+    "witness_actions": 13,
+    "witness_source": "tree"
+   }
+  },
+  {
+   "instance_id": "val_emrcm-0016",
+   "fluids": [
+    {
+     "id": 0,
+     "name": "S",
+     "kind": "SAMPLE"
+    },
+    {
+     "id": 1,
+     "name": "R1",
+     "kind": "REAGENT"
+    },
+    {
+     "id": 2,
+     "name": "B",
+     "kind": "BUFFER"
+    }
+   ],
+   "targets": [
+    {
+     "id": 0,
+     "experiment_id": 0,
+     "composition": {
+      "num": [
+       3,
+       61,
+       448
+      ],
+      "den": 512
+     },
+     "tolerance": {
+      "num": 0,
+      "den": 1
+     },
+     "droplet_volume": 4,
+     "demand": 1
+    }
+   ],
+   "chip": {
+    "name": "meda_m8-M8-S32",
+    "max_mix_volume": 8,
+    "min_mix_volume": 2,
+    "unit_volume": 1,
+    "min_droplet_volume": 1,
+    "allow_partial_take": true,
+    "storage_capacity": 32,
+    "max_denominator": 512,
+    "allow_same_composition_merge": false
+   },
+   "step_limit": 16,
+   "metadata": {
+    "generator": "emrcm_protocol",
+    "cell": "N3-T1",
+    "witness_actions": 6,
+    "witness_source": "tree"
+   }
+  },
+  {
+   "instance_id": "val_emrcm-0017",
+   "fluids": [
+    {
+     "id": 0,
+     "name": "S",
+     "kind": "SAMPLE"
+    },
+    {
+     "id": 1,
+     "name": "R1",
+     "kind": "REAGENT"
+    },
+    {
+     "id": 2,
+     "name": "B",
+     "kind": "BUFFER"
+    }
+   ],
+   "targets": [
+    {
+     "id": 0,
+     "experiment_id": 0,
+     "composition": {
+      "num": [
+       313,
+       185,
+       14
+      ],
+      "den": 512
+     },
+     "tolerance": {
+      "num": 0,
+      "den": 1
+     },
+     "droplet_volume": 4,
+     "demand": 1
+    }
+   ],
+   "chip": {
+    "name": "meda_m8-M8-S32",
+    "max_mix_volume": 8,
+    "min_mix_volume": 2,
+    "unit_volume": 1,
+    "min_droplet_volume": 1,
+    "allow_partial_take": true,
+    "storage_capacity": 32,
+    "max_denominator": 512,
+    "allow_same_composition_merge": false
+   },
+   "step_limit": 24,
+   "metadata": {
+    "generator": "emrcm_protocol",
+    "cell": "N3-T1",
+    "witness_actions": 12,
+    "witness_source": "tree"
+   }
+  },
+  {
+   "instance_id": "val_emrcm-0018",
+   "fluids": [
+    {
+     "id": 0,
+     "name": "S",
+     "kind": "SAMPLE"
+    },
+    {
+     "id": 1,
+     "name": "R1",
+     "kind": "REAGENT"
+    },
+    {
+     "id": 2,
+     "name": "B",
+     "kind": "BUFFER"
+    }
+   ],
+   "targets": [
+    {
+     "id": 0,
+     "experiment_id": 0,
+     "composition": {
+      "num": [
+       30,
+       143,
+       339
+      ],
+      "den": 512
+     },
+     "tolerance": {
+      "num": 0,
+      "den": 1
+     },
+     "droplet_volume": 4,
+     "demand": 1
+    }
+   ],
+   "chip": {
+    "name": "meda_m8-M8-S32",
+    "max_mix_volume": 8,
+    "min_mix_volume": 2,
+    "unit_volume": 1,
+    "min_droplet_volume": 1,
+    "allow_partial_take": true,
+    "storage_capacity": 32,
+    "max_denominator": 512,
+    "allow_same_composition_merge": false
+   },
+   "step_limit": 28,
+   "metadata": {
+    "generator": "emrcm_protocol",
+    "cell": "N3-T1",
+    "witness_actions": 14,
+    "witness_source": "tree"
+   }
+  },
+  {
+   "instance_id": "val_emrcm-0019",
+   "fluids": [
+    {
+     "id": 0,
+     "name": "S",
+     "kind": "SAMPLE"
+    },
+    {
+     "id": 1,
+     "name": "R1",
+     "kind": "REAGENT"
+    },
+    {
+     "id": 2,
+     "name": "B",
+     "kind": "BUFFER"
+    }
+   ],
+   "targets": [
+    {
+     "id": 0,
+     "experiment_id": 0,
+     "composition": {
+      "num": [
+       209,
+       126,
+       177
+      ],
+      "den": 512
+     },
+     "tolerance": {
+      "num": 0,
+      "den": 1
+     },
+     "droplet_volume": 4,
+     "demand": 1
+    }
+   ],
+   "chip": {
+    "name": "meda_m8-M8-S32",
+    "max_mix_volume": 8,
+    "min_mix_volume": 2,
+    "unit_volume": 1,
+    "min_droplet_volume": 1,
+    "allow_partial_take": true,
+    "storage_capacity": 32,
+    "max_denominator": 512,
+    "allow_same_composition_merge": false
+   },
+   "step_limit": 30,
+   "metadata": {
+    "generator": "emrcm_protocol",
+    "cell": "N3-T1",
+    "witness_actions": 15,
+    "witness_source": "tree"
+   }
+  },
+  {
+   "instance_id": "val_emrcm-0020",
+   "fluids": [
+    {
+     "id": 0,
+     "name": "S",
+     "kind": "SAMPLE"
+    },
+    {
+     "id": 1,
+     "name": "R1",
+     "kind": "REAGENT"
+    },
+    {
+     "id": 2,
+     "name": "R2",
+     "kind": "REAGENT"
+    },
+    {
+     "id": 3,
+     "name": "B",
+     "kind": "BUFFER"
+    }
+   ],
+   "targets": [
+    {
+     "id": 0,
+     "experiment_id": 0,
+     "composition": {
+      "num": [
+       23,
+       40,
+       77,
+       372
+      ],
+      "den": 512
+     },
+     "tolerance": {
+      "num": 0,
+      "den": 1
+     },
+     "droplet_volume": 4,
+     "demand": 1
+    }
+   ],
+   "chip": {
+    "name": "meda_m8-M8-S32",
+    "max_mix_volume": 8,
+    "min_mix_volume": 2,
+    "unit_volume": 1,
+    "min_droplet_volume": 1,
+    "allow_partial_take": true,
+    "storage_capacity": 32,
+    "max_denominator": 512,
+    "allow_same_composition_merge": false
+   },
+   "step_limit": 32,
+   "metadata": {
+    "generator": "emrcm_protocol",
+    "cell": "N4-T1",
+    "witness_actions": 16,
+    "witness_source": "tree"
+   }
+  },
+  {
+   "instance_id": "val_emrcm-0021",
+   "fluids": [
+    {
+     "id": 0,
+     "name": "S",
+     "kind": "SAMPLE"
+    },
+    {
+     "id": 1,
+     "name": "R1",
+     "kind": "REAGENT"
+    },
+    {
+     "id": 2,
+     "name": "R2",
+     "kind": "REAGENT"
+    },
+    {
+     "id": 3,
+     "name": "B",
+     "kind": "BUFFER"
+    }
+   ],
+   "targets": [
+    {
+     "id": 0,
+     "experiment_id": 0,
+     "composition": {
+      "num": [
+       60,
+       7,
+       267,
+       178
+      ],
+      "den": 512
+     },
+     "tolerance": {
+      "num": 0,
+      "den": 1
+     },
+     "droplet_volume": 4,
+     "demand": 1
+    }
+   ],
+   "chip": {
+    "name": "meda_m8-M8-S32",
+    "max_mix_volume": 8,
+    "min_mix_volume": 2,
+    "unit_volume": 1,
+    "min_droplet_volume": 1,
+    "allow_partial_take": true,
+    "storage_capacity": 32,
+    "max_denominator": 512,
+    "allow_same_composition_merge": false
+   },
+   "step_limit": 34,
+   "metadata": {
+    "generator": "emrcm_protocol",
+    "cell": "N4-T1",
+    "witness_actions": 17,
+    "witness_source": "tree"
+   }
+  },
+  {
+   "instance_id": "val_emrcm-0022",
+   "fluids": [
+    {
+     "id": 0,
+     "name": "S",
+     "kind": "SAMPLE"
+    },
+    {
+     "id": 1,
+     "name": "R1",
+     "kind": "REAGENT"
+    },
+    {
+     "id": 2,
+     "name": "R2",
+     "kind": "REAGENT"
+    },
+    {
+     "id": 3,
+     "name": "B",
+     "kind": "BUFFER"
+    }
+   ],
+   "targets": [
+    {
+     "id": 0,
+     "experiment_id": 0,
+     "composition": {
+      "num": [
+       5,
+       30,
+       300,
+       177
+      ],
+      "den": 512
+     },
+     "tolerance": {
+      "num": 0,
+      "den": 1
+     },
+     "droplet_volume": 4,
+     "demand": 1
+    }
+   ],
+   "chip": {
+    "name": "meda_m8-M8-S32",
+    "max_mix_volume": 8,
+    "min_mix_volume": 2,
+    "unit_volume": 1,
+    "min_droplet_volume": 1,
+    "allow_partial_take": true,
+    "storage_capacity": 32,
+    "max_denominator": 512,
+    "allow_same_composition_merge": false
+   },
+   "step_limit": 34,
+   "metadata": {
+    "generator": "emrcm_protocol",
+    "cell": "N4-T1",
+    "witness_actions": 17,
+    "witness_source": "tree"
+   }
+  },
+  {
+   "instance_id": "val_emrcm-0023",
+   "fluids": [
+    {
+     "id": 0,
+     "name": "S",
+     "kind": "SAMPLE"
+    },
+    {
+     "id": 1,
+     "name": "R1",
+     "kind": "REAGENT"
+    },
+    {
+     "id": 2,
+     "name": "R2",
+     "kind": "REAGENT"
+    },
+    {
+     "id": 3,
+     "name": "B",
+     "kind": "BUFFER"
+    }
+   ],
+   "targets": [
+    {
+     "id": 0,
+     "experiment_id": 0,
+     "composition": {
+      "num": [
+       109,
+       69,
+       205,
+       129
+      ],
+      "den": 512
+     },
+     "tolerance": {
+      "num": 0,
+      "den": 1
+     },
+     "droplet_volume": 4,
+     "demand": 1
+    }
+   ],
+   "chip": {
+    "name": "meda_m8-M8-S32",
+    "max_mix_volume": 8,
+    "min_mix_volume": 2,
+    "unit_volume": 1,
+    "min_droplet_volume": 1,
+    "allow_partial_take": true,
+    "storage_capacity": 32,
+    "max_denominator": 512,
+    "allow_same_composition_merge": false
+   },
+   "step_limit": 38,
+   "metadata": {
+    "generator": "emrcm_protocol",
+    "cell": "N4-T1",
+    "witness_actions": 19,
+    "witness_source": "tree"
+   }
+  },
+  {
+   "instance_id": "val_emrcm-0024",
+   "fluids": [
+    {
+     "id": 0,
+     "name": "S",
+     "kind": "SAMPLE"
+    },
+    {
+     "id": 1,
+     "name": "R1",
+     "kind": "REAGENT"
+    },
+    {
+     "id": 2,
+     "name": "R2",
+     "kind": "REAGENT"
+    },
+    {
+     "id": 3,
+     "name": "B",
+     "kind": "BUFFER"
+    }
+   ],
+   "targets": [
+    {
+     "id": 0,
+     "experiment_id": 0,
+     "composition": {
+      "num": [
+       30,
+       154,
+       5,
+       323
+      ],
+      "den": 512
+     },
+     "tolerance": {
+      "num": 0,
+      "den": 1
+     },
+     "droplet_volume": 4,
+     "demand": 1
+    }
+   ],
+   "chip": {
+    "name": "meda_m8-M8-S32",
+    "max_mix_volume": 8,
+    "min_mix_volume": 2,
+    "unit_volume": 1,
+    "min_droplet_volume": 1,
+    "allow_partial_take": true,
+    "storage_capacity": 32,
+    "max_denominator": 512,
+    "allow_same_composition_merge": false
+   },
+   "step_limit": 26,
+   "metadata": {
+    "generator": "emrcm_protocol",
+    "cell": "N4-T1",
+    "witness_actions": 13,
+    "witness_source": "tree"
+   }
+  },
+  {
+   "instance_id": "val_emrcm-0025",
+   "fluids": [
+    {
+     "id": 0,
+     "name": "S",
+     "kind": "SAMPLE"
+    },
+    {
+     "id": 1,
+     "name": "R1",
+     "kind": "REAGENT"
+    },
+    {
+     "id": 2,
+     "name": "R2",
+     "kind": "REAGENT"
+    },
+    {
+     "id": 3,
+     "name": "B",
+     "kind": "BUFFER"
+    }
+   ],
+   "targets": [
+    {
+     "id": 0,
+     "experiment_id": 0,
+     "composition": {
+      "num": [
+       98,
+       52,
+       167,
+       195
+      ],
+      "den": 512
+     },
+     "tolerance": {
+      "num": 0,
+      "den": 1
+     },
+     "droplet_volume": 4,
+     "demand": 1
+    }
+   ],
+   "chip": {
+    "name": "meda_m8-M8-S32",
+    "max_mix_volume": 8,
+    "min_mix_volume": 2,
+    "unit_volume": 1,
+    "min_droplet_volume": 1,
+    "allow_partial_take": true,
+    "storage_capacity": 32,
+    "max_denominator": 512,
+    "allow_same_composition_merge": false
+   },
+   "step_limit": 40,
+   "metadata": {
+    "generator": "emrcm_protocol",
+    "cell": "N4-T1",
+    "witness_actions": 20,
+    "witness_source": "tree"
+   }
+  },
+  {
+   "instance_id": "val_emrcm-0026",
+   "fluids": [
+    {
+     "id": 0,
+     "name": "S",
+     "kind": "SAMPLE"
+    },
+    {
+     "id": 1,
+     "name": "R1",
+     "kind": "REAGENT"
+    },
+    {
+     "id": 2,
+     "name": "R2",
+     "kind": "REAGENT"
+    },
+    {
+     "id": 3,
+     "name": "B",
+     "kind": "BUFFER"
+    }
+   ],
+   "targets": [
+    {
+     "id": 0,
+     "experiment_id": 0,
+     "composition": {
+      "num": [
+       190,
+       131,
+       62,
+       129
+      ],
+      "den": 512
+     },
+     "tolerance": {
+      "num": 0,
+      "den": 1
+     },
+     "droplet_volume": 4,
+     "demand": 1
+    }
+   ],
+   "chip": {
+    "name": "meda_m8-M8-S32",
+    "max_mix_volume": 8,
+    "min_mix_volume": 2,
+    "unit_volume": 1,
+    "min_droplet_volume": 1,
+    "allow_partial_take": true,
+    "storage_capacity": 32,
+    "max_denominator": 512,
+    "allow_same_composition_merge": false
+   },
+   "step_limit": 32,
+   "metadata": {
+    "generator": "emrcm_protocol",
+    "cell": "N4-T1",
+    "witness_actions": 16,
+    "witness_source": "tree"
+   }
+  },
+  {
+   "instance_id": "val_emrcm-0027",
+   "fluids": [
+    {
+     "id": 0,
+     "name": "S",
+     "kind": "SAMPLE"
+    },
+    {
+     "id": 1,
+     "name": "R1",
+     "kind": "REAGENT"
+    },
+    {
+     "id": 2,
+     "name": "R2",
+     "kind": "REAGENT"
+    },
+    {
+     "id": 3,
+     "name": "B",
+     "kind": "BUFFER"
+    }
+   ],
+   "targets": [
+    {
+     "id": 0,
+     "experiment_id": 0,
+     "composition": {
+      "num": [
+       123,
+       133,
+       159,
+       97
+      ],
+      "den": 512
+     },
+     "tolerance": {
+      "num": 0,
+      "den": 1
+     },
+     "droplet_volume": 4,
+     "demand": 1
+    }
+   ],
+   "chip": {
+    "name": "meda_m8-M8-S32",
+    "max_mix_volume": 8,
+    "min_mix_volume": 2,
+    "unit_volume": 1,
+    "min_droplet_volume": 1,
+    "allow_partial_take": true,
+    "storage_capacity": 32,
+    "max_denominator": 512,
+    "allow_same_composition_merge": false
+   },
+   "step_limit": 30,
+   "metadata": {
+    "generator": "emrcm_protocol",
+    "cell": "N4-T1",
+    "witness_actions": 15,
+    "witness_source": "tree"
+   }
+  },
+  {
+   "instance_id": "val_emrcm-0028",
+   "fluids": [
+    {
+     "id": 0,
+     "name": "S",
+     "kind": "SAMPLE"
+    },
+    {
+     "id": 1,
+     "name": "R1",
+     "kind": "REAGENT"
+    },
+    {
+     "id": 2,
+     "name": "R2",
+     "kind": "REAGENT"
+    },
+    {
+     "id": 3,
+     "name": "B",
+     "kind": "BUFFER"
+    }
+   ],
+   "targets": [
+    {
+     "id": 0,
+     "experiment_id": 0,
+     "composition": {
+      "num": [
+       310,
+       97,
+       35,
+       70
+      ],
+      "den": 512
+     },
+     "tolerance": {
+      "num": 0,
+      "den": 1
+     },
+     "droplet_volume": 4,
+     "demand": 1
+    }
+   ],
+   "chip": {
+    "name": "meda_m8-M8-S32",
+    "max_mix_volume": 8,
+    "min_mix_volume": 2,
+    "unit_volume": 1,
+    "min_droplet_volume": 1,
+    "allow_partial_take": true,
+    "storage_capacity": 32,
+    "max_denominator": 512,
+    "allow_same_composition_merge": false
+   },
+   "step_limit": 34,
+   "metadata": {
+    "generator": "emrcm_protocol",
+    "cell": "N4-T1",
+    "witness_actions": 17,
+    "witness_source": "tree"
+   }
+  },
+  {
+   "instance_id": "val_emrcm-0029",
+   "fluids": [
+    {
+     "id": 0,
+     "name": "S",
+     "kind": "SAMPLE"
+    },
+    {
+     "id": 1,
+     "name": "R1",
+     "kind": "REAGENT"
+    },
+    {
+     "id": 2,
+     "name": "R2",
+     "kind": "REAGENT"
+    },
+    {
+     "id": 3,
+     "name": "B",
+     "kind": "BUFFER"
+    }
+   ],
+   "targets": [
+    {
+     "id": 0,
+     "experiment_id": 0,
+     "composition": {
+      "num": [
+       259,
+       10,
+       112,
+       131
+      ],
+      "den": 512
+     },
+     "tolerance": {
+      "num": 0,
+      "den": 1
+     },
+     "droplet_volume": 4,
+     "demand": 1
+    }
+   ],
+   "chip": {
+    "name": "meda_m8-M8-S32",
+    "max_mix_volume": 8,
+    "min_mix_volume": 2,
+    "unit_volume": 1,
+    "min_droplet_volume": 1,
+    "allow_partial_take": true,
+    "storage_capacity": 32,
+    "max_denominator": 512,
+    "allow_same_composition_merge": false
+   },
+   "step_limit": 30,
+   "metadata": {
+    "generator": "emrcm_protocol",
+    "cell": "N4-T1",
+    "witness_actions": 15,
+    "witness_source": "tree"
+   }
+  },
+  {
+   "instance_id": "val_emrcm-0030",
+   "fluids": [
+    {
+     "id": 0,
+     "name": "S",
+     "kind": "SAMPLE"
+    },
+    {
+     "id": 1,
+     "name": "R1",
+     "kind": "REAGENT"
+    },
+    {
+     "id": 2,
+     "name": "R2",
+     "kind": "REAGENT"
+    },
+    {
+     "id": 3,
+     "name": "B",
+     "kind": "BUFFER"
+    }
+   ],
+   "targets": [
+    {
+     "id": 0,
+     "experiment_id": 0,
+     "composition": {
+      "num": [
+       247,
+       102,
+       145,
+       18
+      ],
+      "den": 512
+     },
+     "tolerance": {
+      "num": 0,
+      "den": 1
+     },
+     "droplet_volume": 4,
+     "demand": 1
+    }
+   ],
+   "chip": {
+    "name": "meda_m8-M8-S32",
+    "max_mix_volume": 8,
+    "min_mix_volume": 2,
+    "unit_volume": 1,
+    "min_droplet_volume": 1,
+    "allow_partial_take": true,
+    "storage_capacity": 32,
+    "max_denominator": 512,
+    "allow_same_composition_merge": false
+   },
+   "step_limit": 42,
+   "metadata": {
+    "generator": "emrcm_protocol",
+    "cell": "N4-T1",
+    "witness_actions": 21,
+    "witness_source": "tree"
+   }
+  },
+  {
+   "instance_id": "val_emrcm-0031",
+   "fluids": [
+    {
+     "id": 0,
+     "name": "S",
+     "kind": "SAMPLE"
+    },
+    {
+     "id": 1,
+     "name": "R1",
+     "kind": "REAGENT"
+    },
+    {
+     "id": 2,
+     "name": "R2",
+     "kind": "REAGENT"
+    },
+    {
+     "id": 3,
+     "name": "B",
+     "kind": "BUFFER"
+    }
+   ],
+   "targets": [
+    {
+     "id": 0,
+     "experiment_id": 0,
+     "composition": {
+      "num": [
+       126,
+       216,
+       127,
+       43
+      ],
+      "den": 512
+     },
+     "tolerance": {
+      "num": 0,
+      "den": 1
+     },
+     "droplet_volume": 4,
+     "demand": 1
+    }
+   ],
+   "chip": {
+    "name": "meda_m8-M8-S32",
+    "max_mix_volume": 8,
+    "min_mix_volume": 2,
+    "unit_volume": 1,
+    "min_droplet_volume": 1,
+    "allow_partial_take": true,
+    "storage_capacity": 32,
+    "max_denominator": 512,
+    "allow_same_composition_merge": false
+   },
+   "step_limit": 40,
+   "metadata": {
+    "generator": "emrcm_protocol",
+    "cell": "N4-T1",
+    "witness_actions": 20,
+    "witness_source": "tree"
+   }
+  },
+  {
+   "instance_id": "val_emrcm-0032",
+   "fluids": [
+    {
+     "id": 0,
+     "name": "S",
+     "kind": "SAMPLE"
+    },
+    {
+     "id": 1,
+     "name": "R1",
+     "kind": "REAGENT"
+    },
+    {
+     "id": 2,
+     "name": "R2",
+     "kind": "REAGENT"
+    },
+    {
+     "id": 3,
+     "name": "B",
+     "kind": "BUFFER"
+    }
+   ],
+   "targets": [
+    {
+     "id": 0,
+     "experiment_id": 0,
+     "composition": {
+      "num": [
+       35,
+       1,
+       65,
+       27
+      ],
+      "den": 128
+     },
+     "tolerance": {
+      "num": 0,
+      "den": 1
+     },
+     "droplet_volume": 4,
+     "demand": 1
+    }
+   ],
+   "chip": {
+    "name": "meda_m8-M8-S32",
+    "max_mix_volume": 8,
+    "min_mix_volume": 2,
+    "unit_volume": 1,
+    "min_droplet_volume": 1,
+    "allow_partial_take": true,
+    "storage_capacity": 32,
+    "max_denominator": 512,
+    "allow_same_composition_merge": false
+   },
+   "step_limit": 26,
+   "metadata": {
+    "generator": "emrcm_protocol",
+    "cell": "N4-T1",
+    "witness_actions": 13,
+    "witness_source": "tree"
+   }
+  },
+  {
+   "instance_id": "val_emrcm-0033",
+   "fluids": [
+    {
+     "id": 0,
+     "name": "S",
+     "kind": "SAMPLE"
+    },
+    {
+     "id": 1,
+     "name": "R1",
+     "kind": "REAGENT"
+    },
+    {
+     "id": 2,
+     "name": "R2",
+     "kind": "REAGENT"
+    },
+    {
+     "id": 3,
+     "name": "B",
+     "kind": "BUFFER"
+    }
+   ],
+   "targets": [
+    {
+     "id": 0,
+     "experiment_id": 0,
+     "composition": {
+      "num": [
+       354,
+       7,
+       86,
+       65
+      ],
+      "den": 512
+     },
+     "tolerance": {
+      "num": 0,
+      "den": 1
+     },
+     "droplet_volume": 4,
+     "demand": 1
+    }
+   ],
+   "chip": {
+    "name": "meda_m8-M8-S32",
+    "max_mix_volume": 8,
+    "min_mix_volume": 2,
+    "unit_volume": 1,
+    "min_droplet_volume": 1,
+    "allow_partial_take": true,
+    "storage_capacity": 32,
+    "max_denominator": 512,
+    "allow_same_composition_merge": false
+   },
+   "step_limit": 32,
+   "metadata": {
+    "generator": "emrcm_protocol",
+    "cell": "N4-T1",
+    "witness_actions": 16,
+    "witness_source": "tree"
+   }
+  },
+  {
+   "instance_id": "val_emrcm-0034",
+   "fluids": [
+    {
+     "id": 0,
+     "name": "S",
+     "kind": "SAMPLE"
+    },
+    {
+     "id": 1,
+     "name": "R1",
+     "kind": "REAGENT"
+    },
+    {
+     "id": 2,
+     "name": "R2",
+     "kind": "REAGENT"
+    },
+    {
+     "id": 3,
+     "name": "B",
+     "kind": "BUFFER"
+    }
+   ],
+   "targets": [
+    {
+     "id": 0,
+     "experiment_id": 0,
+     "composition": {
+      "num": [
+       147,
+       184,
+       149,
+       32
+      ],
+      "den": 512
+     },
+     "tolerance": {
+      "num": 0,
+      "den": 1
+     },
+     "droplet_volume": 4,
+     "demand": 1
+    }
+   ],
+   "chip": {
+    "name": "meda_m8-M8-S32",
+    "max_mix_volume": 8,
+    "min_mix_volume": 2,
+    "unit_volume": 1,
+    "min_droplet_volume": 1,
+    "allow_partial_take": true,
+    "storage_capacity": 32,
+    "max_denominator": 512,
+    "allow_same_composition_merge": false
+   },
+   "step_limit": 36,
+   "metadata": {
+    "generator": "emrcm_protocol",
+    "cell": "N4-T1",
+    "witness_actions": 18,
+    "witness_source": "tree"
+   }
+  },
+  {
+   "instance_id": "val_emrcm-0035",
+   "fluids": [
+    {
+     "id": 0,
+     "name": "S",
+     "kind": "SAMPLE"
+    },
+    {
+     "id": 1,
+     "name": "R1",
+     "kind": "REAGENT"
+    },
+    {
+     "id": 2,
+     "name": "R2",
+     "kind": "REAGENT"
+    },
+    {
+     "id": 3,
+     "name": "B",
+     "kind": "BUFFER"
+    }
+   ],
+   "targets": [
+    {
+     "id": 0,
+     "experiment_id": 0,
+     "composition": {
+      "num": [
+       151,
+       113,
+       44,
+       204
+      ],
+      "den": 512
+     },
+     "tolerance": {
+      "num": 0,
+      "den": 1
+     },
+     "droplet_volume": 4,
+     "demand": 1
+    }
+   ],
+   "chip": {
+    "name": "meda_m8-M8-S32",
+    "max_mix_volume": 8,
+    "min_mix_volume": 2,
+    "unit_volume": 1,
+    "min_droplet_volume": 1,
+    "allow_partial_take": true,
+    "storage_capacity": 32,
+    "max_denominator": 512,
+    "allow_same_composition_merge": false
+   },
+   "step_limit": 32,
+   "metadata": {
+    "generator": "emrcm_protocol",
+    "cell": "N4-T1",
+    "witness_actions": 16,
+    "witness_source": "tree"
+   }
+  },
+  {
+   "instance_id": "val_emrcm-0036",
+   "fluids": [
+    {
+     "id": 0,
+     "name": "S",
+     "kind": "SAMPLE"
+    },
+    {
+     "id": 1,
+     "name": "R1",
+     "kind": "REAGENT"
+    },
+    {
+     "id": 2,
+     "name": "R2",
+     "kind": "REAGENT"
+    },
+    {
+     "id": 3,
+     "name": "B",
+     "kind": "BUFFER"
+    }
+   ],
+   "targets": [
+    {
+     "id": 0,
+     "experiment_id": 0,
+     "composition": {
+      "num": [
+       78,
+       118,
+       47,
+       13
+      ],
+      "den": 256
+     },
+     "tolerance": {
+      "num": 0,
+      "den": 1
+     },
+     "droplet_volume": 4,
+     "demand": 1
+    }
+   ],
+   "chip": {
+    "name": "meda_m8-M8-S32",
+    "max_mix_volume": 8,
+    "min_mix_volume": 2,
+    "unit_volume": 1,
+    "min_droplet_volume": 1,
+    "allow_partial_take": true,
+    "storage_capacity": 32,
+    "max_denominator": 512,
+    "allow_same_composition_merge": false
+   },
+   "step_limit": 32,
+   "metadata": {
+    "generator": "emrcm_protocol",
+    "cell": "N4-T1",
+    "witness_actions": 16,
+    "witness_source": "tree"
+   }
+  },
+  {
+   "instance_id": "val_emrcm-0037",
+   "fluids": [
+    {
+     "id": 0,
+     "name": "S",
+     "kind": "SAMPLE"
+    },
+    {
+     "id": 1,
+     "name": "R1",
+     "kind": "REAGENT"
+    },
+    {
+     "id": 2,
+     "name": "R2",
+     "kind": "REAGENT"
+    },
+    {
+     "id": 3,
+     "name": "B",
+     "kind": "BUFFER"
+    }
+   ],
+   "targets": [
+    {
+     "id": 0,
+     "experiment_id": 0,
+     "composition": {
+      "num": [
+       102,
+       107,
+       201,
+       102
+      ],
+      "den": 512
+     },
+     "tolerance": {
+      "num": 0,
+      "den": 1
+     },
+     "droplet_volume": 4,
+     "demand": 1
+    }
+   ],
+   "chip": {
+    "name": "meda_m8-M8-S32",
+    "max_mix_volume": 8,
+    "min_mix_volume": 2,
+    "unit_volume": 1,
+    "min_droplet_volume": 1,
+    "allow_partial_take": true,
+    "storage_capacity": 32,
+    "max_denominator": 512,
+    "allow_same_composition_merge": false
+   },
+   "step_limit": 44,
+   "metadata": {
+    "generator": "emrcm_protocol",
+    "cell": "N4-T1",
+    "witness_actions": 22,
+    "witness_source": "tree"
+   }
+  },
+  {
+   "instance_id": "val_emrcm-0038",
+   "fluids": [
+    {
+     "id": 0,
+     "name": "S",
+     "kind": "SAMPLE"
+    },
+    {
+     "id": 1,
+     "name": "R1",
+     "kind": "REAGENT"
+    },
+    {
+     "id": 2,
+     "name": "R2",
+     "kind": "REAGENT"
+    },
+    {
+     "id": 3,
+     "name": "B",
+     "kind": "BUFFER"
+    }
+   ],
+   "targets": [
+    {
+     "id": 0,
+     "experiment_id": 0,
+     "composition": {
+      "num": [
+       156,
+       33,
+       184,
+       139
+      ],
+      "den": 512
+     },
+     "tolerance": {
+      "num": 0,
+      "den": 1
+     },
+     "droplet_volume": 4,
+     "demand": 1
+    }
+   ],
+   "chip": {
+    "name": "meda_m8-M8-S32",
+    "max_mix_volume": 8,
+    "min_mix_volume": 2,
+    "unit_volume": 1,
+    "min_droplet_volume": 1,
+    "allow_partial_take": true,
+    "storage_capacity": 32,
+    "max_denominator": 512,
+    "allow_same_composition_merge": false
+   },
+   "step_limit": 36,
+   "metadata": {
+    "generator": "emrcm_protocol",
+    "cell": "N4-T1",
+    "witness_actions": 18,
+    "witness_source": "tree"
+   }
+  },
+  {
+   "instance_id": "val_emrcm-0039",
+   "fluids": [
+    {
+     "id": 0,
+     "name": "S",
+     "kind": "SAMPLE"
+    },
+    {
+     "id": 1,
+     "name": "R1",
+     "kind": "REAGENT"
+    },
+    {
+     "id": 2,
+     "name": "R2",
+     "kind": "REAGENT"
+    },
+    {
+     "id": 3,
+     "name": "B",
+     "kind": "BUFFER"
+    }
+   ],
+   "targets": [
+    {
+     "id": 0,
+     "experiment_id": 0,
+     "composition": {
+      "num": [
+       15,
+       34,
+       91,
+       116
+      ],
+      "den": 256
+     },
+     "tolerance": {
+      "num": 0,
+      "den": 1
+     },
+     "droplet_volume": 4,
+     "demand": 1
+    }
+   ],
+   "chip": {
+    "name": "meda_m8-M8-S32",
+    "max_mix_volume": 8,
+    "min_mix_volume": 2,
+    "unit_volume": 1,
+    "min_droplet_volume": 1,
+    "allow_partial_take": true,
+    "storage_capacity": 32,
+    "max_denominator": 512,
+    "allow_same_composition_merge": false
+   },
+   "step_limit": 34,
+   "metadata": {
+    "generator": "emrcm_protocol",
+    "cell": "N4-T1",
+    "witness_actions": 17,
+    "witness_source": "tree"
+   }
+  },
+  {
+   "instance_id": "val_emrcm-0040",
+   "fluids": [
+    {
+     "id": 0,
+     "name": "S",
+     "kind": "SAMPLE"
+    },
+    {
+     "id": 1,
+     "name": "R1",
+     "kind": "REAGENT"
+    },
+    {
+     "id": 2,
+     "name": "R2",
+     "kind": "REAGENT"
+    },
+    {
+     "id": 3,
+     "name": "B",
+     "kind": "BUFFER"
+    }
+   ],
+   "targets": [
+    {
+     "id": 0,
+     "experiment_id": 0,
+     "composition": {
+      "num": [
+       10,
+       197,
+       275,
+       30
+      ],
+      "den": 512
+     },
+     "tolerance": {
+      "num": 0,
+      "den": 1
+     },
+     "droplet_volume": 4,
+     "demand": 1
+    }
+   ],
+   "chip": {
+    "name": "meda_m8-M8-S32",
+    "max_mix_volume": 8,
+    "min_mix_volume": 2,
+    "unit_volume": 1,
+    "min_droplet_volume": 1,
+    "allow_partial_take": true,
+    "storage_capacity": 32,
+    "max_denominator": 512,
+    "allow_same_composition_merge": false
+   },
+   "step_limit": 38,
+   "metadata": {
+    "generator": "emrcm_protocol",
+    "cell": "N4-T1",
+    "witness_actions": 19,
+    "witness_source": "tree"
+   }
+  },
+  {
+   "instance_id": "val_emrcm-0041",
+   "fluids": [
+    {
+     "id": 0,
+     "name": "S",
+     "kind": "SAMPLE"
+    },
+    {
+     "id": 1,
+     "name": "R1",
+     "kind": "REAGENT"
+    },
+    {
+     "id": 2,
+     "name": "R2",
+     "kind": "REAGENT"
+    },
+    {
+     "id": 3,
+     "name": "B",
+     "kind": "BUFFER"
+    }
+   ],
+   "targets": [
+    {
+     "id": 0,
+     "experiment_id": 0,
+     "composition": {
+      "num": [
+       345,
+       86,
+       43,
+       38
+      ],
+      "den": 512
+     },
+     "tolerance": {
+      "num": 0,
+      "den": 1
+     },
+     "droplet_volume": 4,
+     "demand": 1
+    }
+   ],
+   "chip": {
+    "name": "meda_m8-M8-S32",
+    "max_mix_volume": 8,
+    "min_mix_volume": 2,
+    "unit_volume": 1,
+    "min_droplet_volume": 1,
+    "allow_partial_take": true,
+    "storage_capacity": 32,
+    "max_denominator": 512,
+    "allow_same_composition_merge": false
+   },
+   "step_limit": 38,
+   "metadata": {
+    "generator": "emrcm_protocol",
+    "cell": "N4-T1",
+    "witness_actions": 19,
+    "witness_source": "tree"
+   }
+  },
+  {
+   "instance_id": "val_emrcm-0042",
+   "fluids": [
+    {
+     "id": 0,
+     "name": "S",
+     "kind": "SAMPLE"
+    },
+    {
+     "id": 1,
+     "name": "R1",
+     "kind": "REAGENT"
+    },
+    {
+     "id": 2,
+     "name": "R2",
+     "kind": "REAGENT"
+    },
+    {
+     "id": 3,
+     "name": "B",
+     "kind": "BUFFER"
+    }
+   ],
+   "targets": [
+    {
+     "id": 0,
+     "experiment_id": 0,
+     "composition": {
+      "num": [
+       235,
+       122,
+       31,
+       124
+      ],
+      "den": 512
+     },
+     "tolerance": {
+      "num": 0,
+      "den": 1
+     },
+     "droplet_volume": 4,
+     "demand": 1
+    }
+   ],
+   "chip": {
+    "name": "meda_m8-M8-S32",
+    "max_mix_volume": 8,
+    "min_mix_volume": 2,
+    "unit_volume": 1,
+    "min_droplet_volume": 1,
+    "allow_partial_take": true,
+    "storage_capacity": 32,
+    "max_denominator": 512,
+    "allow_same_composition_merge": false
+   },
+   "step_limit": 40,
+   "metadata": {
+    "generator": "emrcm_protocol",
+    "cell": "N4-T1",
+    "witness_actions": 20,
+    "witness_source": "tree"
+   }
+  },
+  {
+   "instance_id": "val_emrcm-0043",
+   "fluids": [
+    {
+     "id": 0,
+     "name": "S",
+     "kind": "SAMPLE"
+    },
+    {
+     "id": 1,
+     "name": "R1",
+     "kind": "REAGENT"
+    },
+    {
+     "id": 2,
+     "name": "R2",
+     "kind": "REAGENT"
+    },
+    {
+     "id": 3,
+     "name": "B",
+     "kind": "BUFFER"
+    }
+   ],
+   "targets": [
+    {
+     "id": 0,
+     "experiment_id": 0,
+     "composition": {
+      "num": [
+       178,
+       74,
+       149,
+       111
+      ],
+      "den": 512
+     },
+     "tolerance": {
+      "num": 0,
+      "den": 1
+     },
+     "droplet_volume": 4,
+     "demand": 1
+    }
+   ],
+   "chip": {
+    "name": "meda_m8-M8-S32",
+    "max_mix_volume": 8,
+    "min_mix_volume": 2,
+    "unit_volume": 1,
+    "min_droplet_volume": 1,
+    "allow_partial_take": true,
+    "storage_capacity": 32,
+    "max_denominator": 512,
+    "allow_same_composition_merge": false
+   },
+   "step_limit": 38,
+   "metadata": {
+    "generator": "emrcm_protocol",
+    "cell": "N4-T1",
+    "witness_actions": 19,
+    "witness_source": "tree"
+   }
+  },
+  {
+   "instance_id": "val_emrcm-0044",
+   "fluids": [
+    {
+     "id": 0,
+     "name": "S",
+     "kind": "SAMPLE"
+    },
+    {
+     "id": 1,
+     "name": "R1",
+     "kind": "REAGENT"
+    },
+    {
+     "id": 2,
+     "name": "R2",
+     "kind": "REAGENT"
+    },
+    {
+     "id": 3,
+     "name": "B",
+     "kind": "BUFFER"
+    }
+   ],
+   "targets": [
+    {
+     "id": 0,
+     "experiment_id": 0,
+     "composition": {
+      "num": [
+       45,
+       273,
+       102,
+       92
+      ],
+      "den": 512
+     },
+     "tolerance": {
+      "num": 0,
+      "den": 1
+     },
+     "droplet_volume": 4,
+     "demand": 1
+    }
+   ],
+   "chip": {
+    "name": "meda_m8-M8-S32",
+    "max_mix_volume": 8,
+    "min_mix_volume": 2,
+    "unit_volume": 1,
+    "min_droplet_volume": 1,
+    "allow_partial_take": true,
+    "storage_capacity": 32,
+    "max_denominator": 512,
+    "allow_same_composition_merge": false
+   },
+   "step_limit": 38,
+   "metadata": {
+    "generator": "emrcm_protocol",
+    "cell": "N4-T1",
+    "witness_actions": 19,
+    "witness_source": "tree"
+   }
+  },
+  {
+   "instance_id": "val_emrcm-0045",
+   "fluids": [
+    {
+     "id": 0,
+     "name": "S",
+     "kind": "SAMPLE"
+    },
+    {
+     "id": 1,
+     "name": "R1",
+     "kind": "REAGENT"
+    },
+    {
+     "id": 2,
+     "name": "R2",
+     "kind": "REAGENT"
+    },
+    {
+     "id": 3,
+     "name": "B",
+     "kind": "BUFFER"
+    }
+   ],
+   "targets": [
+    {
+     "id": 0,
+     "experiment_id": 0,
+     "composition": {
+      "num": [
+       418,
+       12,
+       53,
+       29
+      ],
+      "den": 512
+     },
+     "tolerance": {
+      "num": 0,
+      "den": 1
+     },
+     "droplet_volume": 4,
+     "demand": 1
+    }
+   ],
+   "chip": {
+    "name": "meda_m8-M8-S32",
+    "max_mix_volume": 8,
+    "min_mix_volume": 2,
+    "unit_volume": 1,
+    "min_droplet_volume": 1,
+    "allow_partial_take": true,
+    "storage_capacity": 32,
+    "max_denominator": 512,
+    "allow_same_composition_merge": false
+   },
+   "step_limit": 28,
+   "metadata": {
+    "generator": "emrcm_protocol",
+    "cell": "N4-T1",
+    "witness_actions": 14,
+    "witness_source": "tree"
+   }
+  },
+  {
+   "instance_id": "val_emrcm-0046",
+   "fluids": [
+    {
+     "id": 0,
+     "name": "S",
+     "kind": "SAMPLE"
+    },
+    {
+     "id": 1,
+     "name": "R1",
+     "kind": "REAGENT"
+    },
+    {
+     "id": 2,
+     "name": "R2",
+     "kind": "REAGENT"
+    },
+    {
+     "id": 3,
+     "name": "B",
+     "kind": "BUFFER"
+    }
+   ],
+   "targets": [
+    {
+     "id": 0,
+     "experiment_id": 0,
+     "composition": {
+      "num": [
+       11,
+       82,
+       112,
+       51
+      ],
+      "den": 256
+     },
+     "tolerance": {
+      "num": 0,
+      "den": 1
+     },
+     "droplet_volume": 4,
+     "demand": 1
+    }
+   ],
+   "chip": {
+    "name": "meda_m8-M8-S32",
+    "max_mix_volume": 8,
+    "min_mix_volume": 2,
+    "unit_volume": 1,
+    "min_droplet_volume": 1,
+    "allow_partial_take": true,
+    "storage_capacity": 32,
+    "max_denominator": 512,
+    "allow_same_composition_merge": false
+   },
+   "step_limit": 38,
+   "metadata": {
+    "generator": "emrcm_protocol",
+    "cell": "N4-T1",
+    "witness_actions": 19,
+    "witness_source": "tree"
+   }
+  },
+  {
+   "instance_id": "val_emrcm-0047",
+   "fluids": [
+    {
+     "id": 0,
+     "name": "S",
+     "kind": "SAMPLE"
+    },
+    {
+     "id": 1,
+     "name": "R1",
+     "kind": "REAGENT"
+    },
+    {
+     "id": 2,
+     "name": "R2",
+     "kind": "REAGENT"
+    },
+    {
+     "id": 3,
+     "name": "B",
+     "kind": "BUFFER"
+    }
+   ],
+   "targets": [
+    {
+     "id": 0,
+     "experiment_id": 0,
+     "composition": {
+      "num": [
+       44,
+       26,
+       305,
+       137
+      ],
+      "den": 512
+     },
+     "tolerance": {
+      "num": 0,
+      "den": 1
+     },
+     "droplet_volume": 4,
+     "demand": 1
+    }
+   ],
+   "chip": {
+    "name": "meda_m8-M8-S32",
+    "max_mix_volume": 8,
+    "min_mix_volume": 2,
+    "unit_volume": 1,
+    "min_droplet_volume": 1,
+    "allow_partial_take": true,
+    "storage_capacity": 32,
+    "max_denominator": 512,
+    "allow_same_composition_merge": false
+   },
+   "step_limit": 36,
+   "metadata": {
+    "generator": "emrcm_protocol",
+    "cell": "N4-T1",
+    "witness_actions": 18,
+    "witness_source": "tree"
+   }
+  },
+  {
+   "instance_id": "val_emrcm-0048",
+   "fluids": [
+    {
+     "id": 0,
+     "name": "S",
+     "kind": "SAMPLE"
+    },
+    {
+     "id": 1,
+     "name": "R1",
+     "kind": "REAGENT"
+    },
+    {
+     "id": 2,
+     "name": "R2",
+     "kind": "REAGENT"
+    },
+    {
+     "id": 3,
+     "name": "B",
+     "kind": "BUFFER"
+    }
+   ],
+   "targets": [
+    {
+     "id": 0,
+     "experiment_id": 0,
+     "composition": {
+      "num": [
+       2,
+       81,
+       72,
+       357
+      ],
+      "den": 512
+     },
+     "tolerance": {
+      "num": 0,
+      "den": 1
+     },
+     "droplet_volume": 4,
+     "demand": 1
+    }
+   ],
+   "chip": {
+    "name": "meda_m8-M8-S32",
+    "max_mix_volume": 8,
+    "min_mix_volume": 2,
+    "unit_volume": 1,
+    "min_droplet_volume": 1,
+    "allow_partial_take": true,
+    "storage_capacity": 32,
+    "max_denominator": 512,
+    "allow_same_composition_merge": false
+   },
+   "step_limit": 36,
+   "metadata": {
+    "generator": "emrcm_protocol",
+    "cell": "N4-T1",
+    "witness_actions": 18,
+    "witness_source": "tree"
+   }
+  },
+  {
+   "instance_id": "val_emrcm-0049",
+   "fluids": [
+    {
+     "id": 0,
+     "name": "S",
+     "kind": "SAMPLE"
+    },
+    {
+     "id": 1,
+     "name": "R1",
+     "kind": "REAGENT"
+    },
+    {
+     "id": 2,
+     "name": "R2",
+     "kind": "REAGENT"
+    },
+    {
+     "id": 3,
+     "name": "B",
+     "kind": "BUFFER"
+    }
+   ],
+   "targets": [
+    {
+     "id": 0,
+     "experiment_id": 0,
+     "composition": {
+      "num": [
+       139,
+       50,
+       20,
+       47
+      ],
+      "den": 256
+     },
+     "tolerance": {
+      "num": 0,
+      "den": 1
+     },
+     "droplet_volume": 4,
+     "demand": 1
+    }
+   ],
+   "chip": {
+    "name": "meda_m8-M8-S32",
+    "max_mix_volume": 8,
+    "min_mix_volume": 2,
+    "unit_volume": 1,
+    "min_droplet_volume": 1,
+    "allow_partial_take": true,
+    "storage_capacity": 32,
+    "max_denominator": 512,
+    "allow_same_composition_merge": false
+   },
+   "step_limit": 32,
+   "metadata": {
+    "generator": "emrcm_protocol",
+    "cell": "N4-T1",
+    "witness_actions": 16,
+    "witness_source": "tree"
+   }
+  },
+  {
+   "instance_id": "val_emrcm-0050",
+   "fluids": [
+    {
+     "id": 0,
+     "name": "S",
+     "kind": "SAMPLE"
+    },
+    {
+     "id": 1,
+     "name": "R1",
+     "kind": "REAGENT"
+    },
+    {
+     "id": 2,
+     "name": "R2",
+     "kind": "REAGENT"
+    },
+    {
+     "id": 3,
+     "name": "R3",
+     "kind": "REAGENT"
+    },
+    {
+     "id": 4,
+     "name": "B",
+     "kind": "BUFFER"
+    }
+   ],
+   "targets": [
+    {
+     "id": 0,
+     "experiment_id": 0,
+     "composition": {
+      "num": [
+       241,
+       60,
+       168,
+       15,
+       28
+      ],
+      "den": 512
+     },
+     "tolerance": {
+      "num": 0,
+      "den": 1
+     },
+     "droplet_volume": 4,
+     "demand": 1
+    }
+   ],
+   "chip": {
+    "name": "meda_m8-M8-S32",
+    "max_mix_volume": 8,
+    "min_mix_volume": 2,
+    "unit_volume": 1,
+    "min_droplet_volume": 1,
+    "allow_partial_take": true,
+    "storage_capacity": 32,
+    "max_denominator": 512,
+    "allow_same_composition_merge": false
+   },
+   "step_limit": 48,
+   "metadata": {
+    "generator": "emrcm_protocol",
+    "cell": "N5-T1",
+    "witness_actions": 24,
+    "witness_source": "tree"
+   }
+  },
+  {
+   "instance_id": "val_emrcm-0051",
+   "fluids": [
+    {
+     "id": 0,
+     "name": "S",
+     "kind": "SAMPLE"
+    },
+    {
+     "id": 1,
+     "name": "R1",
+     "kind": "REAGENT"
+    },
+    {
+     "id": 2,
+     "name": "R2",
+     "kind": "REAGENT"
+    },
+    {
+     "id": 3,
+     "name": "R3",
+     "kind": "REAGENT"
+    },
+    {
+     "id": 4,
+     "name": "B",
+     "kind": "BUFFER"
+    }
+   ],
+   "targets": [
+    {
+     "id": 0,
+     "experiment_id": 0,
+     "composition": {
+      "num": [
+       148,
+       155,
+       95,
+       96,
+       18
+      ],
+      "den": 512
+     },
+     "tolerance": {
+      "num": 0,
+      "den": 1
+     },
+     "droplet_volume": 4,
+     "demand": 1
+    }
+   ],
+   "chip": {
+    "name": "meda_m8-M8-S32",
+    "max_mix_volume": 8,
+    "min_mix_volume": 2,
+    "unit_volume": 1,
+    "min_droplet_volume": 1,
+    "allow_partial_take": true,
+    "storage_capacity": 32,
+    "max_denominator": 512,
+    "allow_same_composition_merge": false
+   },
+   "step_limit": 50,
+   "metadata": {
+    "generator": "emrcm_protocol",
+    "cell": "N5-T1",
+    "witness_actions": 25,
+    "witness_source": "tree"
+   }
+  },
+  {
+   "instance_id": "val_emrcm-0052",
+   "fluids": [
+    {
+     "id": 0,
+     "name": "S",
+     "kind": "SAMPLE"
+    },
+    {
+     "id": 1,
+     "name": "R1",
+     "kind": "REAGENT"
+    },
+    {
+     "id": 2,
+     "name": "R2",
+     "kind": "REAGENT"
+    },
+    {
+     "id": 3,
+     "name": "R3",
+     "kind": "REAGENT"
+    },
+    {
+     "id": 4,
+     "name": "B",
+     "kind": "BUFFER"
+    }
+   ],
+   "targets": [
+    {
+     "id": 0,
+     "experiment_id": 0,
+     "composition": {
+      "num": [
+       179,
+       36,
+       188,
+       31,
+       78
+      ],
+      "den": 512
+     },
+     "tolerance": {
+      "num": 0,
+      "den": 1
+     },
+     "droplet_volume": 4,
+     "demand": 1
+    }
+   ],
+   "chip": {
+    "name": "meda_m8-M8-S32",
+    "max_mix_volume": 8,
+    "min_mix_volume": 2,
+    "unit_volume": 1,
+    "min_droplet_volume": 1,
+    "allow_partial_take": true,
+    "storage_capacity": 32,
+    "max_denominator": 512,
+    "allow_same_composition_merge": false
+   },
+   "step_limit": 50,
+   "metadata": {
+    "generator": "emrcm_protocol",
+    "cell": "N5-T1",
+    "witness_actions": 25,
+    "witness_source": "tree"
+   }
+  },
+  {
+   "instance_id": "val_emrcm-0053",
+   "fluids": [
+    {
+     "id": 0,
+     "name": "S",
+     "kind": "SAMPLE"
+    },
+    {
+     "id": 1,
+     "name": "R1",
+     "kind": "REAGENT"
+    },
+    {
+     "id": 2,
+     "name": "R2",
+     "kind": "REAGENT"
+    },
+    {
+     "id": 3,
+     "name": "R3",
+     "kind": "REAGENT"
+    },
+    {
+     "id": 4,
+     "name": "B",
+     "kind": "BUFFER"
+    }
+   ],
+   "targets": [
+    {
+     "id": 0,
+     "experiment_id": 0,
+     "composition": {
+      "num": [
+       30,
+       45,
+       322,
+       32,
+       83
+      ],
+      "den": 512
+     },
+     "tolerance": {
+      "num": 0,
+      "den": 1
+     },
+     "droplet_volume": 4,
+     "demand": 1
+    }
+   ],
+   "chip": {
+    "name": "meda_m8-M8-S32",
+    "max_mix_volume": 8,
+    "min_mix_volume": 2,
+    "unit_volume": 1,
+    "min_droplet_volume": 1,
+    "allow_partial_take": true,
+    "storage_capacity": 32,
+    "max_denominator": 512,
+    "allow_same_composition_merge": false
+   },
+   "step_limit": 48,
+   "metadata": {
+    "generator": "emrcm_protocol",
+    "cell": "N5-T1",
+    "witness_actions": 24,
+    "witness_source": "tree"
+   }
+  },
+  {
+   "instance_id": "val_emrcm-0054",
+   "fluids": [
+    {
+     "id": 0,
+     "name": "S",
+     "kind": "SAMPLE"
+    },
+    {
+     "id": 1,
+     "name": "R1",
+     "kind": "REAGENT"
+    },
+    {
+     "id": 2,
+     "name": "R2",
+     "kind": "REAGENT"
+    },
+    {
+     "id": 3,
+     "name": "R3",
+     "kind": "REAGENT"
+    },
+    {
+     "id": 4,
+     "name": "B",
+     "kind": "BUFFER"
+    }
+   ],
+   "targets": [
+    {
+     "id": 0,
+     "experiment_id": 0,
+     "composition": {
+      "num": [
+       25,
+       10,
+       15,
+       249,
+       213
+      ],
+      "den": 512
+     },
+     "tolerance": {
+      "num": 0,
+      "den": 1
+     },
+     "droplet_volume": 4,
+     "demand": 1
+    }
+   ],
+   "chip": {
+    "name": "meda_m8-M8-S32",
+    "max_mix_volume": 8,
+    "min_mix_volume": 2,
+    "unit_volume": 1,
+    "min_droplet_volume": 1,
+    "allow_partial_take": true,
+    "storage_capacity": 32,
+    "max_denominator": 512,
+    "allow_same_composition_merge": false
+   },
+   "step_limit": 42,
+   "metadata": {
+    "generator": "emrcm_protocol",
+    "cell": "N5-T1",
+    "witness_actions": 21,
+    "witness_source": "tree"
+   }
+  },
+  {
+   "instance_id": "val_emrcm-0055",
+   "fluids": [
+    {
+     "id": 0,
+     "name": "S",
+     "kind": "SAMPLE"
+    },
+    {
+     "id": 1,
+     "name": "R1",
+     "kind": "REAGENT"
+    },
+    {
+     "id": 2,
+     "name": "R2",
+     "kind": "REAGENT"
+    },
+    {
+     "id": 3,
+     "name": "R3",
+     "kind": "REAGENT"
+    },
+    {
+     "id": 4,
+     "name": "B",
+     "kind": "BUFFER"
+    }
+   ],
+   "targets": [
+    {
+     "id": 0,
+     "experiment_id": 0,
+     "composition": {
+      "num": [
+       127,
+       99,
+       262,
+       19,
+       5
+      ],
+      "den": 512
+     },
+     "tolerance": {
+      "num": 0,
+      "den": 1
+     },
+     "droplet_volume": 4,
+     "demand": 1
+    }
+   ],
+   "chip": {
+    "name": "meda_m8-M8-S32",
+    "max_mix_volume": 8,
+    "min_mix_volume": 2,
+    "unit_volume": 1,
+    "min_droplet_volume": 1,
+    "allow_partial_take": true,
+    "storage_capacity": 32,
+    "max_denominator": 512,
+    "allow_same_composition_merge": false
+   },
+   "step_limit": 40,
+   "metadata": {
+    "generator": "emrcm_protocol",
+    "cell": "N5-T1",
+    "witness_actions": 20,
+    "witness_source": "tree"
+   }
+  },
+  {
+   "instance_id": "val_emrcm-0056",
+   "fluids": [
+    {
+     "id": 0,
+     "name": "S",
+     "kind": "SAMPLE"
+    },
+    {
+     "id": 1,
+     "name": "R1",
+     "kind": "REAGENT"
+    },
+    {
+     "id": 2,
+     "name": "R2",
+     "kind": "REAGENT"
+    },
+    {
+     "id": 3,
+     "name": "R3",
+     "kind": "REAGENT"
+    },
+    {
+     "id": 4,
+     "name": "B",
+     "kind": "BUFFER"
+    }
+   ],
+   "targets": [
+    {
+     "id": 0,
+     "experiment_id": 0,
+     "composition": {
+      "num": [
+       29,
+       248,
+       44,
+       167,
+       24
+      ],
+      "den": 512
+     },
+     "tolerance": {
+      "num": 0,
+      "den": 1
+     },
+     "droplet_volume": 4,
+     "demand": 1
+    }
+   ],
+   "chip": {
+    "name": "meda_m8-M8-S32",
+    "max_mix_volume": 8,
+    "min_mix_volume": 2,
+    "unit_volume": 1,
+    "min_droplet_volume": 1,
+    "allow_partial_take": true,
+    "storage_capacity": 32,
+    "max_denominator": 512,
+    "allow_same_composition_merge": false
+   },
+   "step_limit": 44,
+   "metadata": {
+    "generator": "emrcm_protocol",
+    "cell": "N5-T1",
+    "witness_actions": 22,
+    "witness_source": "tree"
+   }
+  },
+  {
+   "instance_id": "val_emrcm-0057",
+   "fluids": [
+    {
+     "id": 0,
+     "name": "S",
+     "kind": "SAMPLE"
+    },
+    {
+     "id": 1,
+     "name": "R1",
+     "kind": "REAGENT"
+    },
+    {
+     "id": 2,
+     "name": "R2",
+     "kind": "REAGENT"
+    },
+    {
+     "id": 3,
+     "name": "R3",
+     "kind": "REAGENT"
+    },
+    {
+     "id": 4,
+     "name": "B",
+     "kind": "BUFFER"
+    }
+   ],
+   "targets": [
+    {
+     "id": 0,
+     "experiment_id": 0,
+     "composition": {
+      "num": [
+       231,
+       137,
+       8,
+       85,
+       51
+      ],
+      "den": 512
+     },
+     "tolerance": {
+      "num": 0,
+      "den": 1
+     },
+     "droplet_volume": 4,
+     "demand": 1
+    }
+   ],
+   "chip": {
+    "name": "meda_m8-M8-S32",
+    "max_mix_volume": 8,
+    "min_mix_volume": 2,
+    "unit_volume": 1,
+    "min_droplet_volume": 1,
+    "allow_partial_take": true,
+    "storage_capacity": 32,
+    "max_denominator": 512,
+    "allow_same_composition_merge": false
+   },
+   "step_limit": 38,
+   "metadata": {
+    "generator": "emrcm_protocol",
+    "cell": "N5-T1",
+    "witness_actions": 19,
+    "witness_source": "tree"
+   }
+  },
+  {
+   "instance_id": "val_emrcm-0058",
+   "fluids": [
+    {
+     "id": 0,
+     "name": "S",
+     "kind": "SAMPLE"
+    },
+    {
+     "id": 1,
+     "name": "R1",
+     "kind": "REAGENT"
+    },
+    {
+     "id": 2,
+     "name": "R2",
+     "kind": "REAGENT"
+    },
+    {
+     "id": 3,
+     "name": "R3",
+     "kind": "REAGENT"
+    },
+    {
+     "id": 4,
+     "name": "B",
+     "kind": "BUFFER"
+    }
+   ],
+   "targets": [
+    {
+     "id": 0,
+     "experiment_id": 0,
+     "composition": {
+      "num": [
+       2,
+       108,
+       246,
+       13,
+       143
+      ],
+      "den": 512
+     },
+     "tolerance": {
+      "num": 0,
+      "den": 1
+     },
+     "droplet_volume": 4,
+     "demand": 1
+    }
+   ],
+   "chip": {
+    "name": "meda_m8-M8-S32",
+    "max_mix_volume": 8,
+    "min_mix_volume": 2,
+    "unit_volume": 1,
+    "min_droplet_volume": 1,
+    "allow_partial_take": true,
+    "storage_capacity": 32,
+    "max_denominator": 512,
+    "allow_same_composition_merge": false
+   },
+   "step_limit": 46,
+   "metadata": {
+    "generator": "emrcm_protocol",
+    "cell": "N5-T1",
+    "witness_actions": 23,
+    "witness_source": "tree"
+   }
+  },
+  {
+   "instance_id": "val_emrcm-0059",
+   "fluids": [
+    {
+     "id": 0,
+     "name": "S",
+     "kind": "SAMPLE"
+    },
+    {
+     "id": 1,
+     "name": "R1",
+     "kind": "REAGENT"
+    },
+    {
+     "id": 2,
+     "name": "R2",
+     "kind": "REAGENT"
+    },
+    {
+     "id": 3,
+     "name": "R3",
+     "kind": "REAGENT"
+    },
+    {
+     "id": 4,
+     "name": "B",
+     "kind": "BUFFER"
+    }
+   ],
+   "targets": [
+    {
+     "id": 0,
+     "experiment_id": 0,
+     "composition": {
+      "num": [
+       37,
+       114,
+       93,
+       120,
+       148
+      ],
+      "den": 512
+     },
+     "tolerance": {
+      "num": 0,
+      "den": 1
+     },
+     "droplet_volume": 4,
+     "demand": 1
+    }
+   ],
+   "chip": {
+    "name": "meda_m8-M8-S32",
+    "max_mix_volume": 8,
+    "min_mix_volume": 2,
+    "unit_volume": 1,
+    "min_droplet_volume": 1,
+    "allow_partial_take": true,
+    "storage_capacity": 32,
+    "max_denominator": 512,
+    "allow_same_composition_merge": false
+   },
+   "step_limit": 50,
+   "metadata": {
+    "generator": "emrcm_protocol",
+    "cell": "N5-T1",
+    "witness_actions": 25,
+    "witness_source": "tree"
+   }
+  },
+  {
+   "instance_id": "val_emrcm-0060",
+   "fluids": [
+    {
+     "id": 0,
+     "name": "S",
+     "kind": "SAMPLE"
+    },
+    {
+     "id": 1,
+     "name": "R1",
+     "kind": "REAGENT"
+    },
+    {
+     "id": 2,
+     "name": "R2",
+     "kind": "REAGENT"
+    },
+    {
+     "id": 3,
+     "name": "R3",
+     "kind": "REAGENT"
+    },
+    {
+     "id": 4,
+     "name": "B",
+     "kind": "BUFFER"
+    }
+   ],
+   "targets": [
+    {
+     "id": 0,
+     "experiment_id": 0,
+     "composition": {
+      "num": [
+       127,
+       156,
+       101,
+       90,
+       38
+      ],
+      "den": 512
+     },
+     "tolerance": {
+      "num": 0,
+      "den": 1
+     },
+     "droplet_volume": 4,
+     "demand": 1
+    }
+   ],
+   "chip": {
+    "name": "meda_m8-M8-S32",
+    "max_mix_volume": 8,
+    "min_mix_volume": 2,
+    "unit_volume": 1,
+    "min_droplet_volume": 1,
+    "allow_partial_take": true,
+    "storage_capacity": 32,
+    "max_denominator": 512,
+    "allow_same_composition_merge": false
+   },
+   "step_limit": 42,
+   "metadata": {
+    "generator": "emrcm_protocol",
+    "cell": "N5-T1",
+    "witness_actions": 21,
+    "witness_source": "tree"
+   }
+  },
+  {
+   "instance_id": "val_emrcm-0061",
+   "fluids": [
+    {
+     "id": 0,
+     "name": "S",
+     "kind": "SAMPLE"
+    },
+    {
+     "id": 1,
+     "name": "R1",
+     "kind": "REAGENT"
+    },
+    {
+     "id": 2,
+     "name": "R2",
+     "kind": "REAGENT"
+    },
+    {
+     "id": 3,
+     "name": "R3",
+     "kind": "REAGENT"
+    },
+    {
+     "id": 4,
+     "name": "B",
+     "kind": "BUFFER"
+    }
+   ],
+   "targets": [
+    {
+     "id": 0,
+     "experiment_id": 0,
+     "composition": {
+      "num": [
+       58,
+       136,
+       89,
+       165,
+       64
+      ],
+      "den": 512
+     },
+     "tolerance": {
+      "num": 0,
+      "den": 1
+     },
+     "droplet_volume": 4,
+     "demand": 1
+    }
+   ],
+   "chip": {
+    "name": "meda_m8-M8-S32",
+    "max_mix_volume": 8,
+    "min_mix_volume": 2,
+    "unit_volume": 1,
+    "min_droplet_volume": 1,
+    "allow_partial_take": true,
+    "storage_capacity": 32,
+    "max_denominator": 512,
+    "allow_same_composition_merge": false
+   },
+   "step_limit": 38,
+   "metadata": {
+    "generator": "emrcm_protocol",
+    "cell": "N5-T1",
+    "witness_actions": 19,
+    "witness_source": "tree"
+   }
+  },
+  {
+   "instance_id": "val_emrcm-0062",
+   "fluids": [
+    {
+     "id": 0,
+     "name": "S",
+     "kind": "SAMPLE"
+    },
+    {
+     "id": 1,
+     "name": "R1",
+     "kind": "REAGENT"
+    },
+    {
+     "id": 2,
+     "name": "R2",
+     "kind": "REAGENT"
+    },
+    {
+     "id": 3,
+     "name": "R3",
+     "kind": "REAGENT"
+    },
+    {
+     "id": 4,
+     "name": "B",
+     "kind": "BUFFER"
+    }
+   ],
+   "targets": [
+    {
+     "id": 0,
+     "experiment_id": 0,
+     "composition": {
+      "num": [
+       227,
+       86,
+       36,
+       16,
+       147
+      ],
+      "den": 512
+     },
+     "tolerance": {
+      "num": 0,
+      "den": 1
+     },
+     "droplet_volume": 4,
+     "demand": 1
+    }
+   ],
+   "chip": {
+    "name": "meda_m8-M8-S32",
+    "max_mix_volume": 8,
+    "min_mix_volume": 2,
+    "unit_volume": 1,
+    "min_droplet_volume": 1,
+    "allow_partial_take": true,
+    "storage_capacity": 32,
+    "max_denominator": 512,
+    "allow_same_composition_merge": false
+   },
+   "step_limit": 46,
+   "metadata": {
+    "generator": "emrcm_protocol",
+    "cell": "N5-T1",
+    "witness_actions": 23,
+    "witness_source": "tree"
+   }
+  },
+  {
+   "instance_id": "val_emrcm-0063",
+   "fluids": [
+    {
+     "id": 0,
+     "name": "S",
+     "kind": "SAMPLE"
+    },
+    {
+     "id": 1,
+     "name": "R1",
+     "kind": "REAGENT"
+    },
+    {
+     "id": 2,
+     "name": "R2",
+     "kind": "REAGENT"
+    },
+    {
+     "id": 3,
+     "name": "R3",
+     "kind": "REAGENT"
+    },
+    {
+     "id": 4,
+     "name": "B",
+     "kind": "BUFFER"
+    }
+   ],
+   "targets": [
+    {
+     "id": 0,
+     "experiment_id": 0,
+     "composition": {
+      "num": [
+       19,
+       178,
+       31,
+       14,
+       14
+      ],
+      "den": 256
+     },
+     "tolerance": {
+      "num": 0,
+      "den": 1
+     },
+     "droplet_volume": 4,
+     "demand": 1
+    }
+   ],
+   "chip": {
+    "name": "meda_m8-M8-S32",
+    "max_mix_volume": 8,
+    "min_mix_volume": 2,
+    "unit_volume": 1,
+    "min_droplet_volume": 1,
+    "allow_partial_take": true,
+    "storage_capacity": 32,
+    "max_denominator": 512,
+    "allow_same_composition_merge": false
+   },
+   "step_limit": 40,
+   "metadata": {
+    "generator": "emrcm_protocol",
+    "cell": "N5-T1",
+    "witness_actions": 20,
+    "witness_source": "tree"
+   }
+  },
+  {
+   "instance_id": "val_emrcm-0064",
+   "fluids": [
+    {
+     "id": 0,
+     "name": "S",
+     "kind": "SAMPLE"
+    },
+    {
+     "id": 1,
+     "name": "R1",
+     "kind": "REAGENT"
+    },
+    {
+     "id": 2,
+     "name": "R2",
+     "kind": "REAGENT"
+    },
+    {
+     "id": 3,
+     "name": "R3",
+     "kind": "REAGENT"
+    },
+    {
+     "id": 4,
+     "name": "B",
+     "kind": "BUFFER"
+    }
+   ],
+   "targets": [
+    {
+     "id": 0,
+     "experiment_id": 0,
+     "composition": {
+      "num": [
+       118,
+       1,
+       98,
+       139,
+       156
+      ],
+      "den": 512
+     },
+     "tolerance": {
+      "num": 0,
+      "den": 1
+     },
+     "droplet_volume": 4,
+     "demand": 1
+    }
+   ],
+   "chip": {
+    "name": "meda_m8-M8-S32",
+    "max_mix_volume": 8,
+    "min_mix_volume": 2,
+    "unit_volume": 1,
+    "min_droplet_volume": 1,
+    "allow_partial_take": true,
+    "storage_capacity": 32,
+    "max_denominator": 512,
+    "allow_same_composition_merge": false
+   },
+   "step_limit": 44,
+   "metadata": {
+    "generator": "emrcm_protocol",
+    "cell": "N5-T1",
+    "witness_actions": 22,
+    "witness_source": "tree"
+   }
+  },
+  {
+   "instance_id": "val_emrcm-0065",
+   "fluids": [
+    {
+     "id": 0,
+     "name": "S",
+     "kind": "SAMPLE"
+    },
+    {
+     "id": 1,
+     "name": "R1",
+     "kind": "REAGENT"
+    },
+    {
+     "id": 2,
+     "name": "R2",
+     "kind": "REAGENT"
+    },
+    {
+     "id": 3,
+     "name": "R3",
+     "kind": "REAGENT"
+    },
+    {
+     "id": 4,
+     "name": "B",
+     "kind": "BUFFER"
+    }
+   ],
+   "targets": [
+    {
+     "id": 0,
+     "experiment_id": 0,
+     "composition": {
+      "num": [
+       168,
+       97,
+       36,
+       85,
+       126
+      ],
+      "den": 512
+     },
+     "tolerance": {
+      "num": 0,
+      "den": 1
+     },
+     "droplet_volume": 4,
+     "demand": 1
+    }
+   ],
+   "chip": {
+    "name": "meda_m8-M8-S32",
+    "max_mix_volume": 8,
+    "min_mix_volume": 2,
+    "unit_volume": 1,
+    "min_droplet_volume": 1,
+    "allow_partial_take": true,
+    "storage_capacity": 32,
+    "max_denominator": 512,
+    "allow_same_composition_merge": false
+   },
+   "step_limit": 44,
+   "metadata": {
+    "generator": "emrcm_protocol",
+    "cell": "N5-T1",
+    "witness_actions": 22,
+    "witness_source": "tree"
+   }
+  },
+  {
+   "instance_id": "val_emrcm-0066",
+   "fluids": [
+    {
+     "id": 0,
+     "name": "S",
+     "kind": "SAMPLE"
+    },
+    {
+     "id": 1,
+     "name": "R1",
+     "kind": "REAGENT"
+    },
+    {
+     "id": 2,
+     "name": "R2",
+     "kind": "REAGENT"
+    },
+    {
+     "id": 3,
+     "name": "R3",
+     "kind": "REAGENT"
+    },
+    {
+     "id": 4,
+     "name": "B",
+     "kind": "BUFFER"
+    }
+   ],
+   "targets": [
+    {
+     "id": 0,
+     "experiment_id": 0,
+     "composition": {
+      "num": [
+       10,
+       63,
+       36,
+       63,
+       84
+      ],
+      "den": 256
+     },
+     "tolerance": {
+      "num": 0,
+      "den": 1
+     },
+     "droplet_volume": 4,
+     "demand": 1
+    }
+   ],
+   "chip": {
+    "name": "meda_m8-M8-S32",
+    "max_mix_volume": 8,
+    "min_mix_volume": 2,
+    "unit_volume": 1,
+    "min_droplet_volume": 1,
+    "allow_partial_take": true,
+    "storage_capacity": 32,
+    "max_denominator": 512,
+    "allow_same_composition_merge": false
+   },
+   "step_limit": 42,
+   "metadata": {
+    "generator": "emrcm_protocol",
+    "cell": "N5-T1",
+    "witness_actions": 21,
+    "witness_source": "tree"
+   }
+  },
+  {
+   "instance_id": "val_emrcm-0067",
+   "fluids": [
+    {
+     "id": 0,
+     "name": "S",
+     "kind": "SAMPLE"
+    },
+    {
+     "id": 1,
+     "name": "R1",
+     "kind": "REAGENT"
+    },
+    {
+     "id": 2,
+     "name": "R2",
+     "kind": "REAGENT"
+    },
+    {
+     "id": 3,
+     "name": "R3",
+     "kind": "REAGENT"
+    },
+    {
+     "id": 4,
+     "name": "B",
+     "kind": "BUFFER"
+    }
+   ],
+   "targets": [
+    {
+     "id": 0,
+     "experiment_id": 0,
+     "composition": {
+      "num": [
+       57,
+       164,
+       12,
+       23,
+       256
+      ],
+      "den": 512
+     },
+     "tolerance": {
+      "num": 0,
+      "den": 1
+     },
+     "droplet_volume": 4,
+     "demand": 1
+    }
+   ],
+   "chip": {
+    "name": "meda_m8-M8-S32",
+    "max_mix_volume": 8,
+    "min_mix_volume": 2,
+    "unit_volume": 1,
+    "min_droplet_volume": 1,
+    "allow_partial_take": true,
+    "storage_capacity": 32,
+    "max_denominator": 512,
+    "allow_same_composition_merge": false
+   },
+   "step_limit": 34,
+   "metadata": {
+    "generator": "emrcm_protocol",
+    "cell": "N5-T1",
+    "witness_actions": 17,
+    "witness_source": "tree"
+   }
+  },
+  {
+   "instance_id": "val_emrcm-0068",
+   "fluids": [
+    {
+     "id": 0,
+     "name": "S",
+     "kind": "SAMPLE"
+    },
+    {
+     "id": 1,
+     "name": "R1",
+     "kind": "REAGENT"
+    },
+    {
+     "id": 2,
+     "name": "R2",
+     "kind": "REAGENT"
+    },
+    {
+     "id": 3,
+     "name": "R3",
+     "kind": "REAGENT"
+    },
+    {
+     "id": 4,
+     "name": "B",
+     "kind": "BUFFER"
+    }
+   ],
+   "targets": [
+    {
+     "id": 0,
+     "experiment_id": 0,
+     "composition": {
+      "num": [
+       122,
+       140,
+       127,
+       80,
+       43
+      ],
+      "den": 512
+     },
+     "tolerance": {
+      "num": 0,
+      "den": 1
+     },
+     "droplet_volume": 4,
+     "demand": 1
+    }
+   ],
+   "chip": {
+    "name": "meda_m8-M8-S32",
+    "max_mix_volume": 8,
+    "min_mix_volume": 2,
+    "unit_volume": 1,
+    "min_droplet_volume": 1,
+    "allow_partial_take": true,
+    "storage_capacity": 32,
+    "max_denominator": 512,
+    "allow_same_composition_merge": false
+   },
+   "step_limit": 48,
+   "metadata": {
+    "generator": "emrcm_protocol",
+    "cell": "N5-T1",
+    "witness_actions": 24,
+    "witness_source": "tree"
+   }
+  },
+  {
+   "instance_id": "val_emrcm-0069",
+   "fluids": [
+    {
+     "id": 0,
+     "name": "S",
+     "kind": "SAMPLE"
+    },
+    {
+     "id": 1,
+     "name": "R1",
+     "kind": "REAGENT"
+    },
+    {
+     "id": 2,
+     "name": "R2",
+     "kind": "REAGENT"
+    },
+    {
+     "id": 3,
+     "name": "R3",
+     "kind": "REAGENT"
+    },
+    {
+     "id": 4,
+     "name": "B",
+     "kind": "BUFFER"
+    }
+   ],
+   "targets": [
+    {
+     "id": 0,
+     "experiment_id": 0,
+     "composition": {
+      "num": [
+       176,
+       250,
+       67,
+       6,
+       13
+      ],
+      "den": 512
+     },
+     "tolerance": {
+      "num": 0,
+      "den": 1
+     },
+     "droplet_volume": 4,
+     "demand": 1
+    }
+   ],
+   "chip": {
+    "name": "meda_m8-M8-S32",
+    "max_mix_volume": 8,
+    "min_mix_volume": 2,
+    "unit_volume": 1,
+    "min_droplet_volume": 1,
+    "allow_partial_take": true,
+    "storage_capacity": 32,
+    "max_denominator": 512,
+    "allow_same_composition_merge": false
+   },
+   "step_limit": 40,
+   "metadata": {
+    "generator": "emrcm_protocol",
+    "cell": "N5-T1",
+    "witness_actions": 20,
+    "witness_source": "tree"
+   }
+  },
+  {
+   "instance_id": "val_emrcm-0070",
+   "fluids": [
+    {
+     "id": 0,
+     "name": "S",
+     "kind": "SAMPLE"
+    },
+    {
+     "id": 1,
+     "name": "R1",
+     "kind": "REAGENT"
+    },
+    {
+     "id": 2,
+     "name": "R2",
+     "kind": "REAGENT"
+    },
+    {
+     "id": 3,
+     "name": "R3",
+     "kind": "REAGENT"
+    },
+    {
+     "id": 4,
+     "name": "B",
+     "kind": "BUFFER"
+    }
+   ],
+   "targets": [
+    {
+     "id": 0,
+     "experiment_id": 0,
+     "composition": {
+      "num": [
+       202,
+       77,
+       153,
+       3,
+       77
+      ],
+      "den": 512
+     },
+     "tolerance": {
+      "num": 0,
+      "den": 1
+     },
+     "droplet_volume": 4,
+     "demand": 1
+    }
+   ],
+   "chip": {
+    "name": "meda_m8-M8-S32",
+    "max_mix_volume": 8,
+    "min_mix_volume": 2,
+    "unit_volume": 1,
+    "min_droplet_volume": 1,
+    "allow_partial_take": true,
+    "storage_capacity": 32,
+    "max_denominator": 512,
+    "allow_same_composition_merge": false
+   },
+   "step_limit": 40,
+   "metadata": {
+    "generator": "emrcm_protocol",
+    "cell": "N5-T1",
+    "witness_actions": 20,
+    "witness_source": "tree"
+   }
+  },
+  {
+   "instance_id": "val_emrcm-0071",
+   "fluids": [
+    {
+     "id": 0,
+     "name": "S",
+     "kind": "SAMPLE"
+    },
+    {
+     "id": 1,
+     "name": "R1",
+     "kind": "REAGENT"
+    },
+    {
+     "id": 2,
+     "name": "R2",
+     "kind": "REAGENT"
+    },
+    {
+     "id": 3,
+     "name": "R3",
+     "kind": "REAGENT"
+    },
+    {
+     "id": 4,
+     "name": "B",
+     "kind": "BUFFER"
+    }
+   ],
+   "targets": [
+    {
+     "id": 0,
+     "experiment_id": 0,
+     "composition": {
+      "num": [
+       78,
+       231,
+       15,
+       113,
+       75
+      ],
+      "den": 512
+     },
+     "tolerance": {
+      "num": 0,
+      "den": 1
+     },
+     "droplet_volume": 4,
+     "demand": 1
+    }
+   ],
+   "chip": {
+    "name": "meda_m8-M8-S32",
+    "max_mix_volume": 8,
+    "min_mix_volume": 2,
+    "unit_volume": 1,
+    "min_droplet_volume": 1,
+    "allow_partial_take": true,
+    "storage_capacity": 32,
+    "max_denominator": 512,
+    "allow_same_composition_merge": false
+   },
+   "step_limit": 50,
+   "metadata": {
+    "generator": "emrcm_protocol",
+    "cell": "N5-T1",
+    "witness_actions": 25,
+    "witness_source": "tree"
+   }
+  },
+  {
+   "instance_id": "val_emrcm-0072",
+   "fluids": [
+    {
+     "id": 0,
+     "name": "S",
+     "kind": "SAMPLE"
+    },
+    {
+     "id": 1,
+     "name": "R1",
+     "kind": "REAGENT"
+    },
+    {
+     "id": 2,
+     "name": "R2",
+     "kind": "REAGENT"
+    },
+    {
+     "id": 3,
+     "name": "R3",
+     "kind": "REAGENT"
+    },
+    {
+     "id": 4,
+     "name": "B",
+     "kind": "BUFFER"
+    }
+   ],
+   "targets": [
+    {
+     "id": 0,
+     "experiment_id": 0,
+     "composition": {
+      "num": [
+       133,
+       142,
+       60,
+       88,
+       89
+      ],
+      "den": 512
+     },
+     "tolerance": {
+      "num": 0,
+      "den": 1
+     },
+     "droplet_volume": 4,
+     "demand": 1
+    }
+   ],
+   "chip": {
+    "name": "meda_m8-M8-S32",
+    "max_mix_volume": 8,
+    "min_mix_volume": 2,
+    "unit_volume": 1,
+    "min_droplet_volume": 1,
+    "allow_partial_take": true,
+    "storage_capacity": 32,
+    "max_denominator": 512,
+    "allow_same_composition_merge": false
+   },
+   "step_limit": 52,
+   "metadata": {
+    "generator": "emrcm_protocol",
+    "cell": "N5-T1",
+    "witness_actions": 26,
+    "witness_source": "tree"
+   }
+  },
+  {
+   "instance_id": "val_emrcm-0073",
+   "fluids": [
+    {
+     "id": 0,
+     "name": "S",
+     "kind": "SAMPLE"
+    },
+    {
+     "id": 1,
+     "name": "R1",
+     "kind": "REAGENT"
+    },
+    {
+     "id": 2,
+     "name": "R2",
+     "kind": "REAGENT"
+    },
+    {
+     "id": 3,
+     "name": "R3",
+     "kind": "REAGENT"
+    },
+    {
+     "id": 4,
+     "name": "B",
+     "kind": "BUFFER"
+    }
+   ],
+   "targets": [
+    {
+     "id": 0,
+     "experiment_id": 0,
+     "composition": {
+      "num": [
+       66,
+       81,
+       180,
+       154,
+       31
+      ],
+      "den": 512
+     },
+     "tolerance": {
+      "num": 0,
+      "den": 1
+     },
+     "droplet_volume": 4,
+     "demand": 1
+    }
+   ],
+   "chip": {
+    "name": "meda_m8-M8-S32",
+    "max_mix_volume": 8,
+    "min_mix_volume": 2,
+    "unit_volume": 1,
+    "min_droplet_volume": 1,
+    "allow_partial_take": true,
+    "storage_capacity": 32,
+    "max_denominator": 512,
+    "allow_same_composition_merge": false
+   },
+   "step_limit": 50,
+   "metadata": {
+    "generator": "emrcm_protocol",
+    "cell": "N5-T1",
+    "witness_actions": 25,
+    "witness_source": "tree"
+   }
+  },
+  {
+   "instance_id": "val_emrcm-0074",
+   "fluids": [
+    {
+     "id": 0,
+     "name": "S",
+     "kind": "SAMPLE"
+    },
+    {
+     "id": 1,
+     "name": "R1",
+     "kind": "REAGENT"
+    },
+    {
+     "id": 2,
+     "name": "R2",
+     "kind": "REAGENT"
+    },
+    {
+     "id": 3,
+     "name": "R3",
+     "kind": "REAGENT"
+    },
+    {
+     "id": 4,
+     "name": "B",
+     "kind": "BUFFER"
+    }
+   ],
+   "targets": [
+    {
+     "id": 0,
+     "experiment_id": 0,
+     "composition": {
+      "num": [
+       80,
+       77,
+       142,
+       108,
+       105
+      ],
+      "den": 512
+     },
+     "tolerance": {
+      "num": 0,
+      "den": 1
+     },
+     "droplet_volume": 4,
+     "demand": 1
+    }
+   ],
+   "chip": {
+    "name": "meda_m8-M8-S32",
+    "max_mix_volume": 8,
+    "min_mix_volume": 2,
+    "unit_volume": 1,
+    "min_droplet_volume": 1,
+    "allow_partial_take": true,
+    "storage_capacity": 32,
+    "max_denominator": 512,
+    "allow_same_composition_merge": false
+   },
+   "step_limit": 50,
+   "metadata": {
+    "generator": "emrcm_protocol",
+    "cell": "N5-T1",
+    "witness_actions": 25,
+    "witness_source": "tree"
+   }
+  },
+  {
+   "instance_id": "val_emrcm-0075",
+   "fluids": [
+    {
+     "id": 0,
+     "name": "S",
+     "kind": "SAMPLE"
+    },
+    {
+     "id": 1,
+     "name": "R1",
+     "kind": "REAGENT"
+    },
+    {
+     "id": 2,
+     "name": "R2",
+     "kind": "REAGENT"
+    },
+    {
+     "id": 3,
+     "name": "R3",
+     "kind": "REAGENT"
+    },
+    {
+     "id": 4,
+     "name": "B",
+     "kind": "BUFFER"
+    }
+   ],
+   "targets": [
+    {
+     "id": 0,
+     "experiment_id": 0,
+     "composition": {
+      "num": [
+       26,
+       179,
+       81,
+       220,
+       6
+      ],
+      "den": 512
+     },
+     "tolerance": {
+      "num": 0,
+      "den": 1
+     },
+     "droplet_volume": 4,
+     "demand": 1
+    }
+   ],
+   "chip": {
+    "name": "meda_m8-M8-S32",
+    "max_mix_volume": 8,
+    "min_mix_volume": 2,
+    "unit_volume": 1,
+    "min_droplet_volume": 1,
+    "allow_partial_take": true,
+    "storage_capacity": 32,
+    "max_denominator": 512,
+    "allow_same_composition_merge": false
+   },
+   "step_limit": 50,
+   "metadata": {
+    "generator": "emrcm_protocol",
+    "cell": "N5-T1",
+    "witness_actions": 25,
+    "witness_source": "tree"
+   }
+  },
+  {
+   "instance_id": "val_emrcm-0076",
+   "fluids": [
+    {
+     "id": 0,
+     "name": "S",
+     "kind": "SAMPLE"
+    },
+    {
+     "id": 1,
+     "name": "R1",
+     "kind": "REAGENT"
+    },
+    {
+     "id": 2,
+     "name": "R2",
+     "kind": "REAGENT"
+    },
+    {
+     "id": 3,
+     "name": "R3",
+     "kind": "REAGENT"
+    },
+    {
+     "id": 4,
+     "name": "B",
+     "kind": "BUFFER"
+    }
+   ],
+   "targets": [
+    {
+     "id": 0,
+     "experiment_id": 0,
+     "composition": {
+      "num": [
+       5,
+       260,
+       163,
+       8,
+       76
+      ],
+      "den": 512
+     },
+     "tolerance": {
+      "num": 0,
+      "den": 1
+     },
+     "droplet_volume": 4,
+     "demand": 1
+    }
+   ],
+   "chip": {
+    "name": "meda_m8-M8-S32",
+    "max_mix_volume": 8,
+    "min_mix_volume": 2,
+    "unit_volume": 1,
+    "min_droplet_volume": 1,
+    "allow_partial_take": true,
+    "storage_capacity": 32,
+    "max_denominator": 512,
+    "allow_same_composition_merge": false
+   },
+   "step_limit": 40,
+   "metadata": {
+    "generator": "emrcm_protocol",
+    "cell": "N5-T1",
+    "witness_actions": 20,
+    "witness_source": "tree"
+   }
+  },
+  {
+   "instance_id": "val_emrcm-0077",
+   "fluids": [
+    {
+     "id": 0,
+     "name": "S",
+     "kind": "SAMPLE"
+    },
+    {
+     "id": 1,
+     "name": "R1",
+     "kind": "REAGENT"
+    },
+    {
+     "id": 2,
+     "name": "R2",
+     "kind": "REAGENT"
+    },
+    {
+     "id": 3,
+     "name": "R3",
+     "kind": "REAGENT"
+    },
+    {
+     "id": 4,
+     "name": "B",
+     "kind": "BUFFER"
+    }
+   ],
+   "targets": [
+    {
+     "id": 0,
+     "experiment_id": 0,
+     "composition": {
+      "num": [
+       199,
+       98,
+       62,
+       86,
+       67
+      ],
+      "den": 512
+     },
+     "tolerance": {
+      "num": 0,
+      "den": 1
+     },
+     "droplet_volume": 4,
+     "demand": 1
+    }
+   ],
+   "chip": {
+    "name": "meda_m8-M8-S32",
+    "max_mix_volume": 8,
+    "min_mix_volume": 2,
+    "unit_volume": 1,
+    "min_droplet_volume": 1,
+    "allow_partial_take": true,
+    "storage_capacity": 32,
+    "max_denominator": 512,
+    "allow_same_composition_merge": false
+   },
+   "step_limit": 48,
+   "metadata": {
+    "generator": "emrcm_protocol",
+    "cell": "N5-T1",
+    "witness_actions": 24,
+    "witness_source": "tree"
+   }
+  },
+  {
+   "instance_id": "val_emrcm-0078",
+   "fluids": [
+    {
+     "id": 0,
+     "name": "S",
+     "kind": "SAMPLE"
+    },
+    {
+     "id": 1,
+     "name": "R1",
+     "kind": "REAGENT"
+    },
+    {
+     "id": 2,
+     "name": "R2",
+     "kind": "REAGENT"
+    },
+    {
+     "id": 3,
+     "name": "R3",
+     "kind": "REAGENT"
+    },
+    {
+     "id": 4,
+     "name": "B",
+     "kind": "BUFFER"
+    }
+   ],
+   "targets": [
+    {
+     "id": 0,
+     "experiment_id": 0,
+     "composition": {
+      "num": [
+       21,
+       82,
+       56,
+       102,
+       251
+      ],
+      "den": 512
+     },
+     "tolerance": {
+      "num": 0,
+      "den": 1
+     },
+     "droplet_volume": 4,
+     "demand": 1
+    }
+   ],
+   "chip": {
+    "name": "meda_m8-M8-S32",
+    "max_mix_volume": 8,
+    "min_mix_volume": 2,
+    "unit_volume": 1,
+    "min_droplet_volume": 1,
+    "allow_partial_take": true,
+    "storage_capacity": 32,
+    "max_denominator": 512,
+    "allow_same_composition_merge": false
+   },
+   "step_limit": 50,
+   "metadata": {
+    "generator": "emrcm_protocol",
+    "cell": "N5-T1",
+    "witness_actions": 25,
+    "witness_source": "tree"
+   }
+  },
+  {
+   "instance_id": "val_emrcm-0079",
+   "fluids": [
+    {
+     "id": 0,
+     "name": "S",
+     "kind": "SAMPLE"
+    },
+    {
+     "id": 1,
+     "name": "R1",
+     "kind": "REAGENT"
+    },
+    {
+     "id": 2,
+     "name": "R2",
+     "kind": "REAGENT"
+    },
+    {
+     "id": 3,
+     "name": "R3",
+     "kind": "REAGENT"
+    },
+    {
+     "id": 4,
+     "name": "B",
+     "kind": "BUFFER"
+    }
+   ],
+   "targets": [
+    {
+     "id": 0,
+     "experiment_id": 0,
+     "composition": {
+      "num": [
+       57,
+       165,
+       260,
+       21,
+       9
+      ],
+      "den": 512
+     },
+     "tolerance": {
+      "num": 0,
+      "den": 1
+     },
+     "droplet_volume": 4,
+     "demand": 1
+    }
+   ],
+   "chip": {
+    "name": "meda_m8-M8-S32",
+    "max_mix_volume": 8,
+    "min_mix_volume": 2,
+    "unit_volume": 1,
+    "min_droplet_volume": 1,
+    "allow_partial_take": true,
+    "storage_capacity": 32,
+    "max_denominator": 512,
+    "allow_same_composition_merge": false
+   },
+   "step_limit": 46,
+   "metadata": {
+    "generator": "emrcm_protocol",
+    "cell": "N5-T1",
+    "witness_actions": 23,
+    "witness_source": "tree"
+   }
+  },
+  {
+   "instance_id": "val_emrcm-0080",
+   "fluids": [
+    {
+     "id": 0,
+     "name": "S",
+     "kind": "SAMPLE"
+    },
+    {
+     "id": 1,
+     "name": "R1",
+     "kind": "REAGENT"
+    },
+    {
+     "id": 2,
+     "name": "B",
+     "kind": "BUFFER"
+    }
+   ],
+   "targets": [
+    {
+     "id": 0,
+     "experiment_id": 0,
+     "composition": {
+      "num": [
+       48,
+       397,
+       67
+      ],
+      "den": 512
+     },
+     "tolerance": {
+      "num": 0,
+      "den": 1
+     },
+     "droplet_volume": 4,
+     "demand": 1
+    },
+    {
+     "id": 1,
+     "experiment_id": 0,
+     "composition": {
+      "num": [
+       57,
+       145,
+       54
+      ],
+      "den": 256
+     },
+     "tolerance": {
+      "num": 0,
+      "den": 1
+     },
+     "droplet_volume": 4,
+     "demand": 1
+    },
+    {
+     "id": 2,
+     "experiment_id": 0,
+     "composition": {
+      "num": [
+       23,
+       77,
+       156
+      ],
+      "den": 256
+     },
+     "tolerance": {
+      "num": 0,
+      "den": 1
+     },
+     "droplet_volume": 4,
+     "demand": 1
+    }
+   ],
+   "chip": {
+    "name": "meda_m8-M8-S32",
+    "max_mix_volume": 8,
+    "min_mix_volume": 2,
+    "unit_volume": 1,
+    "min_droplet_volume": 1,
+    "allow_partial_take": true,
+    "storage_capacity": 32,
+    "max_denominator": 512,
+    "allow_same_composition_merge": false
+   },
+   "step_limit": 68,
+   "metadata": {
+    "generator": "emrcm_protocol",
+    "cell": "N3-T3",
+    "witness_actions": 34,
+    "witness_source": "tree"
+   }
+  },
+  {
+   "instance_id": "val_emrcm-0081",
+   "fluids": [
+    {
+     "id": 0,
+     "name": "S",
+     "kind": "SAMPLE"
+    },
+    {
+     "id": 1,
+     "name": "R1",
+     "kind": "REAGENT"
+    },
+    {
+     "id": 2,
+     "name": "B",
+     "kind": "BUFFER"
+    }
+   ],
+   "targets": [
+    {
+     "id": 0,
+     "experiment_id": 0,
+     "composition": {
+      "num": [
+       13,
+       140,
+       359
+      ],
+      "den": 512
+     },
+     "tolerance": {
+      "num": 0,
+      "den": 1
+     },
+     "droplet_volume": 4,
+     "demand": 1
+    },
+    {
+     "id": 1,
+     "experiment_id": 0,
+     "composition": {
+      "num": [
+       46,
+       351,
+       115
+      ],
+      "den": 512
+     },
+     "tolerance": {
+      "num": 0,
+      "den": 1
+     },
+     "droplet_volume": 4,
+     "demand": 1
+    },
+    {
+     "id": 2,
+     "experiment_id": 0,
+     "composition": {
+      "num": [
+       370,
+       103,
+       39
+      ],
+      "den": 512
+     },
+     "tolerance": {
+      "num": 0,
+      "den": 1
+     },
+     "droplet_volume": 4,
+     "demand": 1
+    }
+   ],
+   "chip": {
+    "name": "meda_m8-M8-S32",
+    "max_mix_volume": 8,
+    "min_mix_volume": 2,
+    "unit_volume": 1,
+    "min_droplet_volume": 1,
+    "allow_partial_take": true,
+    "storage_capacity": 32,
+    "max_denominator": 512,
+    "allow_same_composition_merge": false
+   },
+   "step_limit": 86,
+   "metadata": {
+    "generator": "emrcm_protocol",
+    "cell": "N3-T3",
+    "witness_actions": 43,
+    "witness_source": "tree"
+   }
+  },
+  {
+   "instance_id": "val_emrcm-0082",
+   "fluids": [
+    {
+     "id": 0,
+     "name": "S",
+     "kind": "SAMPLE"
+    },
+    {
+     "id": 1,
+     "name": "R1",
+     "kind": "REAGENT"
+    },
+    {
+     "id": 2,
+     "name": "B",
+     "kind": "BUFFER"
+    }
+   ],
+   "targets": [
+    {
+     "id": 0,
+     "experiment_id": 0,
+     "composition": {
+      "num": [
+       84,
+       33,
+       395
+      ],
+      "den": 512
+     },
+     "tolerance": {
+      "num": 0,
+      "den": 1
+     },
+     "droplet_volume": 4,
+     "demand": 1
+    },
+    {
+     "id": 1,
+     "experiment_id": 0,
+     "composition": {
+      "num": [
+       5,
+       59,
+       448
+      ],
+      "den": 512
+     },
+     "tolerance": {
+      "num": 0,
+      "den": 1
+     },
+     "droplet_volume": 4,
+     "demand": 1
+    },
+    {
+     "id": 2,
+     "experiment_id": 0,
+     "composition": {
+      "num": [
+       25,
+       265,
+       222
+      ],
+      "den": 512
+     },
+     "tolerance": {
+      "num": 0,
+      "den": 1
+     },
+     "droplet_volume": 4,
+     "demand": 1
+    }
+   ],
+   "chip": {
+    "name": "meda_m8-M8-S32",
+    "max_mix_volume": 8,
+    "min_mix_volume": 2,
+    "unit_volume": 1,
+    "min_droplet_volume": 1,
+    "allow_partial_take": true,
+    "storage_capacity": 32,
+    "max_denominator": 512,
+    "allow_same_composition_merge": false
+   },
+   "step_limit": 68,
+   "metadata": {
+    "generator": "emrcm_protocol",
+    "cell": "N3-T3",
+    "witness_actions": 34,
+    "witness_source": "tree"
+   }
+  },
+  {
+   "instance_id": "val_emrcm-0083",
+   "fluids": [
+    {
+     "id": 0,
+     "name": "S",
+     "kind": "SAMPLE"
+    },
+    {
+     "id": 1,
+     "name": "R1",
+     "kind": "REAGENT"
+    },
+    {
+     "id": 2,
+     "name": "B",
+     "kind": "BUFFER"
+    }
+   ],
+   "targets": [
+    {
+     "id": 0,
+     "experiment_id": 0,
+     "composition": {
+      "num": [
+       371,
+       77,
+       64
+      ],
+      "den": 512
+     },
+     "tolerance": {
+      "num": 0,
+      "den": 1
+     },
+     "droplet_volume": 4,
+     "demand": 1
+    },
+    {
+     "id": 1,
+     "experiment_id": 0,
+     "composition": {
+      "num": [
+       396,
+       99,
+       17
+      ],
+      "den": 512
+     },
+     "tolerance": {
+      "num": 0,
+      "den": 1
+     },
+     "droplet_volume": 4,
+     "demand": 1
+    },
+    {
+     "id": 2,
+     "experiment_id": 0,
+     "composition": {
+      "num": [
+       4,
+       29,
+       31
+      ],
+      "den": 64
+     },
+     "tolerance": {
+      "num": 0,
+      "den": 1
+     },
+     "droplet_volume": 4,
+     "demand": 1
+    }
+   ],
+   "chip": {
+    "name": "meda_m8-M8-S32",
+    "max_mix_volume": 8,
+    "min_mix_volume": 2,
+    "unit_volume": 1,
+    "min_droplet_volume": 1,
+    "allow_partial_take": true,
+    "storage_capacity": 32,
+    "max_denominator": 512,
+    "allow_same_composition_merge": false
+   },
+   "step_limit": 62,
+   "metadata": {
+    "generator": "emrcm_protocol",
+    "cell": "N3-T3",
+    "witness_actions": 31,
+    "witness_source": "tree"
+   }
+  },
+  {
+   "instance_id": "val_emrcm-0084",
+   "fluids": [
+    {
+     "id": 0,
+     "name": "S",
+     "kind": "SAMPLE"
+    },
+    {
+     "id": 1,
+     "name": "R1",
+     "kind": "REAGENT"
+    },
+    {
+     "id": 2,
+     "name": "B",
+     "kind": "BUFFER"
+    }
+   ],
+   "targets": [
+    {
+     "id": 0,
+     "experiment_id": 0,
+     "composition": {
+      "num": [
+       1,
+       197,
+       58
+      ],
+      "den": 256
+     },
+     "tolerance": {
+      "num": 0,
+      "den": 1
+     },
+     "droplet_volume": 4,
+     "demand": 1
+    },
+    {
+     "id": 1,
+     "experiment_id": 0,
+     "composition": {
+      "num": [
+       93,
+       161,
+       258
+      ],
+      "den": 512
+     },
+     "tolerance": {
+      "num": 0,
+      "den": 1
+     },
+     "droplet_volume": 4,
+     "demand": 1
+    },
+    {
+     "id": 2,
+     "experiment_id": 0,
+     "composition": {
+      "num": [
+       108,
+       55,
+       349
+      ],
+      "den": 512
+     },
+     "tolerance": {
+      "num": 0,
+      "den": 1
+     },
+     "droplet_volume": 4,
+     "demand": 1
+    }
+   ],
+   "chip": {
+    "name": "meda_m8-M8-S32",
+    "max_mix_volume": 8,
+    "min_mix_volume": 2,
+    "unit_volume": 1,
+    "min_droplet_volume": 1,
+    "allow_partial_take": true,
+    "storage_capacity": 32,
+    "max_denominator": 512,
+    "allow_same_composition_merge": false
+   },
+   "step_limit": 78,
+   "metadata": {
+    "generator": "emrcm_protocol",
+    "cell": "N3-T3",
+    "witness_actions": 39,
+    "witness_source": "tree"
+   }
+  },
+  {
+   "instance_id": "val_emrcm-0085",
+   "fluids": [
+    {
+     "id": 0,
+     "name": "S",
+     "kind": "SAMPLE"
+    },
+    {
+     "id": 1,
+     "name": "R1",
+     "kind": "REAGENT"
+    },
+    {
+     "id": 2,
+     "name": "B",
+     "kind": "BUFFER"
+    }
+   ],
+   "targets": [
+    {
+     "id": 0,
+     "experiment_id": 0,
+     "composition": {
+      "num": [
+       120,
+       67,
+       69
+      ],
+      "den": 256
+     },
+     "tolerance": {
+      "num": 0,
+      "den": 1
+     },
+     "droplet_volume": 4,
+     "demand": 1
+    },
+    {
+     "id": 1,
+     "experiment_id": 0,
+     "composition": {
+      "num": [
+       134,
+       47,
+       75
+      ],
+      "den": 256
+     },
+     "tolerance": {
+      "num": 0,
+      "den": 1
+     },
+     "droplet_volume": 4,
+     "demand": 1
+    },
+    {
+     "id": 2,
+     "experiment_id": 0,
+     "composition": {
+      "num": [
+       177,
+       226,
+       109
+      ],
+      "den": 512
+     },
+     "tolerance": {
+      "num": 0,
+      "den": 1
+     },
+     "droplet_volume": 4,
+     "demand": 1
+    }
+   ],
+   "chip": {
+    "name": "meda_m8-M8-S32",
+    "max_mix_volume": 8,
+    "min_mix_volume": 2,
+    "unit_volume": 1,
+    "min_droplet_volume": 1,
+    "allow_partial_take": true,
+    "storage_capacity": 32,
+    "max_denominator": 512,
+    "allow_same_composition_merge": false
+   },
+   "step_limit": 72,
+   "metadata": {
+    "generator": "emrcm_protocol",
+    "cell": "N3-T3",
+    "witness_actions": 36,
+    "witness_source": "tree"
+   }
+  },
+  {
+   "instance_id": "val_emrcm-0086",
+   "fluids": [
+    {
+     "id": 0,
+     "name": "S",
+     "kind": "SAMPLE"
+    },
+    {
+     "id": 1,
+     "name": "R1",
+     "kind": "REAGENT"
+    },
+    {
+     "id": 2,
+     "name": "B",
+     "kind": "BUFFER"
+    }
+   ],
+   "targets": [
+    {
+     "id": 0,
+     "experiment_id": 0,
+     "composition": {
+      "num": [
+       13,
+       109,
+       134
+      ],
+      "den": 256
+     },
+     "tolerance": {
+      "num": 0,
+      "den": 1
+     },
+     "droplet_volume": 4,
+     "demand": 1
+    },
+    {
+     "id": 1,
+     "experiment_id": 0,
+     "composition": {
+      "num": [
+       69,
+       156,
+       31
+      ],
+      "den": 256
+     },
+     "tolerance": {
+      "num": 0,
+      "den": 1
+     },
+     "droplet_volume": 4,
+     "demand": 1
+    },
+    {
+     "id": 2,
+     "experiment_id": 0,
+     "composition": {
+      "num": [
+       236,
+       135,
+       141
+      ],
+      "den": 512
+     },
+     "tolerance": {
+      "num": 0,
+      "den": 1
+     },
+     "droplet_volume": 4,
+     "demand": 1
+    }
+   ],
+   "chip": {
+    "name": "meda_m8-M8-S32",
+    "max_mix_volume": 8,
+    "min_mix_volume": 2,
+    "unit_volume": 1,
+    "min_droplet_volume": 1,
+    "allow_partial_take": true,
+    "storage_capacity": 32,
+    "max_denominator": 512,
+    "allow_same_composition_merge": false
+   },
+   "step_limit": 78,
+   "metadata": {
+    "generator": "emrcm_protocol",
+    "cell": "N3-T3",
+    "witness_actions": 39,
+    "witness_source": "tree"
+   }
+  },
+  {
+   "instance_id": "val_emrcm-0087",
+   "fluids": [
+    {
+     "id": 0,
+     "name": "S",
+     "kind": "SAMPLE"
+    },
+    {
+     "id": 1,
+     "name": "R1",
+     "kind": "REAGENT"
+    },
+    {
+     "id": 2,
+     "name": "B",
+     "kind": "BUFFER"
+    }
+   ],
+   "targets": [
+    {
+     "id": 0,
+     "experiment_id": 0,
+     "composition": {
+      "num": [
+       23,
+       24,
+       17
+      ],
+      "den": 64
+     },
+     "tolerance": {
+      "num": 0,
+      "den": 1
+     },
+     "droplet_volume": 4,
+     "demand": 1
+    },
+    {
+     "id": 1,
+     "experiment_id": 0,
+     "composition": {
+      "num": [
+       54,
+       91,
+       367
+      ],
+      "den": 512
+     },
+     "tolerance": {
+      "num": 0,
+      "den": 1
+     },
+     "droplet_volume": 4,
+     "demand": 1
+    },
+    {
+     "id": 2,
+     "experiment_id": 0,
+     "composition": {
+      "num": [
+       29,
+       332,
+       151
+      ],
+      "den": 512
+     },
+     "tolerance": {
+      "num": 0,
+      "den": 1
+     },
+     "droplet_volume": 4,
+     "demand": 1
+    }
+   ],
+   "chip": {
+    "name": "meda_m8-M8-S32",
+    "max_mix_volume": 8,
+    "min_mix_volume": 2,
+    "unit_volume": 1,
+    "min_droplet_volume": 1,
+    "allow_partial_take": true,
+    "storage_capacity": 32,
+    "max_denominator": 512,
+    "allow_same_composition_merge": false
+   },
+   "step_limit": 76,
+   "metadata": {
+    "generator": "emrcm_protocol",
+    "cell": "N3-T3",
+    "witness_actions": 38,
+    "witness_source": "tree"
+   }
+  },
+  {
+   "instance_id": "val_emrcm-0088",
+   "fluids": [
+    {
+     "id": 0,
+     "name": "S",
+     "kind": "SAMPLE"
+    },
+    {
+     "id": 1,
+     "name": "R1",
+     "kind": "REAGENT"
+    },
+    {
+     "id": 2,
+     "name": "B",
+     "kind": "BUFFER"
+    }
+   ],
+   "targets": [
+    {
+     "id": 0,
+     "experiment_id": 0,
+     "composition": {
+      "num": [
+       88,
+       147,
+       277
+      ],
+      "den": 512
+     },
+     "tolerance": {
+      "num": 0,
+      "den": 1
+     },
+     "droplet_volume": 4,
+     "demand": 1
+    },
+    {
+     "id": 1,
+     "experiment_id": 0,
+     "composition": {
+      "num": [
+       180,
+       317,
+       15
+      ],
+      "den": 512
+     },
+     "tolerance": {
+      "num": 0,
+      "den": 1
+     },
+     "droplet_volume": 4,
+     "demand": 1
+    },
+    {
+     "id": 2,
+     "experiment_id": 0,
+     "composition": {
+      "num": [
+       217,
+       25,
+       270
+      ],
+      "den": 512
+     },
+     "tolerance": {
+      "num": 0,
+      "den": 1
+     },
+     "droplet_volume": 4,
+     "demand": 1
+    }
+   ],
+   "chip": {
+    "name": "meda_m8-M8-S32",
+    "max_mix_volume": 8,
+    "min_mix_volume": 2,
+    "unit_volume": 1,
+    "min_droplet_volume": 1,
+    "allow_partial_take": true,
+    "storage_capacity": 32,
+    "max_denominator": 512,
+    "allow_same_composition_merge": false
+   },
+   "step_limit": 78,
+   "metadata": {
+    "generator": "emrcm_protocol",
+    "cell": "N3-T3",
+    "witness_actions": 39,
+    "witness_source": "tree"
+   }
+  },
+  {
+   "instance_id": "val_emrcm-0089",
+   "fluids": [
+    {
+     "id": 0,
+     "name": "S",
+     "kind": "SAMPLE"
+    },
+    {
+     "id": 1,
+     "name": "R1",
+     "kind": "REAGENT"
+    },
+    {
+     "id": 2,
+     "name": "B",
+     "kind": "BUFFER"
+    }
+   ],
+   "targets": [
+    {
+     "id": 0,
+     "experiment_id": 0,
+     "composition": {
+      "num": [
+       103,
+       6,
+       19
+      ],
+      "den": 128
+     },
+     "tolerance": {
+      "num": 0,
+      "den": 1
+     },
+     "droplet_volume": 4,
+     "demand": 1
+    },
+    {
+     "id": 1,
+     "experiment_id": 0,
+     "composition": {
+      "num": [
+       357,
+       97,
+       58
+      ],
+      "den": 512
+     },
+     "tolerance": {
+      "num": 0,
+      "den": 1
+     },
+     "droplet_volume": 4,
+     "demand": 1
+    },
+    {
+     "id": 2,
+     "experiment_id": 0,
+     "composition": {
+      "num": [
+       23,
+       383,
+       106
+      ],
+      "den": 512
+     },
+     "tolerance": {
+      "num": 0,
+      "den": 1
+     },
+     "droplet_volume": 4,
+     "demand": 1
+    }
+   ],
+   "chip": {
+    "name": "meda_m8-M8-S32",
+    "max_mix_volume": 8,
+    "min_mix_volume": 2,
+    "unit_volume": 1,
+    "min_droplet_volume": 1,
+    "allow_partial_take": true,
+    "storage_capacity": 32,
+    "max_denominator": 512,
+    "allow_same_composition_merge": false
+   },
+   "step_limit": 76,
+   "metadata": {
+    "generator": "emrcm_protocol",
+    "cell": "N3-T3",
+    "witness_actions": 38,
+    "witness_source": "tree"
+   }
+  },
+  {
+   "instance_id": "val_emrcm-0090",
+   "fluids": [
+    {
+     "id": 0,
+     "name": "S",
+     "kind": "SAMPLE"
+    },
+    {
+     "id": 1,
+     "name": "R1",
+     "kind": "REAGENT"
+    },
+    {
+     "id": 2,
+     "name": "R2",
+     "kind": "REAGENT"
+    },
+    {
+     "id": 3,
+     "name": "B",
+     "kind": "BUFFER"
+    }
+   ],
+   "targets": [
+    {
+     "id": 0,
+     "experiment_id": 0,
+     "composition": {
+      "num": [
+       191,
+       150,
+       135,
+       36
+      ],
+      "den": 512
+     },
+     "tolerance": {
+      "num": 0,
+      "den": 1
+     },
+     "droplet_volume": 4,
+     "demand": 1
+    },
+    {
+     "id": 1,
+     "experiment_id": 0,
+     "composition": {
+      "num": [
+       96,
+       99,
+       127,
+       190
+      ],
+      "den": 512
+     },
+     "tolerance": {
+      "num": 0,
+      "den": 1
+     },
+     "droplet_volume": 4,
+     "demand": 1
+    },
+    {
+     "id": 2,
+     "experiment_id": 0,
+     "composition": {
+      "num": [
+       4,
+       302,
+       165,
+       41
+      ],
+      "den": 512
+     },
+     "tolerance": {
+      "num": 0,
+      "den": 1
+     },
+     "droplet_volume": 4,
+     "demand": 1
+    }
+   ],
+   "chip": {
+    "name": "meda_m8-M8-S32",
+    "max_mix_volume": 8,
+    "min_mix_volume": 2,
+    "unit_volume": 1,
+    "min_droplet_volume": 1,
+    "allow_partial_take": true,
+    "storage_capacity": 32,
+    "max_denominator": 512,
+    "allow_same_composition_merge": false
+   },
+   "step_limit": 112,
+   "metadata": {
+    "generator": "emrcm_protocol",
+    "cell": "N4-T3",
+    "witness_actions": 56,
+    "witness_source": "tree"
+   }
+  },
+  {
+   "instance_id": "val_emrcm-0091",
+   "fluids": [
+    {
+     "id": 0,
+     "name": "S",
+     "kind": "SAMPLE"
+    },
+    {
+     "id": 1,
+     "name": "R1",
+     "kind": "REAGENT"
+    },
+    {
+     "id": 2,
+     "name": "R2",
+     "kind": "REAGENT"
+    },
+    {
+     "id": 3,
+     "name": "B",
+     "kind": "BUFFER"
+    }
+   ],
+   "targets": [
+    {
+     "id": 0,
+     "experiment_id": 0,
+     "composition": {
+      "num": [
+       75,
+       89,
+       301,
+       47
+      ],
+      "den": 512
+     },
+     "tolerance": {
+      "num": 0,
+      "den": 1
+     },
+     "droplet_volume": 4,
+     "demand": 1
+    },
+    {
+     "id": 1,
+     "experiment_id": 0,
+     "composition": {
+      "num": [
+       148,
+       131,
+       79,
+       154
+      ],
+      "den": 512
+     },
+     "tolerance": {
+      "num": 0,
+      "den": 1
+     },
+     "droplet_volume": 4,
+     "demand": 1
+    },
+    {
+     "id": 2,
+     "experiment_id": 0,
+     "composition": {
+      "num": [
+       10,
+       3,
+       221,
+       22
+      ],
+      "den": 256
+     },
+     "tolerance": {
+      "num": 0,
+      "den": 1
+     },
+     "droplet_volume": 4,
+     "demand": 1
+    }
+   ],
+   "chip": {
+    "name": "meda_m8-M8-S32",
+    "max_mix_volume": 8,
+    "min_mix_volume": 2,
+    "unit_volume": 1,
+    "min_droplet_volume": 1,
+    "allow_partial_take": true,
+    "storage_capacity": 32,
+    "max_denominator": 512,
+    "allow_same_composition_merge": false
+   },
+   "step_limit": 110,
+   "metadata": {
+    "generator": "emrcm_protocol",
+    "cell": "N4-T3",
+    "witness_actions": 55,
+    "witness_source": "tree"
+   }
+  },
+  {
+   "instance_id": "val_emrcm-0092",
+   "fluids": [
+    {
+     "id": 0,
+     "name": "S",
+     "kind": "SAMPLE"
+    },
+    {
+     "id": 1,
+     "name": "R1",
+     "kind": "REAGENT"
+    },
+    {
+     "id": 2,
+     "name": "R2",
+     "kind": "REAGENT"
+    },
+    {
+     "id": 3,
+     "name": "B",
+     "kind": "BUFFER"
+    }
+   ],
+   "targets": [
+    {
+     "id": 0,
+     "experiment_id": 0,
+     "composition": {
+      "num": [
+       36,
+       275,
+       17,
+       184
+      ],
+      "den": 512
+     },
+     "tolerance": {
+      "num": 0,
+      "den": 1
+     },
+     "droplet_volume": 4,
+     "demand": 1
+    },
+    {
+     "id": 1,
+     "experiment_id": 0,
+     "composition": {
+      "num": [
+       180,
+       88,
+       15,
+       229
+      ],
+      "den": 512
+     },
+     "tolerance": {
+      "num": 0,
+      "den": 1
+     },
+     "droplet_volume": 4,
+     "demand": 1
+    },
+    {
+     "id": 2,
+     "experiment_id": 0,
+     "composition": {
+      "num": [
+       73,
+       267,
+       72,
+       100
+      ],
+      "den": 512
+     },
+     "tolerance": {
+      "num": 0,
+      "den": 1
+     },
+     "droplet_volume": 4,
+     "demand": 1
+    }
+   ],
+   "chip": {
+    "name": "meda_m8-M8-S32",
+    "max_mix_volume": 8,
+    "min_mix_volume": 2,
+    "unit_volume": 1,
+    "min_droplet_volume": 1,
+    "allow_partial_take": true,
+    "storage_capacity": 32,
+    "max_denominator": 512,
+    "allow_same_composition_merge": false
+   },
+   "step_limit": 110,
+   "metadata": {
+    "generator": "emrcm_protocol",
+    "cell": "N4-T3",
+    "witness_actions": 55,
+    "witness_source": "tree"
+   }
+  },
+  {
+   "instance_id": "val_emrcm-0093",
+   "fluids": [
+    {
+     "id": 0,
+     "name": "S",
+     "kind": "SAMPLE"
+    },
+    {
+     "id": 1,
+     "name": "R1",
+     "kind": "REAGENT"
+    },
+    {
+     "id": 2,
+     "name": "R2",
+     "kind": "REAGENT"
+    },
+    {
+     "id": 3,
+     "name": "B",
+     "kind": "BUFFER"
+    }
+   ],
+   "targets": [
+    {
+     "id": 0,
+     "experiment_id": 0,
+     "composition": {
+      "num": [
+       16,
+       93,
+       92,
+       311
+      ],
+      "den": 512
+     },
+     "tolerance": {
+      "num": 0,
+      "den": 1
+     },
+     "droplet_volume": 4,
+     "demand": 1
+    },
+    {
+     "id": 1,
+     "experiment_id": 0,
+     "composition": {
+      "num": [
+       14,
+       127,
+       58,
+       313
+      ],
+      "den": 512
+     },
+     "tolerance": {
+      "num": 0,
+      "den": 1
+     },
+     "droplet_volume": 4,
+     "demand": 1
+    },
+    {
+     "id": 2,
+     "experiment_id": 0,
+     "composition": {
+      "num": [
+       200,
+       213,
+       63,
+       36
+      ],
+      "den": 512
+     },
+     "tolerance": {
+      "num": 0,
+      "den": 1
+     },
+     "droplet_volume": 4,
+     "demand": 1
+    }
+   ],
+   "chip": {
+    "name": "meda_m8-M8-S32",
+    "max_mix_volume": 8,
+    "min_mix_volume": 2,
+    "unit_volume": 1,
+    "min_droplet_volume": 1,
+    "allow_partial_take": true,
+    "storage_capacity": 32,
+    "max_denominator": 512,
+    "allow_same_composition_merge": false
+   },
+   "step_limit": 106,
+   "metadata": {
+    "generator": "emrcm_protocol",
+    "cell": "N4-T3",
+    "witness_actions": 53,
+    "witness_source": "tree"
+   }
+  },
+  {
+   "instance_id": "val_emrcm-0094",
+   "fluids": [
+    {
+     "id": 0,
+     "name": "S",
+     "kind": "SAMPLE"
+    },
+    {
+     "id": 1,
+     "name": "R1",
+     "kind": "REAGENT"
+    },
+    {
+     "id": 2,
+     "name": "R2",
+     "kind": "REAGENT"
+    },
+    {
+     "id": 3,
+     "name": "B",
+     "kind": "BUFFER"
+    }
+   ],
+   "targets": [
+    {
+     "id": 0,
+     "experiment_id": 0,
+     "composition": {
+      "num": [
+       37,
+       376,
+       28,
+       71
+      ],
+      "den": 512
+     },
+     "tolerance": {
+      "num": 0,
+      "den": 1
+     },
+     "droplet_volume": 4,
+     "demand": 1
+    },
+    {
+     "id": 1,
+     "experiment_id": 0,
+     "composition": {
+      "num": [
+       40,
+       419,
+       44,
+       9
+      ],
+      "den": 512
+     },
+     "tolerance": {
+      "num": 0,
+      "den": 1
+     },
+     "droplet_volume": 4,
+     "demand": 1
+    },
+    {
+     "id": 2,
+     "experiment_id": 0,
+     "composition": {
+      "num": [
+       329,
+       8,
+       101,
+       74
+      ],
+      "den": 512
+     },
+     "tolerance": {
+      "num": 0,
+      "den": 1
+     },
+     "droplet_volume": 4,
+     "demand": 1
+    }
+   ],
+   "chip": {
+    "name": "meda_m8-M8-S32",
+    "max_mix_volume": 8,
+    "min_mix_volume": 2,
+    "unit_volume": 1,
+    "min_droplet_volume": 1,
+    "allow_partial_take": true,
+    "storage_capacity": 32,
+    "max_denominator": 512,
+    "allow_same_composition_merge": false
+   },
+   "step_limit": 98,
+   "metadata": {
+    "generator": "emrcm_protocol",
+    "cell": "N4-T3",
+    "witness_actions": 49,
+    "witness_source": "tree"
+   }
+  },
+  {
+   "instance_id": "val_emrcm-0095",
+   "fluids": [
+    {
+     "id": 0,
+     "name": "S",
+     "kind": "SAMPLE"
+    },
+    {
+     "id": 1,
+     "name": "R1",
+     "kind": "REAGENT"
+    },
+    {
+     "id": 2,
+     "name": "R2",
+     "kind": "REAGENT"
+    },
+    {
+     "id": 3,
+     "name": "B",
+     "kind": "BUFFER"
+    }
+   ],
+   "targets": [
+    {
+     "id": 0,
+     "experiment_id": 0,
+     "composition": {
+      "num": [
+       73,
+       238,
+       33,
+       168
+      ],
+      "den": 512
+     },
+     "tolerance": {
+      "num": 0,
+      "den": 1
+     },
+     "droplet_volume": 4,
+     "demand": 1
+    },
+    {
+     "id": 1,
+     "experiment_id": 0,
+     "composition": {
+      "num": [
+       95,
+       191,
+       105,
+       121
+      ],
+      "den": 512
+     },
+     "tolerance": {
+      "num": 0,
+      "den": 1
+     },
+     "droplet_volume": 4,
+     "demand": 1
+    },
+    {
+     "id": 2,
+     "experiment_id": 0,
+     "composition": {
+      "num": [
+       102,
+       105,
+       242,
+       63
+      ],
+      "den": 512
+     },
+     "tolerance": {
+      "num": 0,
+      "den": 1
+     },
+     "droplet_volume": 4,
+     "demand": 1
+    }
+   ],
+   "chip": {
+    "name": "meda_m8-M8-S32",
+    "max_mix_volume": 8,
+    "min_mix_volume": 2,
+    "unit_volume": 1,
+    "min_droplet_volume": 1,
+    "allow_partial_take": true,
+    "storage_capacity": 32,
+    "max_denominator": 512,
+    "allow_same_composition_merge": false
+   },
+   "step_limit": 122,
+   "metadata": {
+    "generator": "emrcm_protocol",
+    "cell": "N4-T3",
+    "witness_actions": 61,
+    "witness_source": "tree"
+   }
+  },
+  {
+   "instance_id": "val_emrcm-0096",
+   "fluids": [
+    {
+     "id": 0,
+     "name": "S",
+     "kind": "SAMPLE"
+    },
+    {
+     "id": 1,
+     "name": "R1",
+     "kind": "REAGENT"
+    },
+    {
+     "id": 2,
+     "name": "R2",
+     "kind": "REAGENT"
+    },
+    {
+     "id": 3,
+     "name": "B",
+     "kind": "BUFFER"
+    }
+   ],
+   "targets": [
+    {
+     "id": 0,
+     "experiment_id": 0,
+     "composition": {
+      "num": [
+       157,
+       298,
+       26,
+       31
+      ],
+      "den": 512
+     },
+     "tolerance": {
+      "num": 0,
+      "den": 1
+     },
+     "droplet_volume": 4,
+     "demand": 1
+    },
+    {
+     "id": 1,
+     "experiment_id": 0,
+     "composition": {
+      "num": [
+       25,
+       112,
+       134,
+       241
+      ],
+      "den": 512
+     },
+     "tolerance": {
+      "num": 0,
+      "den": 1
+     },
+     "droplet_volume": 4,
+     "demand": 1
+    },
+    {
+     "id": 2,
+     "experiment_id": 0,
+     "composition": {
+      "num": [
+       88,
+       221,
+       34,
+       169
+      ],
+      "den": 512
+     },
+     "tolerance": {
+      "num": 0,
+      "den": 1
+     },
+     "droplet_volume": 4,
+     "demand": 1
+    }
+   ],
+   "chip": {
+    "name": "meda_m8-M8-S32",
+    "max_mix_volume": 8,
+    "min_mix_volume": 2,
+    "unit_volume": 1,
+    "min_droplet_volume": 1,
+    "allow_partial_take": true,
+    "storage_capacity": 32,
+    "max_denominator": 512,
+    "allow_same_composition_merge": false
+   },
+   "step_limit": 116,
+   "metadata": {
+    "generator": "emrcm_protocol",
+    "cell": "N4-T3",
+    "witness_actions": 58,
+    "witness_source": "tree"
+   }
+  },
+  {
+   "instance_id": "val_emrcm-0097",
+   "fluids": [
+    {
+     "id": 0,
+     "name": "S",
+     "kind": "SAMPLE"
+    },
+    {
+     "id": 1,
+     "name": "R1",
+     "kind": "REAGENT"
+    },
+    {
+     "id": 2,
+     "name": "R2",
+     "kind": "REAGENT"
+    },
+    {
+     "id": 3,
+     "name": "B",
+     "kind": "BUFFER"
+    }
+   ],
+   "targets": [
+    {
+     "id": 0,
+     "experiment_id": 0,
+     "composition": {
+      "num": [
+       111,
+       21,
+       122,
+       2
+      ],
+      "den": 256
+     },
+     "tolerance": {
+      "num": 0,
+      "den": 1
+     },
+     "droplet_volume": 4,
+     "demand": 1
+    },
+    {
+     "id": 1,
+     "experiment_id": 0,
+     "composition": {
+      "num": [
+       14,
+       70,
+       21,
+       151
+      ],
+      "den": 256
+     },
+     "tolerance": {
+      "num": 0,
+      "den": 1
+     },
+     "droplet_volume": 4,
+     "demand": 1
+    },
+    {
+     "id": 2,
+     "experiment_id": 0,
+     "composition": {
+      "num": [
+       45,
+       387,
+       60,
+       20
+      ],
+      "den": 512
+     },
+     "tolerance": {
+      "num": 0,
+      "den": 1
+     },
+     "droplet_volume": 4,
+     "demand": 1
+    }
+   ],
+   "chip": {
+    "name": "meda_m8-M8-S32",
+    "max_mix_volume": 8,
+    "min_mix_volume": 2,
+    "unit_volume": 1,
+    "min_droplet_volume": 1,
+    "allow_partial_take": true,
+    "storage_capacity": 32,
+    "max_denominator": 512,
+    "allow_same_composition_merge": false
+   },
+   "step_limit": 96,
+   "metadata": {
+    "generator": "emrcm_protocol",
+    "cell": "N4-T3",
+    "witness_actions": 48,
+    "witness_source": "tree"
+   }
+  },
+  {
+   "instance_id": "val_emrcm-0098",
+   "fluids": [
+    {
+     "id": 0,
+     "name": "S",
+     "kind": "SAMPLE"
+    },
+    {
+     "id": 1,
+     "name": "R1",
+     "kind": "REAGENT"
+    },
+    {
+     "id": 2,
+     "name": "R2",
+     "kind": "REAGENT"
+    },
+    {
+     "id": 3,
+     "name": "B",
+     "kind": "BUFFER"
+    }
+   ],
+   "targets": [
+    {
+     "id": 0,
+     "experiment_id": 0,
+     "composition": {
+      "num": [
+       69,
+       130,
+       113,
+       200
+      ],
+      "den": 512
+     },
+     "tolerance": {
+      "num": 0,
+      "den": 1
+     },
+     "droplet_volume": 4,
+     "demand": 1
+    },
+    {
+     "id": 1,
+     "experiment_id": 0,
+     "composition": {
+      "num": [
+       16,
+       461,
+       1,
+       34
+      ],
+      "den": 512
+     },
+     "tolerance": {
+      "num": 0,
+      "den": 1
+     },
+     "droplet_volume": 4,
+     "demand": 1
+    },
+    {
+     "id": 2,
+     "experiment_id": 0,
+     "composition": {
+      "num": [
+       57,
+       209,
+       221,
+       25
+      ],
+      "den": 512
+     },
+     "tolerance": {
+      "num": 0,
+      "den": 1
+     },
+     "droplet_volume": 4,
+     "demand": 1
+    }
+   ],
+   "chip": {
+    "name": "meda_m8-M8-S32",
+    "max_mix_volume": 8,
+    "min_mix_volume": 2,
+    "unit_volume": 1,
+    "min_droplet_volume": 1,
+    "allow_partial_take": true,
+    "storage_capacity": 32,
+    "max_denominator": 512,
+    "allow_same_composition_merge": false
+   },
+   "step_limit": 94,
+   "metadata": {
+    "generator": "emrcm_protocol",
+    "cell": "N4-T3",
+    "witness_actions": 47,
+    "witness_source": "tree"
+   }
+  },
+  {
+   "instance_id": "val_emrcm-0099",
+   "fluids": [
+    {
+     "id": 0,
+     "name": "S",
+     "kind": "SAMPLE"
+    },
+    {
+     "id": 1,
+     "name": "R1",
+     "kind": "REAGENT"
+    },
+    {
+     "id": 2,
+     "name": "R2",
+     "kind": "REAGENT"
+    },
+    {
+     "id": 3,
+     "name": "B",
+     "kind": "BUFFER"
+    }
+   ],
+   "targets": [
+    {
+     "id": 0,
+     "experiment_id": 0,
+     "composition": {
+      "num": [
+       123,
+       136,
+       68,
+       185
+      ],
+      "den": 512
+     },
+     "tolerance": {
+      "num": 0,
+      "den": 1
+     },
+     "droplet_volume": 4,
+     "demand": 1
+    },
+    {
+     "id": 1,
+     "experiment_id": 0,
+     "composition": {
+      "num": [
+       50,
+       31,
+       186,
+       245
+      ],
+      "den": 512
+     },
+     "tolerance": {
+      "num": 0,
+      "den": 1
+     },
+     "droplet_volume": 4,
+     "demand": 1
+    },
+    {
+     "id": 2,
+     "experiment_id": 0,
+     "composition": {
+      "num": [
+       84,
+       117,
+       43,
+       12
+      ],
+      "den": 256
+     },
+     "tolerance": {
+      "num": 0,
+      "den": 1
+     },
+     "droplet_volume": 4,
+     "demand": 1
+    }
+   ],
+   "chip": {
+    "name": "meda_m8-M8-S32",
+    "max_mix_volume": 8,
+    "min_mix_volume": 2,
+    "unit_volume": 1,
+    "min_droplet_volume": 1,
+    "allow_partial_take": true,
+    "storage_capacity": 32,
+    "max_denominator": 512,
+    "allow_same_composition_merge": false
+   },
+   "step_limit": 112,
+   "metadata": {
+    "generator": "emrcm_protocol",
+    "cell": "N4-T3",
+    "witness_actions": 56,
+    "witness_source": "tree"
+   }
+  },
+  {
+   "instance_id": "val_emrcm-0100",
+   "fluids": [
+    {
+     "id": 0,
+     "name": "S",
+     "kind": "SAMPLE"
+    },
+    {
+     "id": 1,
+     "name": "R1",
+     "kind": "REAGENT"
+    },
+    {
+     "id": 2,
+     "name": "R2",
+     "kind": "REAGENT"
+    },
+    {
+     "id": 3,
+     "name": "R3",
+     "kind": "REAGENT"
+    },
+    {
+     "id": 4,
+     "name": "B",
+     "kind": "BUFFER"
+    }
+   ],
+   "targets": [
+    {
+     "id": 0,
+     "experiment_id": 0,
+     "composition": {
+      "num": [
+       14,
+       107,
+       233,
+       25,
+       133
+      ],
+      "den": 512
+     },
+     "tolerance": {
+      "num": 0,
+      "den": 1
+     },
+     "droplet_volume": 4,
+     "demand": 1
+    },
+    {
+     "id": 1,
+     "experiment_id": 0,
+     "composition": {
+      "num": [
+       21,
+       76,
+       74,
+       333,
+       8
+      ],
+      "den": 512
+     },
+     "tolerance": {
+      "num": 0,
+      "den": 1
+     },
+     "droplet_volume": 4,
+     "demand": 1
+    },
+    {
+     "id": 2,
+     "experiment_id": 0,
+     "composition": {
+      "num": [
+       39,
+       63,
+       23,
+       95,
+       36
+      ],
+      "den": 256
+     },
+     "tolerance": {
+      "num": 0,
+      "den": 1
+     },
+     "droplet_volume": 4,
+     "demand": 1
+    }
+   ],
+   "chip": {
+    "name": "meda_m8-M8-S32",
+    "max_mix_volume": 8,
+    "min_mix_volume": 2,
+    "unit_volume": 1,
+    "min_droplet_volume": 1,
+    "allow_partial_take": true,
+    "storage_capacity": 32,
+    "max_denominator": 512,
+    "allow_same_composition_merge": false
+   },
+   "step_limit": 132,
+   "metadata": {
+    "generator": "emrcm_protocol",
+    "cell": "N5-T3",
+    "witness_actions": 66,
+    "witness_source": "tree"
+   }
+  },
+  {
+   "instance_id": "val_emrcm-0101",
+   "fluids": [
+    {
+     "id": 0,
+     "name": "S",
+     "kind": "SAMPLE"
+    },
+    {
+     "id": 1,
+     "name": "R1",
+     "kind": "REAGENT"
+    },
+    {
+     "id": 2,
+     "name": "R2",
+     "kind": "REAGENT"
+    },
+    {
+     "id": 3,
+     "name": "R3",
+     "kind": "REAGENT"
+    },
+    {
+     "id": 4,
+     "name": "B",
+     "kind": "BUFFER"
+    }
+   ],
+   "targets": [
+    {
+     "id": 0,
+     "experiment_id": 0,
+     "composition": {
+      "num": [
+       5,
+       41,
+       104,
+       264,
+       98
+      ],
+      "den": 512
+     },
+     "tolerance": {
+      "num": 0,
+      "den": 1
+     },
+     "droplet_volume": 4,
+     "demand": 1
+    },
+    {
+     "id": 1,
+     "experiment_id": 0,
+     "composition": {
+      "num": [
+       14,
+       56,
+       273,
+       71,
+       98
+      ],
+      "den": 512
+     },
+     "tolerance": {
+      "num": 0,
+      "den": 1
+     },
+     "droplet_volume": 4,
+     "demand": 1
+    },
+    {
+     "id": 2,
+     "experiment_id": 0,
+     "composition": {
+      "num": [
+       298,
+       51,
+       89,
+       41,
+       33
+      ],
+      "den": 512
+     },
+     "tolerance": {
+      "num": 0,
+      "den": 1
+     },
+     "droplet_volume": 4,
+     "demand": 1
+    }
+   ],
+   "chip": {
+    "name": "meda_m8-M8-S32",
+    "max_mix_volume": 8,
+    "min_mix_volume": 2,
+    "unit_volume": 1,
+    "min_droplet_volume": 1,
+    "allow_partial_take": true,
+    "storage_capacity": 32,
+    "max_denominator": 512,
+    "allow_same_composition_merge": false
+   },
+   "step_limit": 148,
+   "metadata": {
+    "generator": "emrcm_protocol",
+    "cell": "N5-T3",
+    "witness_actions": 74,
+    "witness_source": "tree"
+   }
+  },
+  {
+   "instance_id": "val_emrcm-0102",
+   "fluids": [
+    {
+     "id": 0,
+     "name": "S",
+     "kind": "SAMPLE"
+    },
+    {
+     "id": 1,
+     "name": "R1",
+     "kind": "REAGENT"
+    },
+    {
+     "id": 2,
+     "name": "R2",
+     "kind": "REAGENT"
+    },
+    {
+     "id": 3,
+     "name": "R3",
+     "kind": "REAGENT"
+    },
+    {
+     "id": 4,
+     "name": "B",
+     "kind": "BUFFER"
+    }
+   ],
+   "targets": [
+    {
+     "id": 0,
+     "experiment_id": 0,
+     "composition": {
+      "num": [
+       295,
+       76,
+       57,
+       71,
+       13
+      ],
+      "den": 512
+     },
+     "tolerance": {
+      "num": 0,
+      "den": 1
+     },
+     "droplet_volume": 4,
+     "demand": 1
+    },
+    {
+     "id": 1,
+     "experiment_id": 0,
+     "composition": {
+      "num": [
+       271,
+       72,
+       54,
+       55,
+       60
+      ],
+      "den": 512
+     },
+     "tolerance": {
+      "num": 0,
+      "den": 1
+     },
+     "droplet_volume": 4,
+     "demand": 1
+    },
+    {
+     "id": 2,
+     "experiment_id": 0,
+     "composition": {
+      "num": [
+       307,
+       58,
+       104,
+       11,
+       32
+      ],
+      "den": 512
+     },
+     "tolerance": {
+      "num": 0,
+      "den": 1
+     },
+     "droplet_volume": 4,
+     "demand": 1
+    }
+   ],
+   "chip": {
+    "name": "meda_m8-M8-S32",
+    "max_mix_volume": 8,
+    "min_mix_volume": 2,
+    "unit_volume": 1,
+    "min_droplet_volume": 1,
+    "allow_partial_take": true,
+    "storage_capacity": 32,
+    "max_denominator": 512,
+    "allow_same_composition_merge": false
+   },
+   "step_limit": 142,
+   "metadata": {
+    "generator": "emrcm_protocol",
+    "cell": "N5-T3",
+    "witness_actions": 71,
+    "witness_source": "tree"
+   }
+  },
+  {
+   "instance_id": "val_emrcm-0103",
+   "fluids": [
+    {
+     "id": 0,
+     "name": "S",
+     "kind": "SAMPLE"
+    },
+    {
+     "id": 1,
+     "name": "R1",
+     "kind": "REAGENT"
+    },
+    {
+     "id": 2,
+     "name": "R2",
+     "kind": "REAGENT"
+    },
+    {
+     "id": 3,
+     "name": "R3",
+     "kind": "REAGENT"
+    },
+    {
+     "id": 4,
+     "name": "B",
+     "kind": "BUFFER"
+    }
+   ],
+   "targets": [
+    {
+     "id": 0,
+     "experiment_id": 0,
+     "composition": {
+      "num": [
+       16,
+       19,
+       56,
+       419,
+       2
+      ],
+      "den": 512
+     },
+     "tolerance": {
+      "num": 0,
+      "den": 1
+     },
+     "droplet_volume": 4,
+     "demand": 1
+    },
+    {
+     "id": 1,
+     "experiment_id": 0,
+     "composition": {
+      "num": [
+       78,
+       23,
+       29,
+       91,
+       291
+      ],
+      "den": 512
+     },
+     "tolerance": {
+      "num": 0,
+      "den": 1
+     },
+     "droplet_volume": 4,
+     "demand": 1
+    },
+    {
+     "id": 2,
+     "experiment_id": 0,
+     "composition": {
+      "num": [
+       58,
+       97,
+       295,
+       57,
+       5
+      ],
+      "den": 512
+     },
+     "tolerance": {
+      "num": 0,
+      "den": 1
+     },
+     "droplet_volume": 4,
+     "demand": 1
+    }
+   ],
+   "chip": {
+    "name": "meda_m8-M8-S32",
+    "max_mix_volume": 8,
+    "min_mix_volume": 2,
+    "unit_volume": 1,
+    "min_droplet_volume": 1,
+    "allow_partial_take": true,
+    "storage_capacity": 32,
+    "max_denominator": 512,
+    "allow_same_composition_merge": false
+   },
+   "step_limit": 130,
+   "metadata": {
+    "generator": "emrcm_protocol",
+    "cell": "N5-T3",
+    "witness_actions": 65,
+    "witness_source": "tree"
+   }
+  },
+  {
+   "instance_id": "val_emrcm-0104",
+   "fluids": [
+    {
+     "id": 0,
+     "name": "S",
+     "kind": "SAMPLE"
+    },
+    {
+     "id": 1,
+     "name": "R1",
+     "kind": "REAGENT"
+    },
+    {
+     "id": 2,
+     "name": "R2",
+     "kind": "REAGENT"
+    },
+    {
+     "id": 3,
+     "name": "R3",
+     "kind": "REAGENT"
+    },
+    {
+     "id": 4,
+     "name": "B",
+     "kind": "BUFFER"
+    }
+   ],
+   "targets": [
+    {
+     "id": 0,
+     "experiment_id": 0,
+     "composition": {
+      "num": [
+       88,
+       93,
+       56,
+       89,
+       186
+      ],
+      "den": 512
+     },
+     "tolerance": {
+      "num": 0,
+      "den": 1
+     },
+     "droplet_volume": 4,
+     "demand": 1
+    },
+    {
+     "id": 1,
+     "experiment_id": 0,
+     "composition": {
+      "num": [
+       121,
+       176,
+       91,
+       52,
+       72
+      ],
+      "den": 512
+     },
+     "tolerance": {
+      "num": 0,
+      "den": 1
+     },
+     "droplet_volume": 4,
+     "demand": 1
+    },
+    {
+     "id": 2,
+     "experiment_id": 0,
+     "composition": {
+      "num": [
+       131,
+       26,
+       88,
+       149,
+       118
+      ],
+      "den": 512
+     },
+     "tolerance": {
+      "num": 0,
+      "den": 1
+     },
+     "droplet_volume": 4,
+     "demand": 1
+    }
+   ],
+   "chip": {
+    "name": "meda_m8-M8-S32",
+    "max_mix_volume": 8,
+    "min_mix_volume": 2,
+    "unit_volume": 1,
+    "min_droplet_volume": 1,
+    "allow_partial_take": true,
+    "storage_capacity": 32,
+    "max_denominator": 512,
+    "allow_same_composition_merge": false
+   },
+   "step_limit": 140,
+   "metadata": {
+    "generator": "emrcm_protocol",
+    "cell": "N5-T3",
+    "witness_actions": 70,
+    "witness_source": "tree"
+   }
+  },
+  {
+   "instance_id": "val_emrcm-0105",
+   "fluids": [
+    {
+     "id": 0,
+     "name": "S",
+     "kind": "SAMPLE"
+    },
+    {
+     "id": 1,
+     "name": "R1",
+     "kind": "REAGENT"
+    },
+    {
+     "id": 2,
+     "name": "R2",
+     "kind": "REAGENT"
+    },
+    {
+     "id": 3,
+     "name": "R3",
+     "kind": "REAGENT"
+    },
+    {
+     "id": 4,
+     "name": "B",
+     "kind": "BUFFER"
+    }
+   ],
+   "targets": [
+    {
+     "id": 0,
+     "experiment_id": 0,
+     "composition": {
+      "num": [
+       230,
+       55,
+       120,
+       29,
+       78
+      ],
+      "den": 512
+     },
+     "tolerance": {
+      "num": 0,
+      "den": 1
+     },
+     "droplet_volume": 4,
+     "demand": 1
+    },
+    {
+     "id": 1,
+     "experiment_id": 0,
+     "composition": {
+      "num": [
+       97,
+       30,
+       174,
+       175,
+       36
+      ],
+      "den": 512
+     },
+     "tolerance": {
+      "num": 0,
+      "den": 1
+     },
+     "droplet_volume": 4,
+     "demand": 1
+    },
+    {
+     "id": 2,
+     "experiment_id": 0,
+     "composition": {
+      "num": [
+       88,
+       129,
+       182,
+       106,
+       7
+      ],
+      "den": 512
+     },
+     "tolerance": {
+      "num": 0,
+      "den": 1
+     },
+     "droplet_volume": 4,
+     "demand": 1
+    }
+   ],
+   "chip": {
+    "name": "meda_m8-M8-S32",
+    "max_mix_volume": 8,
+    "min_mix_volume": 2,
+    "unit_volume": 1,
+    "min_droplet_volume": 1,
+    "allow_partial_take": true,
+    "storage_capacity": 32,
+    "max_denominator": 512,
+    "allow_same_composition_merge": false
+   },
+   "step_limit": 146,
+   "metadata": {
+    "generator": "emrcm_protocol",
+    "cell": "N5-T3",
+    "witness_actions": 73,
+    "witness_source": "tree"
+   }
+  },
+  {
+   "instance_id": "val_emrcm-0106",
+   "fluids": [
+    {
+     "id": 0,
+     "name": "S",
+     "kind": "SAMPLE"
+    },
+    {
+     "id": 1,
+     "name": "R1",
+     "kind": "REAGENT"
+    },
+    {
+     "id": 2,
+     "name": "R2",
+     "kind": "REAGENT"
+    },
+    {
+     "id": 3,
+     "name": "R3",
+     "kind": "REAGENT"
+    },
+    {
+     "id": 4,
+     "name": "B",
+     "kind": "BUFFER"
+    }
+   ],
+   "targets": [
+    {
+     "id": 0,
+     "experiment_id": 0,
+     "composition": {
+      "num": [
+       77,
+       114,
+       5,
+       143,
+       173
+      ],
+      "den": 512
+     },
+     "tolerance": {
+      "num": 0,
+      "den": 1
+     },
+     "droplet_volume": 4,
+     "demand": 1
+    },
+    {
+     "id": 1,
+     "experiment_id": 0,
+     "composition": {
+      "num": [
+       107,
+       65,
+       26,
+       7,
+       51
+      ],
+      "den": 256
+     },
+     "tolerance": {
+      "num": 0,
+      "den": 1
+     },
+     "droplet_volume": 4,
+     "demand": 1
+    },
+    {
+     "id": 2,
+     "experiment_id": 0,
+     "composition": {
+      "num": [
+       48,
+       117,
+       48,
+       34,
+       265
+      ],
+      "den": 512
+     },
+     "tolerance": {
+      "num": 0,
+      "den": 1
+     },
+     "droplet_volume": 4,
+     "demand": 1
+    }
+   ],
+   "chip": {
+    "name": "meda_m8-M8-S32",
+    "max_mix_volume": 8,
+    "min_mix_volume": 2,
+    "unit_volume": 1,
+    "min_droplet_volume": 1,
+    "allow_partial_take": true,
+    "storage_capacity": 32,
+    "max_denominator": 512,
+    "allow_same_composition_merge": false
+   },
+   "step_limit": 134,
+   "metadata": {
+    "generator": "emrcm_protocol",
+    "cell": "N5-T3",
+    "witness_actions": 67,
+    "witness_source": "tree"
+   }
+  },
+  {
+   "instance_id": "val_emrcm-0107",
+   "fluids": [
+    {
+     "id": 0,
+     "name": "S",
+     "kind": "SAMPLE"
+    },
+    {
+     "id": 1,
+     "name": "R1",
+     "kind": "REAGENT"
+    },
+    {
+     "id": 2,
+     "name": "R2",
+     "kind": "REAGENT"
+    },
+    {
+     "id": 3,
+     "name": "R3",
+     "kind": "REAGENT"
+    },
+    {
+     "id": 4,
+     "name": "B",
+     "kind": "BUFFER"
+    }
+   ],
+   "targets": [
+    {
+     "id": 0,
+     "experiment_id": 0,
+     "composition": {
+      "num": [
+       3,
+       48,
+       435,
+       1,
+       25
+      ],
+      "den": 512
+     },
+     "tolerance": {
+      "num": 0,
+      "den": 1
+     },
+     "droplet_volume": 4,
+     "demand": 1
+    },
+    {
+     "id": 1,
+     "experiment_id": 0,
+     "composition": {
+      "num": [
+       137,
+       112,
+       63,
+       147,
+       53
+      ],
+      "den": 512
+     },
+     "tolerance": {
+      "num": 0,
+      "den": 1
+     },
+     "droplet_volume": 4,
+     "demand": 1
+    },
+    {
+     "id": 2,
+     "experiment_id": 0,
+     "composition": {
+      "num": [
+       11,
+       97,
+       63,
+       118,
+       223
+      ],
+      "den": 512
+     },
+     "tolerance": {
+      "num": 0,
+      "den": 1
+     },
+     "droplet_volume": 4,
+     "demand": 1
+    }
+   ],
+   "chip": {
+    "name": "meda_m8-M8-S32",
+    "max_mix_volume": 8,
+    "min_mix_volume": 2,
+    "unit_volume": 1,
+    "min_droplet_volume": 1,
+    "allow_partial_take": true,
+    "storage_capacity": 32,
+    "max_denominator": 512,
+    "allow_same_composition_merge": false
+   },
+   "step_limit": 132,
+   "metadata": {
+    "generator": "emrcm_protocol",
+    "cell": "N5-T3",
+    "witness_actions": 66,
+    "witness_source": "tree"
+   }
+  },
+  {
+   "instance_id": "val_emrcm-0108",
+   "fluids": [
+    {
+     "id": 0,
+     "name": "S",
+     "kind": "SAMPLE"
+    },
+    {
+     "id": 1,
+     "name": "R1",
+     "kind": "REAGENT"
+    },
+    {
+     "id": 2,
+     "name": "R2",
+     "kind": "REAGENT"
+    },
+    {
+     "id": 3,
+     "name": "R3",
+     "kind": "REAGENT"
+    },
+    {
+     "id": 4,
+     "name": "B",
+     "kind": "BUFFER"
+    }
+   ],
+   "targets": [
+    {
+     "id": 0,
+     "experiment_id": 0,
+     "composition": {
+      "num": [
+       177,
+       13,
+       126,
+       99,
+       97
+      ],
+      "den": 512
+     },
+     "tolerance": {
+      "num": 0,
+      "den": 1
+     },
+     "droplet_volume": 4,
+     "demand": 1
+    },
+    {
+     "id": 1,
+     "experiment_id": 0,
+     "composition": {
+      "num": [
+       305,
+       75,
+       82,
+       16,
+       34
+      ],
+      "den": 512
+     },
+     "tolerance": {
+      "num": 0,
+      "den": 1
+     },
+     "droplet_volume": 4,
+     "demand": 1
+    },
+    {
+     "id": 2,
+     "experiment_id": 0,
+     "composition": {
+      "num": [
+       224,
+       134,
+       36,
+       71,
+       47
+      ],
+      "den": 512
+     },
+     "tolerance": {
+      "num": 0,
+      "den": 1
+     },
+     "droplet_volume": 4,
+     "demand": 1
+    }
+   ],
+   "chip": {
+    "name": "meda_m8-M8-S32",
+    "max_mix_volume": 8,
+    "min_mix_volume": 2,
+    "unit_volume": 1,
+    "min_droplet_volume": 1,
+    "allow_partial_take": true,
+    "storage_capacity": 32,
+    "max_denominator": 512,
+    "allow_same_composition_merge": false
+   },
+   "step_limit": 136,
+   "metadata": {
+    "generator": "emrcm_protocol",
+    "cell": "N5-T3",
+    "witness_actions": 68,
+    "witness_source": "tree"
+   }
+  },
+  {
+   "instance_id": "val_emrcm-0109",
+   "fluids": [
+    {
+     "id": 0,
+     "name": "S",
+     "kind": "SAMPLE"
+    },
+    {
+     "id": 1,
+     "name": "R1",
+     "kind": "REAGENT"
+    },
+    {
+     "id": 2,
+     "name": "R2",
+     "kind": "REAGENT"
+    },
+    {
+     "id": 3,
+     "name": "R3",
+     "kind": "REAGENT"
+    },
+    {
+     "id": 4,
+     "name": "B",
+     "kind": "BUFFER"
+    }
+   ],
+   "targets": [
+    {
+     "id": 0,
+     "experiment_id": 0,
+     "composition": {
+      "num": [
+       202,
+       165,
+       65,
+       5,
+       75
+      ],
+      "den": 512
+     },
+     "tolerance": {
+      "num": 0,
+      "den": 1
+     },
+     "droplet_volume": 4,
+     "demand": 1
+    },
+    {
+     "id": 1,
+     "experiment_id": 0,
+     "composition": {
+      "num": [
+       21,
+       163,
+       46,
+       32,
+       250
+      ],
+      "den": 512
+     },
+     "tolerance": {
+      "num": 0,
+      "den": 1
+     },
+     "droplet_volume": 4,
+     "demand": 1
+    },
+    {
+     "id": 2,
+     "experiment_id": 0,
+     "composition": {
+      "num": [
+       106,
+       37,
+       16,
+       171,
+       182
+      ],
+      "den": 512
+     },
+     "tolerance": {
+      "num": 0,
+      "den": 1
+     },
+     "droplet_volume": 4,
+     "demand": 1
+    }
+   ],
+   "chip": {
+    "name": "meda_m8-M8-S32",
+    "max_mix_volume": 8,
+    "min_mix_volume": 2,
+    "unit_volume": 1,
+    "min_droplet_volume": 1,
+    "allow_partial_take": true,
+    "storage_capacity": 32,
+    "max_denominator": 512,
+    "allow_same_composition_merge": false
+   },
+   "step_limit": 136,
+   "metadata": {
+    "generator": "emrcm_protocol",
+    "cell": "N5-T3",
+    "witness_actions": 68,
+    "witness_source": "tree"
+   }
+  },
+  {
+   "instance_id": "val_emrcm-0110",
+   "fluids": [
+    {
+     "id": 0,
+     "name": "S",
+     "kind": "SAMPLE"
+    },
+    {
+     "id": 1,
+     "name": "R1",
+     "kind": "REAGENT"
+    },
+    {
+     "id": 2,
+     "name": "R2",
+     "kind": "REAGENT"
+    },
+    {
+     "id": 3,
+     "name": "B",
+     "kind": "BUFFER"
+    }
+   ],
+   "targets": [
+    {
+     "id": 0,
+     "experiment_id": 0,
+     "composition": {
+      "num": [
+       46,
+       21,
+       144,
+       301
+      ],
+      "den": 512
+     },
+     "tolerance": {
+      "num": 0,
+      "den": 1
+     },
+     "droplet_volume": 4,
+     "demand": 1
+    },
+    {
+     "id": 1,
+     "experiment_id": 0,
+     "composition": {
+      "num": [
+       229,
+       75,
+       59,
+       149
+      ],
+      "den": 512
+     },
+     "tolerance": {
+      "num": 0,
+      "den": 1
+     },
+     "droplet_volume": 4,
+     "demand": 1
+    },
+    {
+     "id": 2,
+     "experiment_id": 0,
+     "composition": {
+      "num": [
+       49,
+       128,
+       225,
+       110
+      ],
+      "den": 512
+     },
+     "tolerance": {
+      "num": 0,
+      "den": 1
+     },
+     "droplet_volume": 4,
+     "demand": 1
+    },
+    {
+     "id": 3,
+     "experiment_id": 0,
+     "composition": {
+      "num": [
+       24,
+       13,
+       11,
+       16
+      ],
+      "den": 64
+     },
+     "tolerance": {
+      "num": 0,
+      "den": 1
+     },
+     "droplet_volume": 4,
+     "demand": 1
+    },
+    {
+     "id": 4,
+     "experiment_id": 0,
+     "composition": {
+      "num": [
+       42,
+       442,
+       27,
+       1
+      ],
+      "den": 512
+     },
+     "tolerance": {
+      "num": 0,
+      "den": 1
+     },
+     "droplet_volume": 4,
+     "demand": 1
+    }
+   ],
+   "chip": {
+    "name": "meda_m8-M8-S32",
+    "max_mix_volume": 8,
+    "min_mix_volume": 2,
+    "unit_volume": 1,
+    "min_droplet_volume": 1,
+    "allow_partial_take": true,
+    "storage_capacity": 32,
+    "max_denominator": 512,
+    "allow_same_composition_merge": false
+   },
+   "step_limit": 168,
+   "metadata": {
+    "generator": "emrcm_protocol",
+    "cell": "N4-T5",
+    "witness_actions": 84,
+    "witness_source": "tree"
+   }
+  },
+  {
+   "instance_id": "val_emrcm-0111",
+   "fluids": [
+    {
+     "id": 0,
+     "name": "S",
+     "kind": "SAMPLE"
+    },
+    {
+     "id": 1,
+     "name": "R1",
+     "kind": "REAGENT"
+    },
+    {
+     "id": 2,
+     "name": "R2",
+     "kind": "REAGENT"
+    },
+    {
+     "id": 3,
+     "name": "B",
+     "kind": "BUFFER"
+    }
+   ],
+   "targets": [
+    {
+     "id": 0,
+     "experiment_id": 0,
+     "composition": {
+      "num": [
+       76,
+       60,
+       61,
+       315
+      ],
+      "den": 512
+     },
+     "tolerance": {
+      "num": 0,
+      "den": 1
+     },
+     "droplet_volume": 4,
+     "demand": 1
+    },
+    {
+     "id": 1,
+     "experiment_id": 0,
+     "composition": {
+      "num": [
+       30,
+       163,
+       216,
+       103
+      ],
+      "den": 512
+     },
+     "tolerance": {
+      "num": 0,
+      "den": 1
+     },
+     "droplet_volume": 4,
+     "demand": 1
+    },
+    {
+     "id": 2,
+     "experiment_id": 0,
+     "composition": {
+      "num": [
+       86,
+       135,
+       27,
+       8
+      ],
+      "den": 256
+     },
+     "tolerance": {
+      "num": 0,
+      "den": 1
+     },
+     "droplet_volume": 4,
+     "demand": 1
+    },
+    {
+     "id": 3,
+     "experiment_id": 0,
+     "composition": {
+      "num": [
+       130,
+       7,
+       281,
+       94
+      ],
+      "den": 512
+     },
+     "tolerance": {
+      "num": 0,
+      "den": 1
+     },
+     "droplet_volume": 4,
+     "demand": 1
+    },
+    {
+     "id": 4,
+     "experiment_id": 0,
+     "composition": {
+      "num": [
+       205,
+       165,
+       102,
+       40
+      ],
+      "den": 512
+     },
+     "tolerance": {
+      "num": 0,
+      "den": 1
+     },
+     "droplet_volume": 4,
+     "demand": 1
+    }
+   ],
+   "chip": {
+    "name": "meda_m8-M8-S32",
+    "max_mix_volume": 8,
+    "min_mix_volume": 2,
+    "unit_volume": 1,
+    "min_droplet_volume": 1,
+    "allow_partial_take": true,
+    "storage_capacity": 32,
+    "max_denominator": 512,
+    "allow_same_composition_merge": false
+   },
+   "step_limit": 174,
+   "metadata": {
+    "generator": "emrcm_protocol",
+    "cell": "N4-T5",
+    "witness_actions": 87,
+    "witness_source": "tree"
+   }
+  },
+  {
+   "instance_id": "val_emrcm-0112",
+   "fluids": [
+    {
+     "id": 0,
+     "name": "S",
+     "kind": "SAMPLE"
+    },
+    {
+     "id": 1,
+     "name": "R1",
+     "kind": "REAGENT"
+    },
+    {
+     "id": 2,
+     "name": "R2",
+     "kind": "REAGENT"
+    },
+    {
+     "id": 3,
+     "name": "B",
+     "kind": "BUFFER"
+    }
+   ],
+   "targets": [
+    {
+     "id": 0,
+     "experiment_id": 0,
+     "composition": {
+      "num": [
+       89,
+       113,
+       194,
+       116
+      ],
+      "den": 512
+     },
+     "tolerance": {
+      "num": 0,
+      "den": 1
+     },
+     "droplet_volume": 4,
+     "demand": 1
+    },
+    {
+     "id": 1,
+     "experiment_id": 0,
+     "composition": {
+      "num": [
+       277,
+       47,
+       134,
+       54
+      ],
+      "den": 512
+     },
+     "tolerance": {
+      "num": 0,
+      "den": 1
+     },
+     "droplet_volume": 4,
+     "demand": 1
+    },
+    {
+     "id": 2,
+     "experiment_id": 0,
+     "composition": {
+      "num": [
+       49,
+       48,
+       53,
+       362
+      ],
+      "den": 512
+     },
+     "tolerance": {
+      "num": 0,
+      "den": 1
+     },
+     "droplet_volume": 4,
+     "demand": 1
+    },
+    {
+     "id": 3,
+     "experiment_id": 0,
+     "composition": {
+      "num": [
+       18,
+       15,
+       13,
+       18
+      ],
+      "den": 64
+     },
+     "tolerance": {
+      "num": 0,
+      "den": 1
+     },
+     "droplet_volume": 4,
+     "demand": 1
+    },
+    {
+     "id": 4,
+     "experiment_id": 0,
+     "composition": {
+      "num": [
+       324,
+       20,
+       83,
+       85
+      ],
+      "den": 512
+     },
+     "tolerance": {
+      "num": 0,
+      "den": 1
+     },
+     "droplet_volume": 4,
+     "demand": 1
+    }
+   ],
+   "chip": {
+    "name": "meda_m8-M8-S32",
+    "max_mix_volume": 8,
+    "min_mix_volume": 2,
+    "unit_volume": 1,
+    "min_droplet_volume": 1,
+    "allow_partial_take": true,
+    "storage_capacity": 32,
+    "max_denominator": 512,
+    "allow_same_composition_merge": false
+   },
+   "step_limit": 174,
+   "metadata": {
+    "generator": "emrcm_protocol",
+    "cell": "N4-T5",
+    "witness_actions": 87,
+    "witness_source": "tree"
+   }
+  },
+  {
+   "instance_id": "val_emrcm-0113",
+   "fluids": [
+    {
+     "id": 0,
+     "name": "S",
+     "kind": "SAMPLE"
+    },
+    {
+     "id": 1,
+     "name": "R1",
+     "kind": "REAGENT"
+    },
+    {
+     "id": 2,
+     "name": "R2",
+     "kind": "REAGENT"
+    },
+    {
+     "id": 3,
+     "name": "B",
+     "kind": "BUFFER"
+    }
+   ],
+   "targets": [
+    {
+     "id": 0,
+     "experiment_id": 0,
+     "composition": {
+      "num": [
+       92,
+       11,
+       50,
+       359
+      ],
+      "den": 512
+     },
+     "tolerance": {
+      "num": 0,
+      "den": 1
+     },
+     "droplet_volume": 4,
+     "demand": 1
+    },
+    {
+     "id": 1,
+     "experiment_id": 0,
+     "composition": {
+      "num": [
+       230,
+       125,
+       138,
+       19
+      ],
+      "den": 512
+     },
+     "tolerance": {
+      "num": 0,
+      "den": 1
+     },
+     "droplet_volume": 4,
+     "demand": 1
+    },
+    {
+     "id": 2,
+     "experiment_id": 0,
+     "composition": {
+      "num": [
+       215,
+       37,
+       17,
+       243
+      ],
+      "den": 512
+     },
+     "tolerance": {
+      "num": 0,
+      "den": 1
+     },
+     "droplet_volume": 4,
+     "demand": 1
+    },
+    {
+     "id": 3,
+     "experiment_id": 0,
+     "composition": {
+      "num": [
+       96,
+       42,
+       25,
+       93
+      ],
+      "den": 256
+     },
+     "tolerance": {
+      "num": 0,
+      "den": 1
+     },
+     "droplet_volume": 4,
+     "demand": 1
+    },
+    {
+     "id": 4,
+     "experiment_id": 0,
+     "composition": {
+      "num": [
+       47,
+       67,
+       206,
+       192
+      ],
+      "den": 512
+     },
+     "tolerance": {
+      "num": 0,
+      "den": 1
+     },
+     "droplet_volume": 4,
+     "demand": 1
+    }
+   ],
+   "chip": {
+    "name": "meda_m8-M8-S32",
+    "max_mix_volume": 8,
+    "min_mix_volume": 2,
+    "unit_volume": 1,
+    "min_droplet_volume": 1,
+    "allow_partial_take": true,
+    "storage_capacity": 32,
+    "max_denominator": 512,
+    "allow_same_composition_merge": false
+   },
+   "step_limit": 172,
+   "metadata": {
+    "generator": "emrcm_protocol",
+    "cell": "N4-T5",
+    "witness_actions": 86,
+    "witness_source": "tree"
+   }
+  },
+  {
+   "instance_id": "val_emrcm-0114",
+   "fluids": [
+    {
+     "id": 0,
+     "name": "S",
+     "kind": "SAMPLE"
+    },
+    {
+     "id": 1,
+     "name": "R1",
+     "kind": "REAGENT"
+    },
+    {
+     "id": 2,
+     "name": "R2",
+     "kind": "REAGENT"
+    },
+    {
+     "id": 3,
+     "name": "B",
+     "kind": "BUFFER"
+    }
+   ],
+   "targets": [
+    {
+     "id": 0,
+     "experiment_id": 0,
+     "composition": {
+      "num": [
+       190,
+       37,
+       110,
+       175
+      ],
+      "den": 512
+     },
+     "tolerance": {
+      "num": 0,
+      "den": 1
+     },
+     "droplet_volume": 4,
+     "demand": 1
+    },
+    {
+     "id": 1,
+     "experiment_id": 0,
+     "composition": {
+      "num": [
+       126,
+       39,
+       344,
+       3
+      ],
+      "den": 512
+     },
+     "tolerance": {
+      "num": 0,
+      "den": 1
+     },
+     "droplet_volume": 4,
+     "demand": 1
+    },
+    {
+     "id": 2,
+     "experiment_id": 0,
+     "composition": {
+      "num": [
+       197,
+       83,
+       205,
+       27
+      ],
+      "den": 512
+     },
+     "tolerance": {
+      "num": 0,
+      "den": 1
+     },
+     "droplet_volume": 4,
+     "demand": 1
+    },
+    {
+     "id": 3,
+     "experiment_id": 0,
+     "composition": {
+      "num": [
+       14,
+       241,
+       232,
+       25
+      ],
+      "den": 512
+     },
+     "tolerance": {
+      "num": 0,
+      "den": 1
+     },
+     "droplet_volume": 4,
+     "demand": 1
+    },
+    {
+     "id": 4,
+     "experiment_id": 0,
+     "composition": {
+      "num": [
+       79,
+       112,
+       13,
+       52
+      ],
+      "den": 256
+     },
+     "tolerance": {
+      "num": 0,
+      "den": 1
+     },
+     "droplet_volume": 4,
+     "demand": 1
+    }
+   ],
+   "chip": {
+    "name": "meda_m8-M8-S32",
+    "max_mix_volume": 8,
+    "min_mix_volume": 2,
+    "unit_volume": 1,
+    "min_droplet_volume": 1,
+    "allow_partial_take": true,
+    "storage_capacity": 32,
+    "max_denominator": 512,
+    "allow_same_composition_merge": false
+   },
+   "step_limit": 186,
+   "metadata": {
+    "generator": "emrcm_protocol",
+    "cell": "N4-T5",
+    "witness_actions": 93,
+    "witness_source": "tree"
+   }
+  },
+  {
+   "instance_id": "val_emrcm-0115",
+   "fluids": [
+    {
+     "id": 0,
+     "name": "S",
+     "kind": "SAMPLE"
+    },
+    {
+     "id": 1,
+     "name": "R1",
+     "kind": "REAGENT"
+    },
+    {
+     "id": 2,
+     "name": "R2",
+     "kind": "REAGENT"
+    },
+    {
+     "id": 3,
+     "name": "R3",
+     "kind": "REAGENT"
+    },
+    {
+     "id": 4,
+     "name": "B",
+     "kind": "BUFFER"
+    }
+   ],
+   "targets": [
+    {
+     "id": 0,
+     "experiment_id": 0,
+     "composition": {
+      "num": [
+       11,
+       106,
+       170,
+       2,
+       223
+      ],
+      "den": 512
+     },
+     "tolerance": {
+      "num": 0,
+      "den": 1
+     },
+     "droplet_volume": 4,
+     "demand": 1
+    },
+    {
+     "id": 1,
+     "experiment_id": 0,
+     "composition": {
+      "num": [
+       127,
+       26,
+       69,
+       21,
+       269
+      ],
+      "den": 512
+     },
+     "tolerance": {
+      "num": 0,
+      "den": 1
+     },
+     "droplet_volume": 4,
+     "demand": 1
+    },
+    {
+     "id": 2,
+     "experiment_id": 0,
+     "composition": {
+      "num": [
+       31,
+       92,
+       75,
+       233,
+       81
+      ],
+      "den": 512
+     },
+     "tolerance": {
+      "num": 0,
+      "den": 1
+     },
+     "droplet_volume": 4,
+     "demand": 1
+    },
+    {
+     "id": 3,
+     "experiment_id": 0,
+     "composition": {
+      "num": [
+       26,
+       26,
+       53,
+       21,
+       130
+      ],
+      "den": 256
+     },
+     "tolerance": {
+      "num": 0,
+      "den": 1
+     },
+     "droplet_volume": 4,
+     "demand": 1
+    },
+    {
+     "id": 4,
+     "experiment_id": 0,
+     "composition": {
+      "num": [
+       59,
+       2,
+       85,
+       297,
+       69
+      ],
+      "den": 512
+     },
+     "tolerance": {
+      "num": 0,
+      "den": 1
+     },
+     "droplet_volume": 4,
+     "demand": 1
+    }
+   ],
+   "chip": {
+    "name": "meda_m8-M8-S32",
+    "max_mix_volume": 8,
+    "min_mix_volume": 2,
+    "unit_volume": 1,
+    "min_droplet_volume": 1,
+    "allow_partial_take": true,
+    "storage_capacity": 32,
+    "max_denominator": 512,
+    "allow_same_composition_merge": false
+   },
+   "step_limit": 226,
+   "metadata": {
+    "generator": "emrcm_protocol",
+    "cell": "N5-T5",
+    "witness_actions": 113,
+    "witness_source": "tree"
+   }
+  },
+  {
+   "instance_id": "val_emrcm-0116",
+   "fluids": [
+    {
+     "id": 0,
+     "name": "S",
+     "kind": "SAMPLE"
+    },
+    {
+     "id": 1,
+     "name": "R1",
+     "kind": "REAGENT"
+    },
+    {
+     "id": 2,
+     "name": "R2",
+     "kind": "REAGENT"
+    },
+    {
+     "id": 3,
+     "name": "R3",
+     "kind": "REAGENT"
+    },
+    {
+     "id": 4,
+     "name": "B",
+     "kind": "BUFFER"
+    }
+   ],
+   "targets": [
+    {
+     "id": 0,
+     "experiment_id": 0,
+     "composition": {
+      "num": [
+       40,
+       2,
+       60,
+       99,
+       55
+      ],
+      "den": 256
+     },
+     "tolerance": {
+      "num": 0,
+      "den": 1
+     },
+     "droplet_volume": 4,
+     "demand": 1
+    },
+    {
+     "id": 1,
+     "experiment_id": 0,
+     "composition": {
+      "num": [
+       242,
+       35,
+       183,
+       51,
+       1
+      ],
+      "den": 512
+     },
+     "tolerance": {
+      "num": 0,
+      "den": 1
+     },
+     "droplet_volume": 4,
+     "demand": 1
+    },
+    {
+     "id": 2,
+     "experiment_id": 0,
+     "composition": {
+      "num": [
+       34,
+       168,
+       1,
+       244,
+       65
+      ],
+      "den": 512
+     },
+     "tolerance": {
+      "num": 0,
+      "den": 1
+     },
+     "droplet_volume": 4,
+     "demand": 1
+    },
+    {
+     "id": 3,
+     "experiment_id": 0,
+     "composition": {
+      "num": [
+       127,
+       46,
+       321,
+       3,
+       15
+      ],
+      "den": 512
+     },
+     "tolerance": {
+      "num": 0,
+      "den": 1
+     },
+     "droplet_volume": 4,
+     "demand": 1
+    },
+    {
+     "id": 4,
+     "experiment_id": 0,
+     "composition": {
+      "num": [
+       9,
+       130,
+       51,
+       201,
+       121
+      ],
+      "den": 512
+     },
+     "tolerance": {
+      "num": 0,
+      "den": 1
+     },
+     "droplet_volume": 4,
+     "demand": 1
+    }
+   ],
+   "chip": {
+    "name": "meda_m8-M8-S32",
+    "max_mix_volume": 8,
+    "min_mix_volume": 2,
+    "unit_volume": 1,
+    "min_droplet_volume": 1,
+    "allow_partial_take": true,
+    "storage_capacity": 32,
+    "max_denominator": 512,
+    "allow_same_composition_merge": false
+   },
+   "step_limit": 222,
+   "metadata": {
+    "generator": "emrcm_protocol",
+    "cell": "N5-T5",
+    "witness_actions": 111,
+    "witness_source": "tree"
+   }
+  },
+  {
+   "instance_id": "val_emrcm-0117",
+   "fluids": [
+    {
+     "id": 0,
+     "name": "S",
+     "kind": "SAMPLE"
+    },
+    {
+     "id": 1,
+     "name": "R1",
+     "kind": "REAGENT"
+    },
+    {
+     "id": 2,
+     "name": "R2",
+     "kind": "REAGENT"
+    },
+    {
+     "id": 3,
+     "name": "R3",
+     "kind": "REAGENT"
+    },
+    {
+     "id": 4,
+     "name": "B",
+     "kind": "BUFFER"
+    }
+   ],
+   "targets": [
+    {
+     "id": 0,
+     "experiment_id": 0,
+     "composition": {
+      "num": [
+       18,
+       116,
+       251,
+       84,
+       43
+      ],
+      "den": 512
+     },
+     "tolerance": {
+      "num": 0,
+      "den": 1
+     },
+     "droplet_volume": 4,
+     "demand": 1
+    },
+    {
+     "id": 1,
+     "experiment_id": 0,
+     "composition": {
+      "num": [
+       99,
+       160,
+       59,
+       135,
+       59
+      ],
+      "den": 512
+     },
+     "tolerance": {
+      "num": 0,
+      "den": 1
+     },
+     "droplet_volume": 4,
+     "demand": 1
+    },
+    {
+     "id": 2,
+     "experiment_id": 0,
+     "composition": {
+      "num": [
+       37,
+       219,
+       41,
+       154,
+       61
+      ],
+      "den": 512
+     },
+     "tolerance": {
+      "num": 0,
+      "den": 1
+     },
+     "droplet_volume": 4,
+     "demand": 1
+    },
+    {
+     "id": 3,
+     "experiment_id": 0,
+     "composition": {
+      "num": [
+       86,
+       165,
+       77,
+       62,
+       122
+      ],
+      "den": 512
+     },
+     "tolerance": {
+      "num": 0,
+      "den": 1
+     },
+     "droplet_volume": 4,
+     "demand": 1
+    },
+    {
+     "id": 4,
+     "experiment_id": 0,
+     "composition": {
+      "num": [
+       13,
+       219,
+       142,
+       130,
+       8
+      ],
+      "den": 512
+     },
+     "tolerance": {
+      "num": 0,
+      "den": 1
+     },
+     "droplet_volume": 4,
+     "demand": 1
+    }
+   ],
+   "chip": {
+    "name": "meda_m8-M8-S32",
+    "max_mix_volume": 8,
+    "min_mix_volume": 2,
+    "unit_volume": 1,
+    "min_droplet_volume": 1,
+    "allow_partial_take": true,
+    "storage_capacity": 32,
+    "max_denominator": 512,
+    "allow_same_composition_merge": false
+   },
+   "step_limit": 224,
+   "metadata": {
+    "generator": "emrcm_protocol",
+    "cell": "N5-T5",
+    "witness_actions": 112,
+    "witness_source": "tree"
+   }
+  },
+  {
+   "instance_id": "val_emrcm-0118",
+   "fluids": [
+    {
+     "id": 0,
+     "name": "S",
+     "kind": "SAMPLE"
+    },
+    {
+     "id": 1,
+     "name": "R1",
+     "kind": "REAGENT"
+    },
+    {
+     "id": 2,
+     "name": "R2",
+     "kind": "REAGENT"
+    },
+    {
+     "id": 3,
+     "name": "R3",
+     "kind": "REAGENT"
+    },
+    {
+     "id": 4,
+     "name": "B",
+     "kind": "BUFFER"
+    }
+   ],
+   "targets": [
+    {
+     "id": 0,
+     "experiment_id": 0,
+     "composition": {
+      "num": [
+       95,
+       8,
+       30,
+       230,
+       149
+      ],
+      "den": 512
+     },
+     "tolerance": {
+      "num": 0,
+      "den": 1
+     },
+     "droplet_volume": 4,
+     "demand": 1
+    },
+    {
+     "id": 1,
+     "experiment_id": 0,
+     "composition": {
+      "num": [
+       40,
+       127,
+       80,
+       140,
+       125
+      ],
+      "den": 512
+     },
+     "tolerance": {
+      "num": 0,
+      "den": 1
+     },
+     "droplet_volume": 4,
+     "demand": 1
+    },
+    {
+     "id": 2,
+     "experiment_id": 0,
+     "composition": {
+      "num": [
+       124,
+       72,
+       115,
+       98,
+       103
+      ],
+      "den": 512
+     },
+     "tolerance": {
+      "num": 0,
+      "den": 1
+     },
+     "droplet_volume": 4,
+     "demand": 1
+    },
+    {
+     "id": 3,
+     "experiment_id": 0,
+     "composition": {
+      "num": [
+       36,
+       19,
+       52,
+       54,
+       95
+      ],
+      "den": 256
+     },
+     "tolerance": {
+      "num": 0,
+      "den": 1
+     },
+     "droplet_volume": 4,
+     "demand": 1
+    },
+    {
+     "id": 4,
+     "experiment_id": 0,
+     "composition": {
+      "num": [
+       21,
+       242,
+       28,
+       125,
+       96
+      ],
+      "den": 512
+     },
+     "tolerance": {
+      "num": 0,
+      "den": 1
+     },
+     "droplet_volume": 4,
+     "demand": 1
+    }
+   ],
+   "chip": {
+    "name": "meda_m8-M8-S32",
+    "max_mix_volume": 8,
+    "min_mix_volume": 2,
+    "unit_volume": 1,
+    "min_droplet_volume": 1,
+    "allow_partial_take": true,
+    "storage_capacity": 32,
+    "max_denominator": 512,
+    "allow_same_composition_merge": false
+   },
+   "step_limit": 238,
+   "metadata": {
+    "generator": "emrcm_protocol",
+    "cell": "N5-T5",
+    "witness_actions": 119,
+    "witness_source": "tree"
+   }
+  },
+  {
+   "instance_id": "val_emrcm-0119",
+   "fluids": [
+    {
+     "id": 0,
+     "name": "S",
+     "kind": "SAMPLE"
+    },
+    {
+     "id": 1,
+     "name": "R1",
+     "kind": "REAGENT"
+    },
+    {
+     "id": 2,
+     "name": "R2",
+     "kind": "REAGENT"
+    },
+    {
+     "id": 3,
+     "name": "R3",
+     "kind": "REAGENT"
+    },
+    {
+     "id": 4,
+     "name": "B",
+     "kind": "BUFFER"
+    }
+   ],
+   "targets": [
+    {
+     "id": 0,
+     "experiment_id": 0,
+     "composition": {
+      "num": [
+       72,
+       68,
+       19,
+       60,
+       37
+      ],
+      "den": 256
+     },
+     "tolerance": {
+      "num": 0,
+      "den": 1
+     },
+     "droplet_volume": 4,
+     "demand": 1
+    },
+    {
+     "id": 1,
+     "experiment_id": 0,
+     "composition": {
+      "num": [
+       95,
+       253,
+       120,
+       12,
+       32
+      ],
+      "den": 512
+     },
+     "tolerance": {
+      "num": 0,
+      "den": 1
+     },
+     "droplet_volume": 4,
+     "demand": 1
+    },
+    {
+     "id": 2,
+     "experiment_id": 0,
+     "composition": {
+      "num": [
+       70,
+       87,
+       26,
+       5,
+       68
+      ],
+      "den": 256
+     },
+     "tolerance": {
+      "num": 0,
+      "den": 1
+     },
+     "droplet_volume": 4,
+     "demand": 1
+    },
+    {
+     "id": 3,
+     "experiment_id": 0,
+     "composition": {
+      "num": [
+       10,
+       37,
+       44,
+       18,
+       19
+      ],
+      "den": 128
+     },
+     "tolerance": {
+      "num": 0,
+      "den": 1
+     },
+     "droplet_volume": 4,
+     "demand": 1
+    },
+    {
+     "id": 4,
+     "experiment_id": 0,
+     "composition": {
+      "num": [
+       100,
+       11,
+       63,
+       232,
+       106
+      ],
+      "den": 512
+     },
+     "tolerance": {
+      "num": 0,
+      "den": 1
+     },
+     "droplet_volume": 4,
+     "demand": 1
+    }
+   ],
+   "chip": {
+    "name": "meda_m8-M8-S32",
+    "max_mix_volume": 8,
+    "min_mix_volume": 2,
+    "unit_volume": 1,
+    "min_droplet_volume": 1,
+    "allow_partial_take": true,
+    "storage_capacity": 32,
+    "max_denominator": 512,
+    "allow_same_composition_merge": false
+   },
+   "step_limit": 206,
+   "metadata": {
+    "generator": "emrcm_protocol",
+    "cell": "N5-T5",
+    "witness_actions": 103,
+    "witness_source": "tree"
+   }
+  }
+ ]
+}

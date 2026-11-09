@@ -33,6 +33,11 @@ Arguments are key=value: `sets` (default all six), `goals` (default fluid,steps,
 `nfsp_seconds` (per ILP solve, default 600, as Q-118), `orders` (default 32), `methods`
 (published methods to run, default all), `workers`, `out`.
 `seconds` and `sims` override the method's settings for light tests only.
+`finisher` (the search's leaf finisher, default v1's `share_mrcm`), `switch_seconds` and
+`root_switch_seconds` (for `finisher=auto`, defaults `search_check.AUTO_LIMIT`,
+`AUTO_ROOT_LIMIT`) are for the leaf-finisher pilot (D-72) only: `auto` is pilot A, greedy MRCM
+at the leaves until one MRCM finish is slower than the switch (the root's has its own), then
+the plain sharing pass. Records keep `finish_mode`, `root_finish_seconds` and `switched_at`.
 
 B2 (D-70), the papers' own experiments: `sets=litbench_paper_v1` under all three goals and
 `sets=test_emrcm_v1 goals=fluid methods=dfm,facda,generic,dfmm,mrcm,emrcm` (e-MRCM's
@@ -268,12 +273,23 @@ def run_task(task: dict[str, Any], opts: dict[str, Any]) -> dict[str, Any]:
         "hints": "planner",
         "reward_scale": 0.01,
         "keep_plan": True,
+        "switch_seconds": opts.get("switch_seconds", sc.AUTO_LIMIT),
+        "root_switch_seconds": opts.get("root_switch_seconds", sc.AUTO_ROOT_LIMIT),
     }
-    rec = sc.run_task(task_, METHOD["search"], opts["sims"], sopts, METHOD["finisher"])
+    finisher = opts.get("finisher", METHOD["finisher"])
+    out["method"] = {**METHOD, "finisher": finisher}
+    rec = sc.run_task(task_, METHOD["search"], opts["sims"], sopts, finisher)
     plan = rec["plan"]
     ours = stats(inst, "method", plan, rec["search_seconds"]) if plan else {"cost": None}
     _check(rid, "method", goal, ours)
-    ours.update(trace=rec["trace"], capped=rec["capped"], leaves=rec["leaves"])
+    ours.update(
+        trace=rec["trace"],
+        capped=rec["capped"],
+        leaves=rec["leaves"],
+        finish_mode=rec["finish_mode"],
+        root_finish_seconds=rec["root_finish_seconds"],
+        switched_at=rec["switched_at"],
+    )
     out["ours"] = ours
     for name, st_ in [("method", ours), *out["planners"].items()]:
         c = _cost(st_, goal)
@@ -549,6 +565,10 @@ def main(argv: list[str]) -> None:
         "sims": int(args.get("sims", METHOD["sims"])),
         "commit": commit,
         "methods": args.get("methods", ",".join(PUBLISHED)).split(","),
+        # D-72 pilot: the search's leaf finisher (v1: share_mrcm; A: auto) and auto's switch
+        "finisher": args.get("finisher", METHOD["finisher"]),
+        "switch_seconds": float(args.get("switch_seconds", sc.AUTO_LIMIT)),
+        "root_switch_seconds": float(args.get("root_switch_seconds", sc.AUTO_ROOT_LIMIT)),
     }
     limit = int(args["limit"]) if "limit" in args else None
     todo = [

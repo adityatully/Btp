@@ -1,6 +1,13 @@
 # MEDA Design Automation — Codebase Specification
 
-Version 0.38 · 2026-11-09
+Version 0.39 · 2026-11-09
+
+Changes in 0.39 (leaf-finisher pilot, paper log D-72, Q-142): tier 1 development gains
+`val_emrcm_v1` (e-MRCM's protocol at N = 3-5, fresh draws; `make_benchmark.py:build_emrcm_val`,
+the builder now takes the cells and seed). `scripts/search_check.py` gains the `auto` leaf
+finisher (greedy MRCM until one finish is slower than 2 s, the root's 60 s, then the plain
+sharing pass),
+run by `bench.py finisher=auto`. Method-v1 is unchanged.
 
 Changes in 0.38 (literature coverage, paper log L-16 to L-18, Q-141): Dong's splitting trees
 (`dong.py`), Fukui's droplet reuse (`fukui.py`) and SIMOP (`simop.py`) join the published
@@ -1309,7 +1316,8 @@ Sets per tier:
   N = 2 all 511, N = 3-5 512 random; many targets 50 random sets per (N, T), N, T in 2..5;
   2,847 problems, seed 20261108; `make_benchmark.py:build_emrcm`). Our weights are per fluid
   kind, e-MRCM's per reactant, so plans are graded under ours and its printed numbers are shown
-  beside, not graded.
+  beside, not graded. Development twin (0.39, D-72): `val_emrcm_v1`, the same protocol at
+  N = 3-5 (120 problems, seed 20261109, `build_emrcm_val`), none shared with any frozen set.
 - `unseen_ratios_v1` — compositions excluded from training.
 - `larger_v1` — more targets / fluids than any training stage (generalisation test).
 - `frontier_v1` — tier 5, scaling axes over the MTMD + storage problem class.

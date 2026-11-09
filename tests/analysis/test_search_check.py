@@ -347,3 +347,40 @@ def test_reading_on_w_counts_the_published_wins_left() -> None:
     )
     assert SC.w_reading(rs[:2])[-1].endswith("no published method beats our method on these sets")
     assert SC.w_reading([]) == []
+
+
+def test_auto_finisher_keeps_greedy_mrcm_while_it_is_fast() -> None:
+    """D-72 (pilot A): with generous switches the auto finisher is v1's greedy MRCM finisher."""
+    task = SC.tasks({"C"}, 1)[0]
+    inst = SC.Instance.from_json(task["instance"])
+    root = SC.StrongFinish(inst, lookahead=0)(SC.PrepState.initial(inst))
+    assert root is not None
+    slow = {"switch_seconds": 1e9, "root_switch_seconds": 1e9}
+    rec = SC.run_task(task, "uniform", 2, OPTS | {"seconds": 10.0} | slow, "auto")
+    assert rec["finish_mode"] == "share_mrcm" and rec["switched_at"] is None
+    assert rec["search_cost"] is not None and rec["search_cost"] <= float(root[1]) + 1e-9
+
+
+@pytest.mark.parametrize(("limit", "root_limit", "at"), [(1e9, 0.0, 1), (0.0, 1e9, 2)])
+def test_auto_finisher_switches_to_the_plain_pass_when_mrcm_is_slow(
+    limit: float, root_limit: float, at: int
+) -> None:
+    """D-72: past a switch the leaves use the plain sharing pass (the root has its own switch,
+    as it fills MRCM's cache); the switching leaf keeps the cheaper of the two finishes."""
+    task = SC.tasks({"C"}, 1)[0]
+    inst = SC.Instance.from_json(task["instance"])
+    start = SC.PrepState.initial(inst)
+    finish = SC.AutoFinish(inst, limit, root_limit)
+    for _ in range(at):
+        got = finish(start)
+    assert finish.mode == "share" and finish.switched_at == at
+    both = [
+        f
+        for f in (SC.StrongFinish(inst, lookahead=0)(start), finish_from(start, inst, SC.WEIGHTS))
+        if f
+    ]
+    assert got is not None and got[1] == min(f[1] for f in both)
+    assert finish(start) == finish_from(start, inst, SC.WEIGHTS)
+    opts = OPTS | {"seconds": 10.0, "switch_seconds": limit, "root_switch_seconds": root_limit}
+    rec = SC.run_task(task, "uniform", 2, opts, "auto")
+    assert rec["search_cost"] is not None and rec["search_cost"] <= float(got[1]) + 1e-9

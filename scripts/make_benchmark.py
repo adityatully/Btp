@@ -514,19 +514,39 @@ def build_test(which: int | None) -> BenchmarkSet:
 EMRCM_SEED, EMRCM_PRECISION, EMRCM_VOLUME, EMRCM_MIXER = 20261108, 512, 4, 8  # D-70
 
 
-def build_emrcm() -> BenchmarkSet:
+EMRCM_TEST_CELLS = (
+    [("N2-T1", 0)]  # all 511 x/512, not drawn
+    + [(f"N{n}-T1", EMRCM_PRECISION) for n in (3, 4, 5)]
+    + [(f"N{n}-T{t}", 50) for n in (2, 3, 4, 5) for t in (2, 3, 4, 5)]
+)
+# A development set for the leaf-finisher pilot (D-72): fresh draws, never the test problems.
+EMRCM_VAL_SEED = 20261109
+EMRCM_VAL_CELLS = [
+    ("N3-T1", 20), ("N4-T1", 30), ("N5-T1", 30),
+    ("N3-T3", 10), ("N4-T3", 10), ("N5-T3", 10), ("N4-T5", 5), ("N5-T5", 5),
+]  # fmt: skip
+
+
+def build_emrcm(
+    name: str = "test_emrcm",
+    seed: int = EMRCM_SEED,
+    cells: list[tuple[str, int]] = EMRCM_TEST_CELLS,
+    avoid: frozenset[str] = frozenset(),
+) -> BenchmarkSet:
     """e-MRCM's own protocol (Liang et al., TCAD 2020, Section VI; benchmark plan B2, D-70):
-    precision 1/512, 4-unit targets, mixes of at most 8, demand 1. One target: N = 2 all 511,
-    N = 3-5 512 random each; many targets: 50 random sets per (N, T), N and T in 2..5. Random
-    targets are uniform cut points (`emrcm_table3.draw`); a repeated problem is redrawn."""
+    precision 1/512, 4-unit targets, mixes of at most 8, demand 1. The test set: one target,
+    N = 2 all 511, N = 3-5 512 random each; many targets: 50 random sets per (N, T), N and T in
+    2..5. Random targets are uniform cut points (`emrcm_table3.draw`); a repeated problem, or
+    one whose hash is in `avoid`, is redrawn. `cells` gives the (N-T, count) in drawing order;
+    "N2-T1" with count 0 is every x/512."""
     from emrcm_table3 import draw  # scripts/, as this script
 
     weights = load_weights("geometric")
     base = load_chip("meda_m8")
     chip = replace(base, name=f"{base.name}-M{EMRCM_MIXER}-S32", max_mix_volume=EMRCM_MIXER,
                    storage_capacity=32, max_denominator=EMRCM_PRECISION)  # fmt: skip
-    rng = np.random.default_rng(EMRCM_SEED)
-    seen: set[str] = set()
+    rng = np.random.default_rng(seed)
+    seen: set[str] = set(avoid)
     instances: list[Instance] = []
 
     def fluids(n: int) -> tuple[Fluid, ...]:
@@ -547,7 +567,7 @@ def build_emrcm() -> BenchmarkSet:
         instances.append(
             replace(
                 probe,
-                instance_id=f"test_emrcm-{len(instances):04d}",
+                instance_id=f"{name}-{len(instances):04d}",
                 step_limit=limit,
                 metadata={
                     "generator": "emrcm_protocol",
@@ -559,36 +579,48 @@ def build_emrcm() -> BenchmarkSet:
         )
         return True
 
-    for x in range(1, EMRCM_PRECISION):
-        add(2, [Composition.from_ints((x, EMRCM_PRECISION - x), EMRCM_PRECISION)], "N2-T1")
-    for n in (3, 4, 5):
+    for cell, count in cells:
+        n, t = (int(x[1:]) for x in cell.split("-"))
+        if cell == "N2-T1" and count == 0:
+            for x in range(1, EMRCM_PRECISION):
+                add(2, [Composition.from_ints((x, EMRCM_PRECISION - x), EMRCM_PRECISION)], cell)
+            continue
         made = 0
-        while made < EMRCM_PRECISION:
-            made += add(n, [draw(n, rng)], f"N{n}-T1")
-    for n in (2, 3, 4, 5):
-        for t in (2, 3, 4, 5):
-            made = 0
-            while made < 50:
-                made += add(n, [draw(n, rng) for _ in range(t)], f"N{n}-T{t}")
+        while made < count:
+            made += add(n, [draw(n, rng) for _ in range(t)], cell)
+    test = name == "test_emrcm"
     return BenchmarkSet(
-        name="test_emrcm",
+        name=name,
         version=1,
         instances=tuple(instances),
         reference=answer_key(instances, weights),
         generator={
-            "builder": "scripts/make_benchmark.py:build_emrcm",
+            "builder": "scripts/make_benchmark.py:build_emrcm"
+            + ("" if test else ":build_emrcm_val"),
             "protocol": "e-MRCM (Liang et al., TCAD 39(10) 2020), Section VI",
             "precision": EMRCM_PRECISION,
             "costs": "geometric",
             "answer_key": "[root conservation bound (SPEC 0.21), cheaper of naive and tree]",
+            **({} if test else {"cells": dict(cells), "avoids": "test_emrcm_v1"}),
         },
-        seeds=(EMRCM_SEED,),
+        seeds=(seed,),
         description=(
             "Benchmark plan B2 (D-70): e-MRCM's own experiments. One target: N = 2 all 511 "
             "x/512, N = 3-5 512 random each; many targets: 50 random sets per (N, T), N, T in "
             "2..5. 4X targets, mixes of at most 8. Graded under costs/geometric."
+            if test
+            else "Development set for the leaf-finisher pilot (D-72): e-MRCM's protocol, fresh "
+            "draws (none in test_emrcm_v1), weighted to N = 4-5 where v1's search stalls (E-67). "
+            "Graded under costs/geometric."
         ),
     )
+
+
+def build_emrcm_val() -> BenchmarkSet:
+    """D-72's development set: e-MRCM's protocol at N = 3-5, fresh draws (another seed, every
+    test_emrcm_v1 problem excluded)."""
+    test = BenchmarkSet.read("test_emrcm_v1", ROOT / "benchmarks")
+    return build_emrcm("val_emrcm", EMRCM_VAL_SEED, EMRCM_VAL_CELLS, frozenset(test.hashes()))
 
 
 def build_dmfb_sweep() -> BenchmarkSet:
@@ -638,6 +670,7 @@ BUILDERS: dict[str, Callable[[], BenchmarkSet]] = {
     **{f"test_s{k + 1}_v1": functools.partial(build_test, k) for k in range(5)},
     "test_heldout_v1": functools.partial(build_test, None),
     "test_emrcm_v1": build_emrcm,
+    "val_emrcm_v1": build_emrcm_val,
     "dmfb_sweep_v1": build_dmfb_sweep,
 }
 

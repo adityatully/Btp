@@ -168,6 +168,11 @@ _load = lambda rel: OmegaConf.to_container(OmegaConf.load(ROOT / "configs" / rel
 WEIGHTS = hs.WEIGHTS
 PLANNERS = ("share", "share_look3", "share_orders", "share_mrcm_look3")
 C_PUCT = 1.5
+# D-72: an MRCM finish slower than this switches the leaves to the plain pass (E-67: N = 3
+# ~0.5 s a leaf, where the search works; N = 4 ~9 s, where it starves); the root's finish
+# also fills MRCM's cache, so it gets AUTO_ROOT_LIMIT (Mac, val_emrcm_v1: N3-T1 37 s, N4-T1
+# 42 s, N5-T1 73 s, N4-T3 301 s, N5-T3 378 s; the plain pass 0.01-1.2 s)
+AUTO_LIMIT, AUTO_ROOT_LIMIT = 2.0, 60.0
 # Fixed in advance (module docstring).
 FOUND_SHARE, MISS = 1 / 3, 0.02
 D_MIN = 10
@@ -569,6 +574,48 @@ class StrongFinish:
         return found
 
 
+class AutoFinish:
+    """The leaf finisher of D-72 (pilot A): greedy MRCM (`share_mrcm`, D-65) while it is fast,
+    else the plain sharing pass. The root's finish fills MRCM's model cache, so it is slow even
+    where later finishes are fast (N = 3: about 37 s, then about 0.5 s a leaf): the switch to
+    the plain pass happens when the root's MRCM finish takes more than `root_limit` seconds or
+    any later one more than `limit` (E-67: at N = 4-5 a later finish takes 9 s to 400 s and the
+    search starves). Whenever the switch happens, that leaf's answer is the cheaper of the two
+    finishes, so the search keeps v1's plans up to that point."""
+
+    def __init__(self, inst: Instance, limit: float, root_limit: float) -> None:
+        self.inst, self.limit, self.root_limit = inst, limit, root_limit
+        self.mrcm = StrongFinish(inst, lookahead=0)
+        self.fails = self.mrcm.fails
+        self.mode = "share_mrcm"  # becomes "share" at the switch, never back
+        self.root_seconds: float | None = None
+        self.calls = 0  # finishes run; `switched_at` is the call that switched
+        self.switched_at: int | None = None
+
+    def __call__(self, state: PrepState) -> tuple[tuple[Action, ...], Rational] | None:
+        self.calls += 1
+        if self.mode == "share":
+            return self._plain(state)
+        t0 = time.perf_counter()
+        found = self.mrcm(state)
+        took = time.perf_counter() - t0
+        if self.calls == 1:
+            self.root_seconds = round(took, 3)
+        if took <= (self.root_limit if self.calls == 1 else self.limit):
+            return found
+        self.mode, self.switched_at = "share", self.calls
+        plain = self._plain(state)
+        if plain is not None and (found is None or plain[1] < found[1]):
+            return plain
+        return found
+
+    def _plain(self, state: PrepState) -> tuple[tuple[Action, ...], Rational] | None:
+        found = finish_from(state, self.inst, WEIGHTS)
+        if found is None:
+            self.fails["no order finishes"] = self.fails.get("no order finishes", 0) + 1
+        return found
+
+
 def run_task(
     task: dict[str, Any], kind: str, sims: int, opts: dict[str, Any], finisher: str = "share"
 ) -> dict[str, Any]:
@@ -613,7 +660,7 @@ def run_task(
                 "closed_by_planner": True,
             }
     t0 = time.perf_counter()
-    finish: MrcmFinish | GraphFinish | StrongFinish | None = None
+    finish: MrcmFinish | GraphFinish | StrongFinish | AutoFinish | None = None
     if finisher == "mrcm":
         finish = MrcmFinish(inst, WEIGHTS)
     elif finisher == "paper":  # D-60: the problem's own published method
@@ -623,6 +670,12 @@ def run_task(
         finish = StrongFinish(inst)
     elif finisher == "share_mrcm":  # D-65: MRCM's tree, greedy recipe choice
         finish = StrongFinish(inst, lookahead=0)
+    elif finisher == "auto":  # D-72: greedy MRCM while fast, else the plain sharing pass
+        finish = AutoFinish(
+            inst,
+            float(opts.get("switch_seconds", AUTO_LIMIT)),
+            float(opts.get("root_switch_seconds", AUTO_ROOT_LIMIT)),
+        )
     search = Search(
         env, inst, agent, t0 + opts["seconds"], kind != "zero", opts["reward_scale"], finish=finish
     )
@@ -645,6 +698,9 @@ def run_task(
         trace=search.trace,
         finisher=finisher,
         finish_fails=finish.fails if finish is not None else {},
+        finish_mode=finish.mode if isinstance(finish, AutoFinish) else finisher,
+        root_finish_seconds=finish.root_seconds if isinstance(finish, AutoFinish) else None,
+        switched_at=finish.switched_at if isinstance(finish, AutoFinish) else None,
         **{f"search_{k}": v for k, v in stats.items()},
     )
     if opts.get("keep_plan"):  # bench.py: the plan itself, in-process only (not JSON)

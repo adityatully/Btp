@@ -316,3 +316,21 @@ def test_dmfb_sweep_is_every_dyadic_target_with_textbook_bit_scanning() -> None:
         assert totals.mix_ops == d - tz
         assert totals.reagent_by_fluid[0] == bin(n).count("1")
     assert seen == {(n, d) for d in range(4, 9) for n in range(1, 2**d)}
+
+
+def test_emrcm_val_set_is_fresh_and_weighted_to_four_and_five_fluids() -> None:
+    """D-72: the leaf-finisher pilot's development set, e-MRCM's protocol at N = 3-5, with no
+    problem shared with any other frozen set (above all `test_emrcm_v1`)."""
+    bench = BenchmarkSet.read("val_emrcm_v1", BENCHMARKS_DIR)
+    cells: dict[str, int] = {}
+    for inst in bench.instances:
+        cells[inst.metadata["cell"]] = cells.get(inst.metadata["cell"], 0) + 1
+        assert inst.chip.max_mix_volume == 8 and inst.chip.max_denominator == 512
+        assert all(t.droplet_volume == 4 and t.demand == 1 for t in inst.targets)
+        n, t = (int(x[1:]) for x in inst.metadata["cell"].split("-"))
+        assert inst.num_fluids == n and len(inst.targets) == t
+    assert cells == {"N3-T1": 20, "N4-T1": 30, "N5-T1": 30, "N3-T3": 10, "N4-T3": 10,
+                     "N5-T3": 10, "N4-T5": 5, "N5-T5": 5}  # fmt: skip
+    for other in BENCHMARKS_DIR.glob("*_v*.json"):
+        if other.stem != "val_emrcm_v1":
+            assert not bench.hashes() & BenchmarkSet.read(other.stem, BENCHMARKS_DIR).hashes()
