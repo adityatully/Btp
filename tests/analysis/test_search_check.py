@@ -417,6 +417,43 @@ def test_tiered_finisher_skips_mrcm_past_its_share_of_the_time() -> None:
     assert rec["search_cost"] is not None and rec["search_cost"] <= float(plain[1]) + 1e-9
 
 
+def test_switch_finisher_is_v1_while_mrcm_is_fast_on_average() -> None:
+    """D-75 (pilot A3): with a generous mean the switch finisher is v1's greedy MRCM finisher."""
+    task = SC.tasks({"C"}, 1)[0]
+    inst = SC.Instance.from_json(task["instance"])
+    start = SC.PrepState.initial(inst)
+    finish = SC.SwitchFinish(inst, 1e9, 3, 0.5)
+    for _ in range(3):
+        assert finish(start) == SC.StrongFinish(inst, lookahead=0)(start)
+    assert finish.mode == "share_mrcm" and finish.switched_at is None
+    rec = SC.run_task(task, "uniform", 2, OPTS | {"seconds": 10.0, "switch_mean": 1e9}, "switch")
+    assert rec["finish_mode"] == "share_mrcm" and rec["switched_at"] is None
+    assert rec["mrcm_calls"] is None
+
+
+def test_switch_finisher_leaves_out_the_root_and_switches_on_the_average() -> None:
+    """D-75: the root's finish never counts; the first leaf switches only if it alone is over
+    `mean * min_leaves`; once switched, leaves go to A2's tiered finisher with MRCM's cache."""
+    task = SC.tasks({"C"}, 1)[0]
+    inst = SC.Instance.from_json(task["instance"])
+    start = SC.PrepState.initial(inst)
+    finish = SC.SwitchFinish(inst, 0.0, 3, 0.0)
+    finish(start)  # the root: never switches
+    assert finish.mode == "share_mrcm" and finish.root_seconds is not None
+    finish(start)  # a leaf slower than 0 s on average: switch
+    assert finish.mode == "tiered" and finish.switched_at == 2
+    assert finish.tiered is not None and finish.tiered.mrcm is finish.mrcm
+    finish.tiered.mrcm_seconds = 1.0  # over its share: the plain pass only
+    assert finish(start) == finish_from(start, inst, SC.WEIGHTS)
+    slow = SC.SwitchFinish(inst, 1.0, 3, 0.5)
+    slow.calls, slow.leaf_seconds = 1, 3.5  # root done; as if the first leaf took 3.5 s
+    slow(start)  # 3.5 s and more over 1 leaf > 1 s * max(1, 3): switch at once
+    assert slow.mode == "tiered" and slow.switched_at == 2
+    rec = SC.run_task(task, "uniform", 2, OPTS | {"seconds": 10.0, "switch_mean": 0.0}, "switch")
+    assert rec["finish_mode"] == "tiered" and rec["switched_at"] == 2
+    assert rec["search_cost"] is not None
+
+
 def test_planner_jumps_hold_the_planners_first_decision() -> None:
     """D-73: from the empty chip the jumps include the plain planner's first delivery group,
     one run of actions per (target, candidate), each longer than one action."""

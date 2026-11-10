@@ -178,6 +178,10 @@ AUTO_LIMIT, AUTO_ROOT_LIMIT = 2.0, 60.0
 # D-74 (pilot A2), fixed before the coe9 run: greedy MRCM checks leaves besides the plain
 # pass while it has used at most this share of the search's time
 TIER_SHARE = 0.5
+# D-75 (pilot A3), from E-73's offline check on val: switch a problem from greedy MRCM at every
+# leaf to A2's tiered finisher once MRCM's leaf finishes (the root's left out) average more
+# than this many seconds, counted over at least SWITCH_MIN_LEAVES leaves
+SWITCH_MEAN, SWITCH_MIN_LEAVES = 20.0, 3
 # Fixed in advance (module docstring).
 FOUND_SHARE, MISS = 1 / 3, 0.02
 D_MIN = 10
@@ -686,9 +690,9 @@ class TieredFinish:
     keeps the search fed (pilot A). E-69: no time limit separates the two kinds of problem.
     The root is always checked with both (its MRCM finish fills MRCM's cache)."""
 
-    def __init__(self, inst: Instance, share: float) -> None:
+    def __init__(self, inst: Instance, share: float, mrcm: StrongFinish | None = None) -> None:
         self.inst, self.share = inst, share
-        self.mrcm = StrongFinish(inst, lookahead=0)
+        self.mrcm = mrcm if mrcm is not None else StrongFinish(inst, lookahead=0)
         self.fails = self.mrcm.fails
         self.mode = "tiered"
         self.start = time.perf_counter()
@@ -715,6 +719,47 @@ class TieredFinish:
             self.mrcm_wins += 1
             return found
         return plain
+
+
+class SwitchFinish:
+    """The leaf finisher of D-75 (pilot A3): one finisher per problem. Greedy MRCM at every
+    leaf (v1) until MRCM's leaf finishes, the root's left out (it fills MRCM's cache), average
+    more than `mean` seconds, counted over at least `min_leaves` leaves (so one finish slower
+    than `mean * min_leaves` switches at once); from then on A2's tiered finisher (D-74),
+    keeping MRCM's cache. E-72: mixing finishers in one tree loses v1's quality where MRCM is
+    the better finisher, so the switch is for problems where MRCM is slow on average (E-73),
+    not after one slow finish (pilot A)."""
+
+    def __init__(self, inst: Instance, mean: float, min_leaves: int, share: float) -> None:
+        self.inst, self.mean, self.min_leaves, self.share = inst, mean, min_leaves, share
+        self.mrcm = StrongFinish(inst, lookahead=0)
+        self.fails = self.mrcm.fails
+        self.tiered: TieredFinish | None = None
+        self.calls = 0
+        self.leaf_seconds = 0.0  # MRCM's leaf finishes before the switch, root left out
+        self.root_seconds: float | None = None
+        self.switched_at: int | None = None
+
+    @property
+    def mode(self) -> str:
+        return "share_mrcm" if self.tiered is None else "tiered"
+
+    def __call__(self, state: PrepState) -> tuple[tuple[Action, ...], Rational] | None:
+        self.calls += 1
+        if self.tiered is not None:
+            return self.tiered(state)
+        t0 = time.perf_counter()
+        found = self.mrcm(state)
+        took = time.perf_counter() - t0
+        if self.calls == 1:
+            self.root_seconds = round(took, 3)
+            return found
+        self.leaf_seconds += took
+        if self.leaf_seconds > self.mean * max(self.calls - 1, self.min_leaves):
+            self.switched_at = self.calls
+            self.tiered = TieredFinish(self.inst, self.share, self.mrcm)
+            self.tiered.calls = 1  # MRCM's cache is filled: no forced root check
+        return found
 
 
 class PlannerJumps:
@@ -798,7 +843,9 @@ def run_task(
                 "closed_by_planner": True,
             }
     t0 = time.perf_counter()
-    finish: MrcmFinish | GraphFinish | StrongFinish | AutoFinish | TieredFinish | None = None
+    finish: (
+        MrcmFinish | GraphFinish | StrongFinish | AutoFinish | TieredFinish | SwitchFinish | None
+    ) = None
     if finisher == "mrcm":
         finish = MrcmFinish(inst, WEIGHTS)
     elif finisher == "paper":  # D-60: the problem's own published method
@@ -816,6 +863,13 @@ def run_task(
         )
     elif finisher == "tiered":  # D-74: plain pass at every leaf, MRCM within its time share
         finish = TieredFinish(inst, float(opts.get("tier_share", TIER_SHARE)))
+    elif finisher == "switch":  # D-75: v1 per problem until MRCM is slow on average, then A2
+        finish = SwitchFinish(
+            inst,
+            float(opts.get("switch_mean", SWITCH_MEAN)),
+            int(opts.get("switch_min_leaves", SWITCH_MIN_LEAVES)),
+            float(opts.get("tier_share", TIER_SHARE)),
+        )
     k = int(opts.get("jumps", 0))  # D-73: planner jumps per open target (0: none, v1)
     search = Search(
         env,
@@ -847,14 +901,7 @@ def run_task(
         trace=search.trace,
         finisher=finisher,
         finish_fails=finish.fails if finish is not None else {},
-        finish_mode=finish.mode if isinstance(finish, AutoFinish | TieredFinish) else finisher,
-        root_finish_seconds=(
-            finish.root_seconds if isinstance(finish, AutoFinish | TieredFinish) else None
-        ),
-        mrcm_calls=finish.mrcm_calls if isinstance(finish, TieredFinish) else None,
-        mrcm_wins=finish.mrcm_wins if isinstance(finish, TieredFinish) else None,
-        mrcm_seconds=(round(finish.mrcm_seconds, 3) if isinstance(finish, TieredFinish) else None),
-        switched_at=finish.switched_at if isinstance(finish, AutoFinish) else None,
+        **finish_record(finish, finisher),
         jumps=k,
         jump_share=float(opts.get("jump_share", 0.5)) if k > 0 else None,
         **{f"search_{k}": v for k, v in stats.items()},
@@ -862,6 +909,23 @@ def run_task(
     if opts.get("keep_plan"):  # bench.py: the plan itself, in-process only (not JSON)
         rec["plan"] = out["plan"]
     return rec
+
+
+def finish_record(finish: Any, finisher: str) -> dict[str, Any]:
+    """What the pilots' leaf finishers (D-72, D-74, D-75) record about themselves."""
+    tiered = finish.tiered if isinstance(finish, SwitchFinish) else finish
+    tiered = tiered if isinstance(tiered, TieredFinish) else None
+    timed = isinstance(finish, AutoFinish | TieredFinish | SwitchFinish)
+    return {
+        "finish_mode": finish.mode if timed else finisher,
+        "root_finish_seconds": finish.root_seconds if timed else None,
+        "switched_at": finish.switched_at
+        if isinstance(finish, AutoFinish | SwitchFinish)
+        else None,
+        "mrcm_calls": tiered.mrcm_calls if tiered else None,
+        "mrcm_wins": tiered.mrcm_wins if tiered else None,
+        "mrcm_seconds": round(tiered.mrcm_seconds, 3) if tiered else None,
+    }
 
 
 def _star(args: tuple[dict[str, Any], str, int, dict[str, Any], str]) -> dict[str, Any]:

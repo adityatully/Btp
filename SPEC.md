@@ -1,6 +1,12 @@
 # MEDA Design Automation — Codebase Specification
 
-Version 0.40 · 2026-11-10
+Version 0.41 · 2026-11-10
+
+Changes in 0.41 (pilot A3, paper log D-75, E-72, E-73): `scripts/search_check.py` gains the
+`switch` leaf finisher (`SwitchFinish`): greedy MRCM at every leaf (v1) until MRCM's leaf
+finishes, the root's left out, average more than 20 s over at least 3 leaves, then the
+`tiered` finisher with MRCM's cache. Run by `bench.py finisher=switch` (`switch_mean`,
+`switch_min_leaves`). Method-v1 is unchanged.
 
 Changes in 0.40 (pilot A2, paper log D-74, E-69): `scripts/search_check.py` gains the `tiered`
 leaf finisher (`TieredFinish`): every leaf gets the plain sharing pass and, while greedy MRCM

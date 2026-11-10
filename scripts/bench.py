@@ -43,7 +43,9 @@ search as single moves, with `jump_share` (default 0.5) of each node's prior; th
 still run, as the reference the trial is read against (search alone, from `ours.trace`).
 `finisher=tiered` (D-74, pilot A2) gives every leaf the plain sharing pass and also greedy
 MRCM while MRCM has used at most `tier_share` (default 0.5) of the search's time; the cheaper
-answer counts. Records keep
+answer counts. `finisher=switch` (D-75, pilot A3) is v1's greedy MRCM at every leaf until
+MRCM's leaf finishes (root left out) average more than `switch_mean` seconds (default 20) over
+at least `switch_min_leaves` (default 3), then `tiered`. Records keep
 `mrcm_calls`, `mrcm_wins` and `mrcm_seconds`.
 
 B2 (D-70), the papers' own experiments: `sets=litbench_paper_v1` under all three goals and
@@ -285,6 +287,8 @@ def run_task(task: dict[str, Any], opts: dict[str, Any]) -> dict[str, Any]:
         "jumps": opts.get("jumps", 0),
         "jump_share": opts.get("jump_share", 0.5),
         "tier_share": opts.get("tier_share", sc.TIER_SHARE),
+        "switch_mean": opts.get("switch_mean", sc.SWITCH_MEAN),
+        "switch_min_leaves": opts.get("switch_min_leaves", sc.SWITCH_MIN_LEAVES),
     }
     finisher = opts.get("finisher", METHOD["finisher"])
     out["method"] = {**METHOD, "finisher": finisher, "jumps": opts.get("jumps", 0)}
@@ -587,6 +591,9 @@ def main(argv: list[str]) -> None:
         "jump_share": float(args.get("jump_share", 0.5)),
         # D-74: pilot A2's tiered finisher (finisher=tiered)
         "tier_share": float(args.get("tier_share", sc.TIER_SHARE)),
+        # D-75: pilot A3's per-problem switch (finisher=switch)
+        "switch_mean": float(args.get("switch_mean", sc.SWITCH_MEAN)),
+        "switch_min_leaves": int(args.get("switch_min_leaves", sc.SWITCH_MIN_LEAVES)),
     }
     limit = int(args["limit"]) if "limit" in args else None
     todo = [
