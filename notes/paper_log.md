@@ -1061,6 +1061,31 @@ Format: date · decision · alternatives considered · why · evidence.
   (jumps dearer); more leaves with jumps on all 5. No gain seen at 60 s on these small
   problems (T 1-3, where E-68 finds the runs add nothing); the coe9 run decides.
 
+- **D-74 (2026-11-10) Pilot A2: both finishers at once, no switch (E-69, Q-142).**
+  E-69: pilot A wins big at N = 4-5 but its 2 s switch also fires on N = 3 and s3-s5, where
+  MRCM's finish is better and fast on average; v1's time per leaf overlaps across groups (N3
+  0.25-6.5 s, N4 0.86-630 s, s4 median 3 s, s5 up to 941 s), so **no time limit separates
+  them**. User: "yea we can experiment with the new one now". **A2** = v1 with the leaf
+  finisher `tiered` (`search_check.TieredFinish`): every leaf gets the plain sharing pass and,
+  while greedy MRCM has used at most half the time since the search began, MRCM as well (the
+  root always); the cheaper answer counts. Where MRCM is fast it checks most leaves (like
+  v1), where it is slow a few (like A); nothing has to guess which kind of problem it is.
+  *Mac trial (60 s, 5 problems) changed one thing:* a first version re-checked only leaves
+  whose plain finish was within 5% of the best plain so far; on val_s5-000 that gave 401 vs
+  v1's 338 (MRCM is cheap there but the plain pass ranked its best leaves badly). Without the
+  margin: val_s5-000 338 (v1 338), val_emrcm-0000 175 (v1 177), val_emrcm-0020 766 (766),
+  share 0.5 better than 0.8 (more leaves); val_emrcm-0080 (N3-T3) 354 vs v1's 330, not
+  judged at 60 s (only the root's 35 s MRCM finish fits). Fixed for the coe9 run: share 0.5,
+  900 s, 256 sims. Also user's framing for the paper (not a code change): the
+  method is "build, then improve" (planner plan as the start, the search only improves it),
+  not a best of 5.
+  **Run:** `bench.py finisher=tiered` on pilot A's sets, read against E-69's v1 and A records
+  (same machine, same 242 problems).
+  **Pass bar, fixed in advance (D-72's, plus N3):** on `val_emrcm_v1` N = 4-5, A2 / v1 mean
+  below 0.98 with CI below 1 and fewer DFMM losses than v1; on N = 3 and on each of s3, s4,
+  s5, A2 / v1 level or better (CI of the mean contains 1 or lies below it). **Pass:** A2 is
+  method-v2 for the B1 / B2 rerun. **Fail:** look at where it loses before any other change.
+
 ## 4. Experiments and results
 
 ### E-1 (2026-10-13) Exact search on the hand-checked cases (M5)
@@ -1839,6 +1864,38 @@ MRCM's intermediates on val_s2: 4 of 28 covered (chain D4), 5 of 28 (premix D3).
   (an exact lower bound on mixes left, or a constructive method's recipes, which is a planner
   again). (3) Built as SPEC 0.28 `hint_source: problem` (depth-4 chain in the recipe columns)
   for a copy-test comparison on stages 1–2 against the planner's hints.
+
+### E-70 (2026-11-10) Trial v3 (D-73): planner jumps do not pay
+`outputs/bench/pilot_v3.jsonl` (coe9, commit e9888ab, SPEC 0.39), same 242 problems as E-69,
+read with a one-off comparison script (per problem, fluid goal; search alone = cheapest plan
+in its trace; method = cheaper of search and the best of the 4 planner runs).
+- **Bar 1 fails:** v3's search alone is dearer than the best of the 4 runs on 25 of 242
+  (10.3%, bar 2%): N3 7 of 30, s4 11 of 40, s5 7 of 42; none on N 4-5 or s3. A's search
+  alone (no jumps): 26; v1's: 11.
+- **Bar 2 fails:** v3's search alone / v1's method 1.054 [1.024, 1.088], 45 / 107 / 90
+  (w / t / l). By group: N3 1.334, N 4-5 0.944, s3 1.050, s4 1.053, s5 1.094.
+- **Against A (same finisher, jumps the only change):** no fewer losses to the runs (25 vs
+  26), and slower: mean leaves on N 4-5 114 vs A's 7,183; s3-s5 more leaves than A. v3's
+  method / v1's method on N 4-5 0.944 vs A's 0.890.
+- **Reading:** by D-73's rule (neither bar), jumps do not pay; reported, not kept. v3 also
+  carries A's over-eager switch (E-69), so its N3 and s5 numbers are partly A's.
+
+### E-69 (2026-11-10) Pilot A (D-72): a big gain at N 4-5, but the switch fires too often
+`outputs/bench/pilot_v1.jsonl` and `pilot_a.jsonl` (coe9, 18 workers each, side by side,
+commit 2e4061f, SPEC 0.39), `val_emrcm_v1` + `val_s3_v2` to `val_s5_v2`, 242 problems, fluid
+goal, 900 s. Method = cheaper of the search and the best of the 4 runs, any time.
+- **N 4-5 (D-72's first bar): passes.** A / v1 0.890 [0.866, 0.913], 62 / 28 / 0. Losses to
+  DFMM 41 of 60 (v1) → 23 (A). Mean leaves 34 → 7,183; A switched on all 90.
+- **Stages 3-5 (second bar): fails on s5.** s3 0.993 [0.974, 1.011] level; s4 1.004
+  [0.997, 1.011] level (13 losses); **s5 1.036 [1.005, 1.080], CI above 1** (9 losses).
+- **N3 (not in the bar, but a loss):** A / v1 1.258 [1.154, 1.380], 2 / 8 / 20.
+- **Why:** the 2 s leaf limit fired where MRCM's finish is fast on average: A switched on
+  24 of 30 N3, 15 of 40 s3, 28 of 40 s4, 19 of 42 s5. v1's mean leaves (900 s): N3 1,324,
+  s3 4,812, s4 2,162, s5 3,279 (well under 1 s a leaf on average), against 34 on N 4-5
+  (~26 s a leaf). One slow finish (cache fill, 36 busy workers) is enough to switch.
+- **Reading:** by D-72's rule A fails as fixed. The gain at N 4-5 is real and large; the
+  loss is the switch rule, not the plain pass. Next: the user's call on a switch that
+  separates the two (D-72 left the limit fixed in advance; any change is a new decision).
 
 ### E-68 (2026-11-09) Can the search drop the 4 planner runs? Not on s4, s5, held-out
 B1 records (E-64, `outputs/bench/b1.jsonl`, coe9), search alone (cheapest plan in its trace,
