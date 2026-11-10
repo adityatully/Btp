@@ -57,8 +57,9 @@ chats. Last updated 2026-11-03.*
 | Q-125 | Change the claim to "search over a planner, with learning where the planner is weak", and stop trying to replace the planner on s3-s5? | Open, waiting on the user; after D-54 (plan 4.2) |
 | Q-126 | Can a value head rank sibling moves if it reads the candidate moves (and hints), or is trained to rank instead of to hit the cost? | Closed → E-50: ranking helps (0.38 → 0.52), below the 0.55 bar |
 | Q-128 | Does the search improve a published planner (MRCM) put at its leaves, as it improves ours? | Closed → E-55: yes, below MRCM on 7 of 13 of set B (bar 5), 5.1% below on average |
+| Q-144 | How do we count the 4 planner runs' time: one after another (serial, today), side by side (parallel), or the search beside them too (E-71)? | Open, the user's call; E-71: parallel takes no-plan-by-900 s from 97 to 0, costs within 1% |
 | Q-143 | Can the search drop the 4 planner runs if the planner's decisions are moves in it (planner jumps, E-68)? | Closed → E-70: no; v3 fails both bars (dearer than the runs on 10.3%, bar 2%; 1.054 of v1), and jumps slow the search |
-| Q-142 | Why is our method 5-9x the bound on 4-5-fluid mixtures at 1/512, and why does DFMM beat it on 660 of 2,046 (E-66)? | Open: bound loose there (DFMM also 5-6x) and the search adds ~nothing over the planner at N 4-5 (E-67); cause: the finisher is too slow, so few leaves (E-67); pilot A (D-72, E-69): 11% cheaper at N 4-5 and DFMM losses 41 → 23 of 60, but the 2 s switch fires on N3 and s3-s5 too (s5 fails, N3 26% dearer); no time limit separates the groups; pilot A2 (D-74): both finishers at every leaf, MRCM within half the time |
+| Q-142 | Why is our method 5-9x the bound on 4-5-fluid mixtures at 1/512, and why does DFMM beat it on 660 of 2,046 (E-66)? | Open: bound loose there (DFMM also 5-6x) and the search adds ~nothing over the planner at N 4-5 (E-67); cause: the finisher is too slow, so few leaves (E-67); pilot A (D-72, E-69): 11% cheaper at N 4-5 and DFMM losses 41 → 23 of 60, but the 2 s switch fires on N3 and s3-s5 too (s5 fails, N3 26% dearer); no time limit separates the groups; pilot A2 (D-74, E-72) fails the same way (N 4-5 0.884, N3 1.244, s5 1.034): mixing finishers in one tree loses v1's quality where MRCM is better; E-73 offline: one finisher per problem by MRCM's average time keeps the gain, level elsewhere; pilot A3 (D-75) |
 | Q-141 | Which of the 13 unbuilt methods in the folder do we build, and in what order (L-9)? | Closed → L-10 to L-18: all built, one by one (user); Dong collapses to one mix per droplet in our engine, Fukui and SIMOP partly reproduced |
 | Q-140 | Why does our method end dearer than our own planner on 27 of 100 held-out and 17 of 100 s4 test problems (E-64)? | Closed → F-18: a reporting error (`bench.py` read the search alone); fixed, B1/B2 to be re-summarised on coe9 |
 | Q-139 | What time budget does our method get in the paper's headline tables (900 s, or a smaller fixed budget with 900 s as an extra column)? | Both reported (60 s and 900 s, user 2026-11-07); which one heads the tables is Tom's call |
@@ -623,6 +624,12 @@ the point of no return) and re-tests with D-45's bar plus a cliff check.
 hopeless positions as dearer on average (1,361 vs 1,197) but not the move into one. Candidate
 causes left: dead ends are a small share of the value data, and the value head reads only the
 global token (Q-111).
+
+**Q-144 How do we count the planner runs' time (E-71)?** · Open
+(2026-11-10) Today the 4 runs are counted one after another before the search (F-18), so
+97 B1 pairs have no plan by 900 s. Re-timed from the B1 records: side by side, 0 by 900 s and
+8 by 60 s (was 397), costs within 1%. Options: parallel (4 cores, search after the slowest)
+or all5 (5 cores, search from the start). The user's call; it changes how B1/B2 report time.
 
 **Q-143 Can the search drop the 4 planner runs (E-68)?** · Closed → E-70
 (2026-11-09) The search alone loses to the runs on 8-27 of 100 s4 / s5 / held-out problems

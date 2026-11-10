@@ -1086,6 +1086,28 @@ Format: date · decision · alternatives considered · why · evidence.
   s5, A2 / v1 level or better (CI of the mean contains 1 or lies below it). **Pass:** A2 is
   method-v2 for the B1 / B2 rerun. **Fail:** look at where it loses before any other change.
 
+- **D-75 (2026-11-10) Pilot A3: one finisher per problem, switched on MRCM's average time
+  (E-72, E-73, Q-142).** E-72: mixing the plain pass and MRCM in one tree loses v1's quality
+  where MRCM is the better finisher; E-73 (offline, hindsight): choosing v1 or A2 per problem
+  by v1's average seconds per leaf keeps the N 4-5 gain and is level elsewhere for X 10-20 s.
+  User: "Yes, build A3". **A3** = v1 with the leaf finisher `switch`
+  (`search_check.SwitchFinish`): greedy MRCM at every leaf until MRCM's leaf finishes (the
+  root's left out, it fills the cache) average more than 20 s, counted over at least 3 leaves
+  (so a single finish over 60 s switches at once); from then on A2's tiered finisher, keeping
+  MRCM's cache. Fixed before the coe9 run: 20 s, 3 leaves, tier share 0.5, 900 s, 256 sims.
+  X = 20 was picked on the val pilot records (E-73), so the pilot on the same problems checks
+  that the early decision matches the hindsight one; the B1 / B2 rerun is the real test.
+  **Run:** `bench.py finisher=switch` on pilot A's 242 problems, against E-69's v1 records.
+  **Pass bar (D-74's):** N 4-5 A3 / v1 below 0.98 with CI below 1 and fewer DFMM losses; on N3,
+  s3, s4, s5 level or better (CI contains 1 or lies below it). **Pass:** A3 is method-v2.
+  *Mac trial (120 s, unloaded, 6 problems):* at 20 s nothing switched, also not N4-T1 (12
+  leaves) and N5-T1 (7): unloaded, MRCM takes ~10 s a leaf there, against 24+ s on the loaded
+  coe9 (E-69). Costs equal v1's (177, 330, 766, 1003, 271, 338). With a 5 s limit both switch
+  (at leaf 3 and 2) and A2's path works: N4-T1 766 (4,409 leaves), **N5-T1 977 vs 1,003**.
+  So the switch depends on the machine's speed and load, like the 900 s budget itself; the
+  coe9 pilot keeps 20 s, the value E-73 found under coe9's load. A machine-free form (switch
+  when MRCM's projected leaves in the budget fall below some count) is noted for method-v2.
+
 ## 4. Experiments and results
 
 ### E-1 (2026-10-13) Exact search on the hand-checked cases (M5)
@@ -1864,6 +1886,58 @@ MRCM's intermediates on val_s2: 4 of 28 covered (chain D4), 5 of 28 (premix D3).
   (an exact lower bound on mixes left, or a constructive method's recipes, which is a planner
   again). (3) Built as SPEC 0.28 `hint_source: problem` (depth-4 chain in the recipe columns)
   for a copy-test comparison on stages 1–2 against the planner's hints.
+
+### E-73 (2026-11-10) One finisher per problem, by MRCM's average time: offline check
+Pilot records of E-69 / E-72 (coe9), no rerun. Rule tried: per problem, v1 (greedy MRCM at
+every leaf) if v1's search seconds per leaf <= X, else A2. **Hindsight:** X is applied to the
+whole run's average, which a real run only knows after the fact; a real rule must decide from
+its first finishes. Tuned on development sets (val), not test. Per group, mean / v1 [95% CI],
+losses, problems on A2:
+- **X = 1:** N3 1.042 (6, 11 of 30); N 4-5 0.884 (0, 89 of 90); s3 0.996; s4 0.995; s5 1.025
+  [1.003, 1.063] (7, 16 of 42).
+- **X = 5:** N3 0.996 (2, 6); N 4-5 0.884; s3 0.998; s4 0.996 (0, 15); s5 1.020 (4, 9).
+- **X = 10:** N3 1.000 (0, 0); N 4-5 0.884; s3 1.004 (1, 2); s4 0.996 (0, 9); s5 1.018 (2, 6).
+- **X = 20:** N3 1.000 (0, 0); **N 4-5 0.884** [0.860, 0.907] (0, 88 of 90); s3 1.000 (0, 1);
+  s4 0.996 [0.991, 1.000] (0, 4); **s5 1.018** [1.000, 1.053] (2, 6).
+- **X = 50:** N 4-5 0.948 (31 of 90 on A2); s5 1.001; the rest 1.000 / 0.996.
+- **Reading:** a per-problem choice keeps the whole N 4-5 gain and loses nothing elsewhere
+  for X from 10 to 20 (s5 within its CI, 2 losses of 42). N 4-5 sits at 24+ s per leaf (E-69),
+  everything else mostly under 5 s, so 20 s has room on both sides.
+
+### E-72 (2026-11-10) Pilot A2 (D-74): same as A; fails on N3 and s5
+`outputs/bench/pilot_a2.jsonl` (coe9, 18 workers, commit 1725496, SPEC 0.40), the 242
+problems of E-69, fluid goal, 900 s; read against E-69's v1 and A records with a one-off
+script (method = cheaper of the search and the best of the 4 runs).
+- **A2 / v1:** N 4-5 **0.884** [0.860, 0.907], 66 / 24 / 0 (passes; DFMM losses 41 → 23 of
+  60, as A); **N3 1.244** [1.105, 1.403], 9 / 1 / 20 (fails); s3 0.992 [0.973, 1.008] level;
+  s4 1.007 [0.990, 1.029] level; **s5 1.034** [1.004, 1.079] (fails, CI above 1).
+- **A / v1 for reference:** N 4-5 0.890, N3 1.258, s3 0.993, s4 1.004, s5 1.036.
+- **Finishers (means per problem):** leaves v1 / A / A2: N3 1,324 / 3,616 / 4,054; N 4-5 34 /
+  7,183 / 7,214; s3 4,812 / 5,088 / 5,473; s4 2,162 / 2,087 / 1,837; s5 3,279 / 3,641 /
+  3,665. A2's MRCM checks (wins over the plain pass, seconds): N3 576 (179, 294 s); N 4-5 13
+  (4, 318 s); s3 4,486 (846); s4 1,655 (924); s5 2,544 (553).
+- **Search alone dearer than the best of the 4 runs:** v1 / A / A2: N3 0 / 6 / 0; s4 8 / 14 /
+  8; s5 3 / 6 / 6; none elsewhere.
+- **Reading:** by D-74's rule A2 fails. It keeps A's gain at N 4-5 and has A's losses on N3
+  and s5, although MRCM still checks hundreds to thousands of leaves there. So the loss is
+  not too few MRCM finishes: where MRCM is the better finisher, a tree whose values come
+  partly or wholly from the plain pass searches worse than v1's, whose every leaf is valued
+  by MRCM. Mixing the two finishers in one tree does not give v1's quality.
+
+### E-71 (2026-11-10) Planner time counted in parallel: the "no plan" cases go away
+B1 records (E-64, `outputs/bench/b1.jsonl`, coe9), re-timed offline (no rerun): the time at
+which our method has a whole plan, counted three ways. *Serial* (today, F-18): the 4 planner
+runs one after another, then the search. *Parallel*: the 4 runs side by side (each run's plan
+counts once that run is done), the search after the slowest. *All5*: the search beside them
+from the start too (it never uses their plans). Each run's own measured time is used.
+- **No plan by 900 s:** serial 97 of 1,815 (problem, goal) pairs (held-out 6 / 10 / 8, s4
+  13 / 14 / 13, s5 11 / 11 / 11 under fluid / steps / waste); **parallel 0; all5 0.**
+- **No plan by 60 s:** serial 397 (held-out 45-48, s3 10-12, s4 50-51, s5 25 per goal);
+  parallel 8 (s4 1-2, s5 1-2); all5 8.
+- **Cost where both have a plan:** parallel / serial 0.990-1.000 at 900 s and 0.991-1.000 at
+  60 s; all5 / serial 0.989-1.000 at 900 s, 0.968-1.000 at 60 s (waste goal gains most).
+- **Reading:** the "no plan" cases are an artefact of counting the 4 runs' times as a sum,
+  not of the method; with 4 cores they vanish. How to count is the user's call (Q-144).
 
 ### E-70 (2026-11-10) Trial v3 (D-73): planner jumps do not pay
 `outputs/bench/pilot_v3.jsonl` (coe9, commit e9888ab, SPEC 0.39), same 242 problems as E-69,
