@@ -1,6 +1,11 @@
 # MEDA Design Automation — Codebase Specification
 
-Version 0.39 · 2026-11-09
+Version 0.40 · 2026-11-10
+
+Changes in 0.40 (pilot A2, paper log D-74, E-69): `scripts/search_check.py` gains the `tiered`
+leaf finisher (`TieredFinish`): every leaf gets the plain sharing pass and, while greedy MRCM
+has used at most half the search's time, MRCM as well; the cheaper answer counts. Run by
+`bench.py finisher=tiered` (`tier_share`). Method-v1 is unchanged.
 
 Changes in 0.39 (leaf-finisher pilot, paper log D-72, Q-142): tier 1 development gains
 `val_emrcm_v1` (e-MRCM's protocol at N = 3-5, fresh draws; `make_benchmark.py:build_emrcm_val`,

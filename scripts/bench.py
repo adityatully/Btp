@@ -41,6 +41,10 @@ the plain sharing pass. Records keep `finish_mode`, `root_finish_seconds` and `s
 `jumps=k` (D-73, v3 trial) adds the planner's k cheapest next moves per open target to the
 search as single moves, with `jump_share` (default 0.5) of each node's prior; the planner runs
 still run, as the reference the trial is read against (search alone, from `ours.trace`).
+`finisher=tiered` (D-74, pilot A2) gives every leaf the plain sharing pass and also greedy
+MRCM while MRCM has used at most `tier_share` (default 0.5) of the search's time; the cheaper
+answer counts. Records keep
+`mrcm_calls`, `mrcm_wins` and `mrcm_seconds`.
 
 B2 (D-70), the papers' own experiments: `sets=litbench_paper_v1` under all three goals and
 `sets=test_emrcm_v1 goals=fluid methods=dfm,facda,generic,dfmm,mrcm,emrcm` (e-MRCM's
@@ -280,6 +284,7 @@ def run_task(task: dict[str, Any], opts: dict[str, Any]) -> dict[str, Any]:
         "root_switch_seconds": opts.get("root_switch_seconds", sc.AUTO_ROOT_LIMIT),
         "jumps": opts.get("jumps", 0),
         "jump_share": opts.get("jump_share", 0.5),
+        "tier_share": opts.get("tier_share", sc.TIER_SHARE),
     }
     finisher = opts.get("finisher", METHOD["finisher"])
     out["method"] = {**METHOD, "finisher": finisher, "jumps": opts.get("jumps", 0)}
@@ -294,6 +299,9 @@ def run_task(task: dict[str, Any], opts: dict[str, Any]) -> dict[str, Any]:
         finish_mode=rec["finish_mode"],
         root_finish_seconds=rec["root_finish_seconds"],
         switched_at=rec["switched_at"],
+        mrcm_calls=rec["mrcm_calls"],
+        mrcm_wins=rec["mrcm_wins"],
+        mrcm_seconds=rec["mrcm_seconds"],
     )
     out["ours"] = ours
     for name, st_ in [("method", ours), *out["planners"].items()]:
@@ -577,6 +585,8 @@ def main(argv: list[str]) -> None:
         # D-73: planner jumps per open target in the search (0: v1) and their prior share
         "jumps": int(args.get("jumps", 0)),
         "jump_share": float(args.get("jump_share", 0.5)),
+        # D-74: pilot A2's tiered finisher (finisher=tiered)
+        "tier_share": float(args.get("tier_share", sc.TIER_SHARE)),
     }
     limit = int(args["limit"]) if "limit" in args else None
     todo = [

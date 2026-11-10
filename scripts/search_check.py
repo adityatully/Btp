@@ -175,6 +175,9 @@ C_PUCT = 1.5
 # also fills MRCM's cache, so it gets AUTO_ROOT_LIMIT (Mac, val_emrcm_v1: N3-T1 37 s, N4-T1
 # 42 s, N5-T1 73 s, N4-T3 301 s, N5-T3 378 s; the plain pass 0.01-1.2 s)
 AUTO_LIMIT, AUTO_ROOT_LIMIT = 2.0, 60.0
+# D-74 (pilot A2), fixed before the coe9 run: greedy MRCM checks leaves besides the plain
+# pass while it has used at most this share of the search's time
+TIER_SHARE = 0.5
 # Fixed in advance (module docstring).
 FOUND_SHARE, MISS = 1 / 3, 0.02
 D_MIN = 10
@@ -675,6 +678,45 @@ class AutoFinish:
         return found
 
 
+class TieredFinish:
+    """The leaf finisher of D-74 (pilot A2): both finishers, no switch. Every leaf gets the
+    plain sharing pass (fast) and, while greedy MRCM (`share_mrcm`, D-65) has used at most
+    `share` of the time since the search began, MRCM as well; the cheaper answer counts. Where
+    MRCM is fast it checks most leaves (v1); where it is slow it checks a few and the plain pass
+    keeps the search fed (pilot A). E-69: no time limit separates the two kinds of problem.
+    The root is always checked with both (its MRCM finish fills MRCM's cache)."""
+
+    def __init__(self, inst: Instance, share: float) -> None:
+        self.inst, self.share = inst, share
+        self.mrcm = StrongFinish(inst, lookahead=0)
+        self.fails = self.mrcm.fails
+        self.mode = "tiered"
+        self.start = time.perf_counter()
+        self.mrcm_seconds = 0.0
+        self.mrcm_calls = self.mrcm_wins = self.calls = 0
+        self.root_seconds: float | None = None
+
+    def __call__(self, state: PrepState) -> tuple[tuple[Action, ...], Rational] | None:
+        self.calls += 1
+        plain = finish_from(state, self.inst, WEIGHTS)
+        if plain is None:
+            self.fails["no order finishes"] = self.fails.get("no order finishes", 0) + 1
+        elapsed = time.perf_counter() - self.start
+        if self.calls > 1 and self.mrcm_seconds > self.share * elapsed:
+            return plain
+        t0 = time.perf_counter()
+        found = self.mrcm(state)
+        took = time.perf_counter() - t0
+        self.mrcm_seconds += took
+        self.mrcm_calls += 1
+        if self.calls == 1:
+            self.root_seconds = round(took, 3)
+        if found is not None and (plain is None or found[1] < plain[1]):
+            self.mrcm_wins += 1
+            return found
+        return plain
+
+
 class PlannerJumps:
     """The search's planner jumps (D-73): from a state, for each open target, the planner's
     `k` cheapest candidates for that target's next delivery group (`share._options`), each as
@@ -756,7 +798,7 @@ def run_task(
                 "closed_by_planner": True,
             }
     t0 = time.perf_counter()
-    finish: MrcmFinish | GraphFinish | StrongFinish | AutoFinish | None = None
+    finish: MrcmFinish | GraphFinish | StrongFinish | AutoFinish | TieredFinish | None = None
     if finisher == "mrcm":
         finish = MrcmFinish(inst, WEIGHTS)
     elif finisher == "paper":  # D-60: the problem's own published method
@@ -772,6 +814,8 @@ def run_task(
             float(opts.get("switch_seconds", AUTO_LIMIT)),
             float(opts.get("root_switch_seconds", AUTO_ROOT_LIMIT)),
         )
+    elif finisher == "tiered":  # D-74: plain pass at every leaf, MRCM within its time share
+        finish = TieredFinish(inst, float(opts.get("tier_share", TIER_SHARE)))
     k = int(opts.get("jumps", 0))  # D-73: planner jumps per open target (0: none, v1)
     search = Search(
         env,
@@ -803,8 +847,13 @@ def run_task(
         trace=search.trace,
         finisher=finisher,
         finish_fails=finish.fails if finish is not None else {},
-        finish_mode=finish.mode if isinstance(finish, AutoFinish) else finisher,
-        root_finish_seconds=finish.root_seconds if isinstance(finish, AutoFinish) else None,
+        finish_mode=finish.mode if isinstance(finish, AutoFinish | TieredFinish) else finisher,
+        root_finish_seconds=(
+            finish.root_seconds if isinstance(finish, AutoFinish | TieredFinish) else None
+        ),
+        mrcm_calls=finish.mrcm_calls if isinstance(finish, TieredFinish) else None,
+        mrcm_wins=finish.mrcm_wins if isinstance(finish, TieredFinish) else None,
+        mrcm_seconds=(round(finish.mrcm_seconds, 3) if isinstance(finish, TieredFinish) else None),
         switched_at=finish.switched_at if isinstance(finish, AutoFinish) else None,
         jumps=k,
         jump_share=float(opts.get("jump_share", 0.5)) if k > 0 else None,

@@ -386,6 +386,37 @@ def test_auto_finisher_switches_to_the_plain_pass_when_mrcm_is_slow(
     assert rec["search_cost"] is not None and rec["search_cost"] <= float(got[1]) + 1e-9
 
 
+def test_tiered_finisher_checks_the_root_with_both_and_keeps_the_cheaper() -> None:
+    """D-74 (pilot A2): the root gets the plain pass and greedy MRCM, and the cheaper answer."""
+    task = SC.tasks({"C"}, 1)[0]
+    inst = SC.Instance.from_json(task["instance"])
+    start = SC.PrepState.initial(inst)
+    finish = SC.TieredFinish(inst, 0.5)
+    got = finish(start)
+    both = [
+        f
+        for f in (SC.StrongFinish(inst, lookahead=0)(start), finish_from(start, inst, SC.WEIGHTS))
+        if f
+    ]
+    assert got is not None and got[1] == min(f[1] for f in both)
+    assert finish.mrcm_calls == 1 and finish.root_seconds is not None
+
+
+def test_tiered_finisher_skips_mrcm_past_its_share_of_the_time() -> None:
+    """D-74: once MRCM has used more than its share of the time, leaves get the plain pass."""
+    task = SC.tasks({"C"}, 1)[0]
+    inst = SC.Instance.from_json(task["instance"])
+    start = SC.PrepState.initial(inst)
+    plain = finish_from(start, inst, SC.WEIGHTS)
+    assert plain is not None
+    finish = SC.TieredFinish(inst, 0.0)
+    finish.calls, finish.mrcm_seconds = 1, 1.0  # the root is done, over its share
+    assert finish(start) == plain and finish.mrcm_calls == 0
+    rec = SC.run_task(task, "uniform", 2, OPTS | {"seconds": 10.0}, "tiered")
+    assert rec["finish_mode"] == "tiered" and rec["mrcm_calls"] >= 1
+    assert rec["search_cost"] is not None and rec["search_cost"] <= float(plain[1]) + 1e-9
+
+
 def test_planner_jumps_hold_the_planners_first_decision() -> None:
     """D-73: from the empty chip the jumps include the plain planner's first delivery group,
     one run of actions per (target, candidate), each longer than one action."""
