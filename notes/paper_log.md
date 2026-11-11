@@ -1178,6 +1178,24 @@ Format: date · decision · alternatives considered · why · evidence.
   test_s4-000 first plan at 3.1 s (the plain pass is seconds, not milliseconds, at T 7-10),
   ours 1,516 vs best run 1,328 at 30 s (the D-77 question).
 
+- **D-80 (2026-11-11) Causal check of the novel intermediates (E-78).** E-78 shows the search's
+  wins come with novel reused intermediates, but a different plan always has different
+  droplets, so it does not show they cause the gain. User: "proceed" (Mac kept light: code and
+  a 2-problem test only; the run goes to coe9). **Check** (`scripts/causal_check.py`), on E-78's
+  winning problems with a novel intermediate (up to 10 per set, 4 runs under 120 s in total),
+  method-v3's search at 300 s CPU: **(a)** is each novel intermediate outside every
+  single-target recipe (each target planned alone on an empty chip, plain and with MRCM's
+  trees)? **(b) ablation:** replay the search's plan to just before the move that makes it and
+  finish with the search's own finisher (`before`), and through that move (`after`); the best
+  single move's (before - after) over the gain on the reference (best of the 4 runs and the
+  root finish), and the share from the first novel move on (all novel moves together).
+  **Reading, fixed before the run:** the novel intermediates cause the gain if one novel move
+  alone explains at least half the gain on at least half the problems, and most novel
+  intermediates lie outside every single-target recipe.
+  *Mac test (10 s, 2 problems):* val_s5-000: three novel moves, all outside the single-target
+  recipes; finishing before the first costs 463 (the reference), after it 402, after the
+  second 338 (the search's cost): one move explains 51% of the gain, the two together 100%.
+
 ## 4. Experiments and results
 
 ### E-1 (2026-10-13) Exact search on the hand-checked cases (M5)
