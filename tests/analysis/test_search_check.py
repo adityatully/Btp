@@ -467,6 +467,22 @@ def test_the_search_budget_is_cpu_time(monkeypatch: pytest.MonkeyPatch) -> None:
     assert all(s % 100 == 0 for s, _ in rec["trace"])
 
 
+def test_first_plan_comes_before_the_root_and_leaves_the_search_unchanged() -> None:
+    """D-79: with `first_plan` the plain pass's plan is the trace's first entry; the root's
+    finish still sets the score's scale, so the search's own result is never dearer."""
+    task = SC.tasks({"C"}, 1)[0]
+    inst = SC.Instance.from_json(task["instance"])
+    plain = finish_from(SC.PrepState.initial(inst), inst, SC.WEIGHTS)
+    assert plain is not None
+    opts = OPTS | {"seconds": 5.0, "keep_plan": True}
+    rec = SC.run_task(task, "uniform", 2, opts | {"first_plan": True}, "share_mrcm")
+    assert rec["first_plan"] is True
+    assert rec["trace"][0][1] == float(plain[1]) and rec["trace"][0][0] < 1.0
+    assert rec["search_cost"] <= float(plain[1]) + 1e-9
+    assert rec["root_finish"] is not None
+    assert rec["root_finish"] == SC.StrongFinish(inst, lookahead=0)(SC.PrepState.initial(inst))
+
+
 def test_planner_jumps_hold_the_planners_first_decision() -> None:
     """D-73: from the empty chip the jumps include the plain planner's first delivery group,
     one run of actions per (target, candidate), each longer than one action."""

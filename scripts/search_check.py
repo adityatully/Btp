@@ -399,8 +399,14 @@ class Search:
         finish: Any = None,
         jumps: Any = None,
         jump_share: float = 0.5,
+        first_plan: bool = False,
     ) -> None:
         self.env, self.inst, self.agent, self.deadline = env, inst, agent, deadline
+        # D-79 (method-v3): before the root, the plain sharing pass from the empty chip gives
+        # a whole plan at once (milliseconds), so the search has a plan at any time
+        self.first_plan = first_plan
+        # the root's own finish (its plan and cost), kept for the novelty check (D-79)
+        self.root_finish: tuple[tuple[Action, ...], Rational] | None = None
         # the leaf finisher (D-55): state -> (actions, cost) or None; the sharing pass by default
         self.finish = finish or (lambda state: finish_from(state, inst, WEIGHTS))
         # D-73: state -> the planner's next moves as action runs (None: single actions only),
@@ -454,6 +460,8 @@ class Search:
         if not self.planner_leaf:
             return Node(snap, actions, prior, self.score(float(snap.plan_cost) + estimate), False)
         found = self.finish(env.state)
+        if not actions:
+            self.root_finish = found
         best = math.inf
         if found is None:
             value = -1.0
@@ -540,9 +548,18 @@ class Search:
 
     def run(self, sims: int) -> dict[str, Any]:
         obs, _ = self.env.reset(options={"instance": self.inst})
+        if self.first_plan:
+            first = finish_from(PrepState.initial(self.inst), self.inst, WEIGHTS)
+            if first is not None and len(first[0]) <= self.inst.step_limit:
+                self._offer(float(first[1]), first[0], len(first[0]))
         if self.planner_leaf:
             root = self.leaf(obs, (), None)
-            self.c0 = max(self.best[0], 1.0) if self.best else 1.0
+            # the score's scale comes from the root's own finish, so a first plan (D-79)
+            # leaves the search itself unchanged
+            if math.isfinite(root.best):
+                self.c0 = max(root.best, 1.0)
+            else:
+                self.c0 = max(self.best[0], 1.0) if self.best else 1.0
         else:
             self.c0 = max(self.net(obs, len(self.env.legal))[1], 1.0)
             root = self.leaf(obs, (), None)
@@ -885,6 +902,7 @@ def run_task(
         finish=finish,
         jumps=PlannerJumps(inst, k, finish) if k > 0 else None,
         jump_share=float(opts.get("jump_share", 0.5)),
+        first_plan=bool(opts.get("first_plan", False)),
     )
     out = search.run(sims)
     stats = hs.plan_stats(inst, f"search_{kind}", out["plan"], CLOCK() - t0)
@@ -908,10 +926,12 @@ def run_task(
         **finish_record(finish, finisher),
         jumps=k,
         jump_share=float(opts.get("jump_share", 0.5)) if k > 0 else None,
+        first_plan=bool(opts.get("first_plan", False)),
         **{f"search_{k}": v for k, v in stats.items()},
     )
-    if opts.get("keep_plan"):  # bench.py: the plan itself, in-process only (not JSON)
+    if opts.get("keep_plan"):  # bench.py: the plans themselves, in-process only (not JSON)
         rec["plan"] = out["plan"]
+        rec["root_finish"] = search.root_finish
     return rec
 
 

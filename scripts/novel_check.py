@@ -74,7 +74,7 @@ def intermediates(inst: Instance, plan: tuple[Action, ...]) -> list[dict[str, An
     return [m for uid, m in made.items() if uid not in delivered]
 
 
-def _show(c: Composition) -> str:
+def show(c: Composition) -> str:
     return "(" + ", ".join(str(n) for n in c.num) + f")/{c.den}"
 
 
@@ -154,7 +154,7 @@ def run_task(task: dict[str, Any], opts: dict[str, Any]) -> dict[str, Any]:
         search_reused=sum(m["uses"] > 0 for m in mine),
         planner_intermediates={n: len(x) for n, x in zip(plans, theirs, strict=True)},
         novel=[
-            {"comp": _show(m["comp"]), "volume": m["volume"], "step": m["step"], "uses": m["uses"]}
+            {"comp": show(m["comp"]), "volume": m["volume"], "step": m["step"], "uses": m["uses"]}
             for m in found
         ],
     )

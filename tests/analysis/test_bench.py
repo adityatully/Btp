@@ -53,7 +53,10 @@ def test_one_problem_under_each_goal_gives_a_whole_record() -> None:
     ours = rec["ours"]
     assert set(ours["by_goal"]) == set(B.GOALS)
     assert rec["bound"] - 1e-9 <= ours["by_goal"]["fluid"] <= rec["construction"] + 1e-9
-    assert B.ours_at(rec, 1e9) == min([c for _, c in ours["trace"]] + [rec["best_planner"]])
+    # method-v3 (D-79): the search alone, its first plan at once
+    assert rec["method"]["portfolio"] is False and ours["first_plan"] is True
+    assert B.ours_at(rec, 1e9) == min(c for _, c in ours["trace"])
+    assert ours["trace"][0][0] < 1.0 and ours["intermediates"] >= len(ours["novel"]) >= 0
     for st in rec["planners"].values():
         assert st["sample"] >= 1 and st["mixes"] >= 1
     steps = B.run_task(B.tasks(["test_s1_v1"], ["steps"], 1)[0], OPTS)
@@ -94,6 +97,40 @@ def test_ours_at_takes_the_planner_with_its_time() -> None:
     assert B.ours_at(rec, 60.0) == 85.0
     assert B.ours_at(rec, 205.0) == 85.0  # the 80 plan comes at 10 + 200 s
     assert B.ours_at(rec, 900.0) == 80.0
+
+
+def test_ours_at_for_method_v3_is_the_search_alone() -> None:
+    """D-79: the 4 runs are baselines, not part of method-v3; its clock starts with the search."""
+    rec = {
+        "method": {"portfolio": False},
+        "best_planner": 70.0,
+        "planner_seconds": 10.0,
+        "ours": {"trace": [(0.01, 100.0), (30.0, 90.0)]},
+    }
+    assert B.ours_at(rec, 1.0) == 100.0
+    assert B.ours_at(rec, 900.0) == 90.0
+
+
+def test_an_earlier_answer_key_is_reused_and_only_missing_methods_run(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """D-79: bound, exact search and published methods come from the earlier record; a method it
+    lacks is run."""
+    task = B.tasks(["test_s1_v1"], ["fluid"], 1)[0]
+    first = B.run_task(task, OPTS | {"methods": ["mrcm"]})
+
+    def boom(*_: Any, **__: Any) -> Any:
+        raise RuntimeError("recomputed")
+
+    monkeypatch.setattr(B, "ExactSearch", boom)
+    monkeypatch.setitem(B.PUBLISHED, "mrcm", boom)
+    keep = ("bound", "construction", "exact", "optimum", "published", "bitscan", "commit")
+    old = {k: first[k] for k in keep if k in first}
+    rec = B.run_task(task | {"reuse": old}, OPTS | {"methods": ["mrcm", "dfm"]})
+    assert rec["reused"] == "test" and "reuse" not in rec
+    assert (rec["bound"], rec["optimum"]) == (first["bound"], first["optimum"])
+    assert rec["published"]["mrcm"] == first["published"]["mrcm"]
+    assert set(rec["published"]) == {"mrcm", "dfm"}
 
 
 def test_emrcm_table_puts_the_papers_numbers_beside_ours() -> None:

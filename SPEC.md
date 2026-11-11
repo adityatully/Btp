@@ -1,6 +1,16 @@
 # MEDA Design Automation — Codebase Specification
 
-Version 0.42 · 2026-11-11
+Version 0.43 · 2026-11-11
+
+Changes in 0.43 (method-v3, paper log D-79): `scripts/bench.py`'s `METHOD` is method-v3: the
+flat-prior search alone (the 4 planner runs are reported as baselines, not part of the method;
+`ours_at` reads the search's trace alone; `METHOD_V1` records are read as before), A3's
+`switch` finisher, CPU-time budgets, and `first_plan`: before the root, the plain sharing
+pass's plan from the empty chip is the trace's first entry (`search_check.Search(first_plan=)`;
+the root's own finish still sets the score's scale, so the search is unchanged). Every bench
+record holds the search's novel reused intermediates (`ours.novel`, `novel_check`'s test).
+`bench.py reuse=<records>` takes each problem's answer key from earlier records and runs only
+the published methods they lack.
 
 Changes in 0.42 (paper log D-78): every time budget and timing in `scripts/search_check.py`
 (the search's deadline and trace, the leaf finishers' switch and share timings, planner and

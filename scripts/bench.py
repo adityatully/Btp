@@ -13,14 +13,15 @@ Per problem and goal, in this order (the answer key is fixed before our method r
 2. **Published methods** (`fluid` records only; a plan does not depend on the goal, its cost
    under every goal is stored in `by_goal`): DFM, FacDA, Generic, DFMM, MRCM, e-MRCM, NFSP.
    A method that declines a problem records why (`na`).
-3. **Our planner alone:** `share`, `share_look3`, `share_orders`, `share_mrcm_look3` under the
-   goal; the best planner is the cheapest.
-4. **Our method** (`METHOD`, frozen as `method-v1`): the cheaper of the best planner (step 3)
-   and the flat-prior search with greedy MRCM finishes (E-61), `sims` simulations per move, cap
-   `seconds`. Its cost at any time t is the cheapest of the best planner, once the planners'
-   time has passed, and the search's whole plans found by then, its trace timed after the
-   planners (`ours_at`, Q-140); before either, none. The paper reports t = 60 s and t = 900 s
-   (Q-139).
+3. **Our planner alone (baselines):** `share`, `share_look3`, `share_orders`,
+   `share_mrcm_look3` under the goal; the best planner is the cheapest.
+4. **Our method** (`METHOD`, method-v3, D-79): the flat-prior search alone, `sims` simulations
+   per move, cap `seconds` of CPU time (D-78), with A3's per-problem leaf finisher (D-75) and
+   the plain sharing pass's plan before the root. Its cost at time t is the cheapest whole
+   plan in its trace by t (`ours_at`). Every record also holds the search's intermediates that
+   none of the 4 runs nor its root finish make and a later mix reuses (`ours.novel`, D-76).
+   Records of method-v1 (`METHOD_V1`: the cheaper of the best planner and the search, the
+   search timed after the planners, Q-140) are still read as before.
 
 Every plan is replayed by the engine and its DAG validated (rule 7); under `steps` and `waste`
 every plan is checked to keep the goal's first term first (`goal_check.check_first`).
@@ -32,7 +33,9 @@ Arguments are key=value: `sets` (default all six), `goals` (default fluid,steps,
 `limit=N` problems per set, `exact_seconds` (default 60), `exact_nodes` (default 1,000,000),
 `nfsp_seconds` (per ILP solve, default 600, as Q-118), `orders` (default 32), `methods`
 (published methods to run, default all), `workers`, `out`.
-`seconds` and `sims` override the method's settings for light tests only.
+`seconds` and `sims` override the method's settings for light tests only. `reuse=<records>[,..]`
+(D-79) takes each problem's answer key (bound, construction, exact search, published methods,
+bit scanning) from earlier records and runs only the published methods they lack.
 `finisher` (the search's leaf finisher, default v1's `share_mrcm`), `switch_seconds` and
 `root_switch_seconds` (for `finisher=auto`, defaults `search_check.AUTO_LIMIT`,
 `AUTO_ROOT_LIMIT`) are for the leaf-finisher pilot (D-72) only: `auto` is pilot A, greedy MRCM
@@ -92,13 +95,26 @@ import goal_check as gc  # noqa: E402
 import headroom_share as hs  # noqa: E402
 import lit_bench as lb  # noqa: E402
 import lit_bench_full as lbf  # noqa: E402
+import novel_check as nc  # noqa: E402
 import search_check as sc  # noqa: E402
 from emrcm_table3 import PAPER as EMRCM_PAPER  # noqa: E402
 
 SETS = ("test_s1_v1", "test_s2_v1", "test_s3_v1", "test_s4_v1", "test_s5_v1", "test_heldout_v1")
 B2_SETS = ("litbench_paper_v1", "test_emrcm_v1")  # D-70: the papers' own experiments
 GOALS = tuple(gc.GOALS)
-METHOD = {"search": "uniform", "finisher": "share_mrcm", "sims": 256, "seconds": 900.0}  # v1
+# method-v1 (D-67): the cheaper of the 4 planner runs and the search, greedy MRCM finishes
+METHOD_V1 = {"search": "uniform", "finisher": "share_mrcm", "sims": 256, "seconds": 900.0}
+# method-v3 (D-79): the search alone (the 4 runs are baselines, not part of the method), A3's
+# per-problem finisher (D-75), a plain-pass plan before the root, budgets in CPU time (D-78)
+METHOD = {
+    "search": "uniform",
+    "finisher": "switch",
+    "sims": 256,
+    "seconds": 900.0,
+    "first_plan": True,
+    "portfolio": False,
+    "clock": "cpu",
+}
 PUBLISHED = {**lb.LITERATURE, **lbf.METHODS}
 PLANNERS = ("share", "share_look3", "share_orders", "share_mrcm_look3")
 # Each published method's own goal (notes/lit_bench/objectives.md): it is compared with our
@@ -193,7 +209,8 @@ def run_task(task: dict[str, Any], opts: dict[str, Any]) -> dict[str, Any]:
     nfsp_module.TIME_LIMIT = opts["nfsp_seconds"]
     inst = Instance.from_json(task["instance"])
     rid = inst.instance_id
-    out: dict[str, Any] = {k: v for k, v in task.items() if k != "instance"}
+    out: dict[str, Any] = {k: v for k, v in task.items() if k not in ("instance", "reuse")}
+    old = task.get("reuse")  # D-79: this problem's record from an earlier run (answer key)
     out.update(
         T=len(inst.targets),
         F=inst.num_fluids,
@@ -204,13 +221,24 @@ def run_task(task: dict[str, Any], opts: dict[str, Any]) -> dict[str, Any]:
         method=METHOD,
     )
 
-    # 1. Answer key: nothing of ours.
-    root = ExactSearch(w).solve(inst, SolveBudget(max_nodes=0))
-    if root.cost is None or root.lower_bound is None:
-        raise RuntimeError(f"{rid}: no construction plan under {goal}")
-    out["bound"], out["construction"] = float(root.lower_bound), float(root.cost)
-    optimum: Rational | None = root.cost if root.cost == root.lower_bound else None
-    if optimum is None and opts["exact_seconds"] > 0:  # seeded with the construction only
+    # 1. Answer key: nothing of ours. Reused from an earlier record when given (D-79): it does
+    # not depend on our method, and the exact search is the costly part
+    optimum: Rational | float | None
+    if old is not None:
+        for key in ("bound", "construction", "exact", "optimum"):
+            if key in old:
+                out[key] = old[key]
+        optimum = old["optimum"]
+        out["reused"] = old.get("commit")
+    else:
+        root = ExactSearch(w).solve(inst, SolveBudget(max_nodes=0))
+        if root.cost is None or root.lower_bound is None:
+            raise RuntimeError(f"{rid}: no construction plan under {goal}")
+        out["bound"], out["construction"] = float(root.lower_bound), float(root.cost)
+        optimum = root.cost if root.cost == root.lower_bound else None
+    if (
+        old is None and optimum is None and opts["exact_seconds"] > 0
+    ):  # seeded with the construction
         t0 = sc.CLOCK()
         plan, cost, st = ExactSearch(w).search(
             inst, SolveBudget(max_seconds=opts["exact_seconds"], max_nodes=opts["exact_nodes"])
@@ -226,11 +254,13 @@ def run_task(task: dict[str, Any], opts: dict[str, Any]) -> dict[str, Any]:
             _check(rid, "exact", goal, ex)
     out["optimum"] = None if optimum is None else float(optimum)
 
-    # 2. Published methods, once (their plans do not depend on the goal).
+    # 2. Published methods, once (their plans do not depend on the goal); an earlier record's
+    # results are kept and only the methods it lacks are run (D-79)
     if goal == "fluid":
-        out["published"] = {}
+        kept = (old or {}).get("published", {})
+        out["published"] = {m: st for m, st in kept.items() if m in opts.get("methods", PUBLISHED)}
         for name, make in PUBLISHED.items():
-            if name not in opts.get("methods", PUBLISHED):
+            if name not in opts.get("methods", PUBLISHED) or name in out["published"]:
                 continue
             t0 = sc.CLOCK()
             try:
@@ -246,7 +276,9 @@ def run_task(task: dict[str, Any], opts: dict[str, Any]) -> dict[str, Any]:
             out["published"][name] = st_
 
     # 2b. Bit scanning, the 1:1 floor (B3, D-71): the naive construction under M = 2.
-    if goal == "fluid" and bitscan_applies(inst) is None:
+    if goal == "fluid" and old is not None and "bitscan" in old:
+        out["bitscan"] = old["bitscan"]
+    elif goal == "fluid" and bitscan_applies(inst) is None:
         out["bitscan"] = stats(inst, "bitscan", naive_plan(inst), 0.0)
 
     # 3. Our planner alone.
@@ -257,10 +289,14 @@ def run_task(task: dict[str, Any], opts: dict[str, Any]) -> dict[str, Any]:
         "share_mrcm_look3": lambda: share.share_plan(inst, w, lookahead=3, mrcm=True),
     }
     out["planners"] = {}
+    plans: dict[str, tuple[Action, ...]] = {}
     for name, make in makers.items():
         t0 = sc.CLOCK()
-        out["planners"][name] = stats(inst, name, make(), sc.CLOCK() - t0)
+        made = make()
+        out["planners"][name] = stats(inst, name, made, sc.CLOCK() - t0)
         _check(rid, name, goal, out["planners"][name])
+        if made is not None:
+            plans[name] = made
     found = [(_cost(s, goal), n) for n, s in out["planners"].items() if _cost(s, goal) is not None]
     out["best_planner"] = min(found)[0] if found else None
     out["planner_seconds"] = sum(s["seconds"] for s in out["planners"].values())
@@ -289,9 +325,16 @@ def run_task(task: dict[str, Any], opts: dict[str, Any]) -> dict[str, Any]:
         "tier_share": opts.get("tier_share", sc.TIER_SHARE),
         "switch_mean": opts.get("switch_mean", sc.SWITCH_MEAN),
         "switch_min_leaves": opts.get("switch_min_leaves", sc.SWITCH_MIN_LEAVES),
+        "first_plan": opts.get("first_plan", METHOD["first_plan"]),
     }
     finisher = opts.get("finisher", METHOD["finisher"])
-    out["method"] = {**METHOD, "finisher": finisher, "jumps": opts.get("jumps", 0), "clock": "cpu"}
+    out["method"] = {
+        **METHOD,
+        "finisher": finisher,
+        "jumps": opts.get("jumps", 0),
+        "first_plan": sopts["first_plan"],
+        "portfolio": opts.get("portfolio", METHOD["portfolio"]),
+    }
     rec = sc.run_task(task_, METHOD["search"], opts["sims"], sopts, finisher)
     plan = rec["plan"]
     ours = stats(inst, "method", plan, rec["search_seconds"]) if plan else {"cost": None}
@@ -306,7 +349,29 @@ def run_task(task: dict[str, Any], opts: dict[str, Any]) -> dict[str, Any]:
         mrcm_calls=rec["mrcm_calls"],
         mrcm_wins=rec["mrcm_wins"],
         mrcm_seconds=rec["mrcm_seconds"],
+        first_plan=rec["first_plan"],
     )
+    # D-79: the unexpected-moves check (D-76, E-78) on every record: the search's intermediates
+    # that none of the 4 runs nor its root finish make, and that a later mix reuses
+    if plan:
+        refs = [nc.intermediates(inst, p) for p in plans.values()]
+        if rec["root_finish"] is not None:
+            refs.append(nc.intermediates(inst, rec["root_finish"][0]))
+        mine = nc.intermediates(inst, plan)
+        ours["intermediates"] = len(mine)
+        ours["novel"] = [
+            {
+                "comp": nc.show(m["comp"]),
+                "volume": m["volume"],
+                "step": m["step"],
+                "uses": m["uses"],
+            }
+            for m in nc.novel(mine, refs)
+        ]
+        # from the empty chip the finish's cost is the whole plan's
+        ours["root_finish_cost"] = (
+            None if rec["root_finish"] is None else float(rec["root_finish"][1])
+        )
     out["ours"] = ours
     for name, st_ in [("method", ours), *out["planners"].items()]:
         c = _cost(st_, goal)
@@ -325,9 +390,13 @@ def _star(args: tuple[dict[str, Any], dict[str, Any]]) -> dict[str, Any]:
 
 
 def ours_at(rec: dict[str, Any], t: float) -> float | None:
-    """Our method's cost if stopped at t seconds (None: no whole plan yet): the cheaper of the
+    """Our method's cost if stopped at t seconds (None: no whole plan yet). Method-v3 (D-79):
+    the search's trace alone. Method-v1 records: the cheaper of the
     best planner and the search (D-67 rule 1, Q-140). The planners run first, so the clock
     starts with their time (`planner_seconds`); the search's trace is timed from its own start."""
+    if rec.get("method", {}).get("portfolio") is False:  # method-v3 (D-79): the search alone
+        found = [c for s, c in rec["ours"].get("trace", []) if s <= t]
+        return min(found) if found else None
     off = rec.get("planner_seconds", 0.0)
     found = [c for s, c in rec["ours"].get("trace", []) if off + s <= t]
     if rec.get("best_planner") is not None and off <= t:
@@ -596,8 +665,15 @@ def main(argv: list[str]) -> None:
         "switch_min_leaves": int(args.get("switch_min_leaves", sc.SWITCH_MIN_LEAVES)),
     }
     limit = int(args["limit"]) if "limit" in args else None
+    # D-79: earlier records whose answer key (bound, exact search, published methods) is reused
+    keep = ("bound", "construction", "exact", "optimum", "published", "bitscan", "commit")
+    reuse: dict[tuple[str, str, str], dict[str, Any]] = {}
+    for path in filter(None, args.get("reuse", "").split(",")):
+        for line in Path(path).read_text().splitlines():
+            r = json.loads(line)
+            reuse[(r["set"], r["id"], r["goal"])] = {k: r[k] for k in keep if k in r}
     todo = [
-        (t, opts)
+        ({**t, "reuse": reuse.get((t["set"], t["id"], t["goal"]))}, opts)
         for t in tasks(
             args.get("sets", ",".join(SETS)).split(","),
             args.get("goals", ",".join(GOALS)).split(","),
