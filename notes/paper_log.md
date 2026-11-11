@@ -1144,6 +1144,20 @@ Format: date · decision · alternatives considered · why · evidence.
   72 already tie or beat the runs at 900 s. Bar unchanged in spirit: at most 2 of the 10 still
   dearer than the best run.
 
+- **D-78 (2026-11-11) Search budgets in CPU time, not wall time.** coe9 is shared: on
+  2026-11-11 another user's GROMACS jobs held ~37 of 40 cores (some 243 h of CPU), and every
+  result so far is a search on a wall clock, so a busy machine gives the search fewer leaves
+  and a worse plan, and "900 s on coe9" cannot be reproduced. User: "proceed" (instead of
+  raising our priority over another user's jobs). **Change:** `search_check.CLOCK =
+  time.process_time` for the search's deadline and trace, the finishers' timings (A, A2, A3's
+  switch), and planner / published-method seconds in `bench.py` and `novel_check.py`; progress
+  logs stay on the wall clock. Records from before SPEC 0.42 are wall time.
+  *Mac check (val_s4-007, 20 s search, A3's finisher, 8 cores):* quiet: wall 674 leaves / 271,
+  CPU 688 / 271 (20.2 s wall). With 24 busy processes: **wall 119 leaves, cost 350**; **CPU
+  395 leaves, cost 271** (70.7 s wall). CPU time removes most of the load's effect, not all:
+  shared caches make each CPU second worth less under load (395 vs 688 leaves), so runs should
+  still use no more workers than free cores, and report the machine's load.
+
 ## 4. Experiments and results
 
 ### E-1 (2026-10-13) Exact search on the hand-checked cases (M5)
