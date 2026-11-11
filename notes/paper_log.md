@@ -1127,6 +1127,23 @@ Format: date · decision · alternatives considered · why · evidence.
   was added after the first try (on val_emrcm-0001 it took the novel count from 9 to 0 in one
   run); the finisher alone cost the same as the best run on all 4 problems where the search won.
 
+- **D-77 (2026-11-11) Fair time for the search alone on s4-s5 (E-75, E-77).** User: drop the
+  4 runs only if the search does not lose performance; find the root cause and fix it. E-77:
+  the search alone loses to the runs on 10 of 82 val s4-s5 problems (0.7% / 2.7%), starved of
+  leaves, against runs that took up to 15,223 s. User: "yea we can test it". **Run:** method-v2
+  (A3, `finisher=switch`) with a 3,600 s search on `val_s4_v2` and `val_s5_v2` (82), fluid;
+  the 4 runs are recomputed as the reference; the trace gives the search alone at 900 s too.
+  **Bar, fixed before the run:** at 3,600 s the search alone is dearer than the best run on at
+  most 2 of 82 problems. **Pass:** the losses were time; the search alone becomes the method
+  candidate with the longer budget on big problems. **Fail:** the next lever is a faster
+  finisher on many-target problems.
+  *Same day, before the run:* coe9 is full (another user's GROMACS jobs, ~36 cores, running
+  for 5-31 h), and a clock-bound search on a loaded machine is not a fair test. Run first on
+  the 10 problems where A3's search lost (E-77), search only (A3's recorded best run as the
+  reference; the runs are deterministic), 3 workers to fit the free cores, 3,600 s. The other
+  72 already tie or beat the runs at 900 s. Bar unchanged in spirit: at most 2 of the 10 still
+  dearer than the best run.
+
 ## 4. Experiments and results
 
 ### E-1 (2026-10-13) Exact search on the hand-checked cases (M5)
@@ -1905,6 +1922,85 @@ MRCM's intermediates on val_s2: 4 of 28 covered (chain D4), 5 of 28 (premix D3).
   (an exact lower bound on mixes left, or a constructive method's recipes, which is a planner
   again). (3) Built as SPEC 0.28 `hint_source: problem` (depth-4 chain in the recipe columns)
   for a copy-test comparison on stages 1–2 against the planner's hints.
+
+### E-78 (2026-11-11) The unexpected-moves check (D-76): the story holds
+`outputs/novel/novel.jsonl` (coe9, commit 867226f, method-v2 search, 900 s), 321 of 322 val
+problems (val_s5-041 still running; its planner run takes hours), summarised with
+`novel_check.py summary=`. Reference = best of the 4 runs and the finisher alone.
+- **Search cheaper than the reference on 211 of 321; 192 of them (91%) hold a novel reused
+  intermediate, against 2 of 98 ties (2%).** 123 of the 211 hold one that feeds 2+ later
+  mixes (a shared novel intermediate).
+- By set (cheaper / with novel (shared) / ties with novel): `val_emrcm_v1` 78 / 70 (37) / 1 of
+  41; s1 20 / 20 (11) / 0 of 20; s2 27 / 26 (14) / 0 of 13; s3 27 / 21 (16) / 0 of 13; s4 30 /
+  30 (26) / 0 of 1; s5 29 / 25 (19) / 1 of 10.
+- **Mean gain over the reference:** 19.7% where a novel intermediate is used, 4.8% where not
+  (emrcm 26.1% / 9.6%, s2 23.7% / 6.0%, s3 14.3% / 0.4%, s5 16.0% / 1.4%, s4 8.5%).
+- **Largest gains** are 3-fluid single-target mixtures at 1/512: val_emrcm-0018 122 vs 671
+  (the runs and the finisher alone), val_emrcm-0009 146 vs 749, val_emrcm-0007 147 vs 734;
+  e.g. val_emrcm-0007 makes (1, 2, 1)/4 x4 and uses it in 3 later mixes. val_s2-019 189 vs 520.
+- **Reading (D-76):** the story holds (91% vs 2%). **Caveat:** "novel" is partly tied to "a
+  different plan" (a tie usually means the same plan), so the contrast with ties is weak
+  evidence on its own; the stronger facts are the size of the gains where novel
+  intermediates appear and that 58% of the wins reuse one in 2+ mixes. Open next: whether the
+  planner's recipe space can make these compositions at all (if not, the planner cannot find
+  them by construction), and an ablation (ban a novel intermediate, re-plan, cost rises).
+  Figure candidate: val_emrcm-0007 or -0018, planner's plan vs the search's.
+
+### E-77 (2026-11-11) Why the search alone loses to the 4 runs on s4-s5: starved and out-timed
+Pilot A3 records (E-74, `outputs/bench/pilot_a3.jsonl`, val, fluid), offline. User: do not
+drop the runs at a loss; find the root cause and fix the search. Per problem where the search
+alone (its trace) is dearer than the best of the 4 runs:
+- **val_s4_v2: 7 of 40, mean excess 0.7%** (largest 2.2%); **val_s5_v2: 3 of 42, 2.7%**
+  (largest 6.1%); none on val s3 or `val_emrcm_v1` (E-72's counts).
+- **Winning run:** `share_mrcm_look3` (lookahead over MRCM's trees) 7 of 10, `share_orders`
+  2, `share_look3` 1. Target order is not the main cause; recipe lookahead is.
+- **The winners had far more time:** median 112 s (s4) and 2,294 s (s5), up to 15,223 s
+  (val_s5-041), against the search's 900 s.
+- **The search was starved:** 1-40 leaves on most of these (val_s5-041 1 leaf, val_s4-036 2,
+  val_s4-025 29, val_s5-038 30); all have T 3-10, mostly 7-10. A3's switch fired on 4 of 10.
+  Its best plan came late (median 352 s / 827 s), some after 900 s (an uninterruptible finish).
+- **Reading:** the same cause as N 4-5 (E-67): on many-target problems each greedy MRCM finish
+  takes seconds to minutes, so the search gets a few dozen tries, and the one run that beats it
+  is the slowest run with the most time. Not a flaw of the search's moves. Candidate fixes:
+  equal time (give the search the time the winning run took) and a faster finisher there.
+
+### E-76 (2026-11-11) How low can the time go? The search alone from 1 s to 900 s (B1 records)
+B1 records (E-64, method-v1, coe9 under load), offline: the search alone's cheapest plan by t
+(its trace, timed from its own start), at t = 1-900 s. Ratios only over problems with a plan
+by t; "no plan" = problems without one yet.
+- **Against the published methods (own goal):** beats DFM, Generic, FacDA, MRCM, e-MRCM and
+  DFMM at every t from 1 s (e.g. MRCM 0.927 at 1 s, 0.909 at 20 s, 0.902 at 60 s, 0.890 at
+  900 s). **NFSP: loses below 20 s** (1.064 at 1 s, 1.049 at 10 s), **level from 20 s** (1.032).
+  Every problem in these comparisons has a plan by 20 s under steps and fluid; under waste
+  (DFMM's 113) 13 still have none at 20 s, 8 at 30 s, 0 at 60 s.
+- **Against the best of the 4 runs, fluid:** s1 0.884 at 10 s (all with a plan), 0.868 at
+  900 s; s2 0.945 at 20 s with 16 of 100 still without a plan, all by 60 s (0.927), 0.882 at
+  900 s; **s3: 11 of 100 still without a plan at 60 s, 2 at 120 s, 0 by 300 s** (0.928 at 900 s).
+- **Reading:** the published verdicts hold from 20 s (60 s under waste). The floor is set by
+  the time to the **first** plan, not by improvement: the search's first plan is the root's
+  greedy MRCM finish, which also fills MRCM's cache and is slow on some s2-s3 problems (and on
+  4-5-fluid mixtures, E-67). A plain-pass plan at the start (milliseconds) would remove the gap.
+
+### E-75 (2026-11-11) The search alone carries every published-method verdict; the 4 runs only matter on s4, s5, held-out
+B1 records (E-64, `outputs/bench/b1.jsonl`, coe9, method-v1), offline. User: "take 5
+heuristics ... made a portfolio and take the min, it aint smth that great". Search alone =
+cheapest plan in the search's trace by 900 s (no planner runs); against each published
+method under its own goal, D-69's rule, next to the full method (search + 4 runs):
+- **Identical on every row:** DFM (steps, 88) 0.809 beats; Generic (steps, 90) 0.722 beats;
+  FacDA (fluid, 88) 0.827 beats; MRCM (fluid, 122) 0.890 beats; e-MRCM (fluid, 133) 0.876
+  beats; NFSP (fluid, 80) 1.009 [0.980, 1.044] level; DFMM (waste, 113) 0.639 beats. The
+  published methods accept mostly small problems, where the runs add nothing.
+- **Where the 4 runs matter (search alone dearer than the best run, count, mean excess on
+  those):** s1, s2: 0; s3: waste 6 of 100 (under 0.1%); s4: fluid 17 of 97 (1.4%), steps 18
+  (5.3%), waste 21 (25.4%); s5: fluid 7 of 104 (2.7%), steps 13 (6.6%), waste 10 (12.0%);
+  held-out: fluid 27 of 100 (1.3%), steps 25 (3.8%), waste 24 (26.5%). Waste ratios are large
+  because waste costs are small numbers (E-65).
+- **Reading:** no claim against a published method needs the portfolio. Dropping it costs
+  1-3% fluid and 4-7% steps on a fifth of the big problems, more under waste; nobody else has
+  plans there to compare. Whether the method becomes the search alone is the user's call.
+- **Same at 60 s** (search alone by 60 s vs the full method by 900 s): DFM 0.809, Generic
+  0.722, FacDA 0.832, MRCM 0.902, e-MRCM 0.888, DFMM 0.680 (10 losses, was 6), all beats;
+  NFSP 1.024 [0.990, 1.064] level (14 losses, was 11). Every verdict holds at 60 s.
 
 ### E-74 (2026-11-11) Pilot A3 (D-75): passes; one finisher per problem keeps v1 and most of A's gain
 `outputs/bench/pilot_a3.jsonl` (coe9, 18 workers, commit c25dc2d, SPEC 0.41), the 242

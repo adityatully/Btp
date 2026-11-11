@@ -73,7 +73,7 @@ chats. Last updated 2026-11-03.*
 | Q-131 | On bigger problems, does one planner finish get so slow (median >= 10 s) that the search affords only a few leaves, leaving room for a network? | Closed → E-54: the finish is slow at 40 targets (E-53, median 25.6 s), but the network does not speed the search there (no arm passes D-43; the network alone finishes 1 of 10) |
 | Q-130 | Under the literature's other goals (steps first, waste first), do the planner and the search over it fall short of the optimum, leaving room for a network? | Closed → E-52: no (after the search at most 2.2% of proved problems > 2% above, mean gap <= 2.1%) |
 | Q-129 | Does the network guide the search where our planner is weak at full size (s3-s5 problems where e-MRCM or NFSP beats it)? | Closed → E-51: no (0.754 vs 0.755 at 60 s, 13 problems) |
-| Q-127 | Does the search build intermediate droplets the planner never makes, reused later to cut cost (the "unexpected moves")? | Open; check built 2026-11-11 (D-76, `novel_check.py`), coe9 run on val s1-s5 + val_emrcm |
+| Q-127 | Does the search build intermediate droplets the planner never makes, reused later to cut cost (the "unexpected moves")? | Closed → E-78: yes; 192 of 211 search wins (91%) use a novel reused intermediate (123 shared by 2+ mixes), 2 of 98 ties; gain 19.7% vs 4.8%. Causal checks (recipe space, ablation) open |
 | Q-117 | Does our e-MRCM reproduce the paper's Table III (its gain over MRCM on 2-5 targets)? | No, not under our Eq. 11 reading; closed: e-MRCM is reported as "our reading" (L-7) |
 | Q-118 | What time limit per ILP solve for NFSP on s3-s5 (3 of 20 s3 dilutions hit 60 s)? | Closed: 600 s on the workstation (user, L-8) |
 | Q-72 | Self-imitation if cost stalls near the teacher? | 4.3 |
@@ -755,8 +755,8 @@ The search is never dearer than the planner at its leaves (its first leaf is tha
 plan). With our sharing pass there it is cheaper on 85 of 99 (E-36). Put MRCM there instead, on
 the 13 mixtures where MRCM beats our planner (set B): below MRCM on >= 5 of 13 → it improves MRCM.
 
-**Q-127 Does the search build intermediate droplets the planner never makes?** · **Open → plan
-4.2, plan check after D-54** (user, 2026-11-03)
+**Q-127 Does the search build intermediate droplets the planner never makes?** · **Closed → E-78** (opened as plan
+4.2, plan check after D-54; user, 2026-11-03)
 The search beats the best planner on 85 of 99 full-size problems (E-36) and reaches proved optima
 the planner misses, where the optimum builds two intermediates and blends them (E-17, E-33).
 The search records keep costs, not plans, so which droplets it makes has never been looked at.
@@ -765,6 +765,9 @@ a later step (e.g. 4 moves on) reuses.
 *2026-11-11 (D-76):* built as `scripts/novel_check.py` with method-v2 (A3): novel = made by
 none of the 4 runs nor the finisher alone, reused = a later mix takes from it; reading fixed
 in D-76. Run on coe9 on val s1-s5 v2 and `val_emrcm_v1`.
+*2026-11-11 (E-78):* yes. Of 211 problems where the search beats the 4 runs and its finisher
+alone, 192 (91%) use a novel reused intermediate, 123 of them shared by 2+ mixes; 2 of 98 ties.
+Mean gain 19.7% with, 4.8% without. Caveat and causal follow-ups in E-78.
 
 **Q-126 Can a value head rank sibling moves with the moves in view, or trained to rank?** ·
 **Closed → E-50: closer, not enough** (user, 2026-11-03; closed 2026-11-03: the ranking loss
