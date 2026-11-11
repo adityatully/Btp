@@ -59,7 +59,7 @@ chats. Last updated 2026-11-03.*
 | Q-128 | Does the search improve a published planner (MRCM) put at its leaves, as it improves ours? | Closed → E-55: yes, below MRCM on 7 of 13 of set B (bar 5), 5.1% below on average |
 | Q-144 | How do we count the 4 planner runs' time: one after another (serial, today), side by side (parallel), or the search beside them too (E-71)? | Open, the user's call; E-71: parallel takes no-plan-by-900 s from 97 to 0, costs within 1% |
 | Q-143 | Can the search drop the 4 planner runs if the planner's decisions are moves in it (planner jumps, E-68)? | Closed → E-70: no; v3 fails both bars (dearer than the runs on 10.3%, bar 2%; 1.054 of v1), and jumps slow the search |
-| Q-142 | Why is our method 5-9x the bound on 4-5-fluid mixtures at 1/512, and why does DFMM beat it on 660 of 2,046 (E-66)? | Open: bound loose there (DFMM also 5-6x) and the search adds ~nothing over the planner at N 4-5 (E-67); cause: the finisher is too slow, so few leaves (E-67); pilot A (D-72, E-69): 11% cheaper at N 4-5 and DFMM losses 41 → 23 of 60, but the 2 s switch fires on N3 and s3-s5 too (s5 fails, N3 26% dearer); no time limit separates the groups; pilot A2 (D-74, E-72) fails the same way (N 4-5 0.884, N3 1.244, s5 1.034): mixing finishers in one tree loses v1's quality where MRCM is better; E-73 offline: one finisher per problem by MRCM's average time keeps the gain, level elsewhere; pilot A3 (D-75) |
+| Q-142 | Why is our method 5-9x the bound on 4-5-fluid mixtures at 1/512, and why does DFMM beat it on 660 of 2,046 (E-66)? | Closed → E-74: the bound is loose there (DFMM also 5-6x) and the MRCM finisher was too slow for the search (E-67); A3 (one finisher per problem, D-75) is 7.3% cheaper at N 4-5, DFMM losses 41 → 30 of 60, level elsewhere; A3 is method-v2 |
 | Q-141 | Which of the 13 unbuilt methods in the folder do we build, and in what order (L-9)? | Closed → L-10 to L-18: all built, one by one (user); Dong collapses to one mix per droplet in our engine, Fukui and SIMOP partly reproduced |
 | Q-140 | Why does our method end dearer than our own planner on 27 of 100 held-out and 17 of 100 s4 test problems (E-64)? | Closed → F-18: a reporting error (`bench.py` read the search alone); fixed, B1/B2 to be re-summarised on coe9 |
 | Q-139 | What time budget does our method get in the paper's headline tables (900 s, or a smaller fixed budget with 900 s as an extra column)? | Both reported (60 s and 900 s, user 2026-11-07); which one heads the tables is Tom's call |
@@ -73,7 +73,7 @@ chats. Last updated 2026-11-03.*
 | Q-131 | On bigger problems, does one planner finish get so slow (median >= 10 s) that the search affords only a few leaves, leaving room for a network? | Closed → E-54: the finish is slow at 40 targets (E-53, median 25.6 s), but the network does not speed the search there (no arm passes D-43; the network alone finishes 1 of 10) |
 | Q-130 | Under the literature's other goals (steps first, waste first), do the planner and the search over it fall short of the optimum, leaving room for a network? | Closed → E-52: no (after the search at most 2.2% of proved problems > 2% above, mean gap <= 2.1%) |
 | Q-129 | Does the network guide the search where our planner is weak at full size (s3-s5 problems where e-MRCM or NFSP beats it)? | Closed → E-51: no (0.754 vs 0.755 at 60 s, 13 problems) |
-| Q-127 | Does the search build intermediate droplets the planner never makes, reused later to cut cost (the "unexpected moves")? | Plan check after D-54, plan 4.2 |
+| Q-127 | Does the search build intermediate droplets the planner never makes, reused later to cut cost (the "unexpected moves")? | Open; check built 2026-11-11 (D-76, `novel_check.py`), coe9 run on val s1-s5 + val_emrcm |
 | Q-117 | Does our e-MRCM reproduce the paper's Table III (its gain over MRCM on 2-5 targets)? | No, not under our Eq. 11 reading; closed: e-MRCM is reported as "our reading" (L-7) |
 | Q-118 | What time limit per ILP solve for NFSP on s3-s5 (3 of 20 s3 dilutions hit 60 s)? | Closed: 600 s on the workstation (user, L-8) |
 | Q-72 | Self-imitation if cost stalls near the teacher? | 4.3 |
@@ -638,7 +638,7 @@ moves as jumps in the search, besides single actions; bar in D-73.
 
 *2026-11-10 (E-70):* no. v3 fails both of D-73's bars (dearer than the runs on 25 of 242, 10.3%; search alone / v1's method 1.054 [1.024, 1.088]); against A, jumps cut no losses (25 vs 26) and slow the search (N 4-5 leaves 114 vs 7,183). The 4 runs stay.
 
-**Q-142 Our method on 4-5-fluid mixtures at 1/512 (E-66)?** · Open
+**Q-142 Our method on 4-5-fluid mixtures at 1/512 (E-66)?** · Closed → E-74
 (2026-11-09) On e-MRCM's protocol our method is 5.4-9.3x the bound at N 4-5 (1.0-1.3 at N 2,
 1.7 at N 3), and DFMM beats it on 660 of the 2,046 problems DFMM accepts. Is the bound loose
 there, or are our plans poor? First step: the losses to DFMM and ours/bound by N-T from the
@@ -651,6 +651,7 @@ Same day: few leaves. At the time cap it has finished 105 (N4-T1) and 28 (N5-T1)
 finisher there would change method-v1: the user's call. User chose pilot A (D-72): finisher by
 speed, tested on the new `val_emrcm_v1` and stages 3-5 val.
 *2026-11-10 (E-69):* pilot A passes at N 4-5 (A / v1 0.890 [0.866, 0.913], 0 losses; DFMM losses 41 → 23 of 60) but fails on s5 (1.036 [1.005, 1.080]) and is 26% dearer on N3: the 2 s leaf limit also fires where MRCM's finish is fast on average (one slow finish is enough). Next: a switch rule that separates the two (user's call).
+*2026-11-11 (E-74):* closed. A2 failed like A (E-72); one finisher per problem by MRCM's average time (A3, D-75) passes: N 4-5 0.927 of v1, DFMM losses 41 → 30 of 60, N3 / s3 / s4 at or below v1, s5 1.017 (CI touches 1, one problem). A3 is method-v2.
 
 **Q-141 Which unbuilt methods do we build, in what order?** · Closed → L-10 to L-18
 (2026-11-08) The audit (L-9, `notes/lit_bench/coverage_audit.md`) finds 13 methods in the
@@ -761,6 +762,9 @@ the planner misses, where the optimum builds two intermediates and blends them (
 The search records keep costs, not plans, so which droplets it makes has never been looked at.
 Save the plans on set A and part of C; list droplets the planner's plan never makes, and those
 a later step (e.g. 4 moves on) reuses.
+*2026-11-11 (D-76):* built as `scripts/novel_check.py` with method-v2 (A3): novel = made by
+none of the 4 runs nor the finisher alone, reused = a later mix takes from it; reading fixed
+in D-76. Run on coe9 on val s1-s5 v2 and `val_emrcm_v1`.
 
 **Q-126 Can a value head rank sibling moves with the moves in view, or trained to rank?** ·
 **Closed → E-50: closer, not enough** (user, 2026-11-03; closed 2026-11-03: the ranking loss

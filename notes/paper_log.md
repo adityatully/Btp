@@ -1108,6 +1108,25 @@ Format: date · decision · alternatives considered · why · evidence.
   coe9 pilot keeps 20 s, the value E-73 found under coe9's load. A machine-free form (switch
   when MRCM's projected leaves in the budget fall below some count) is noted for method-v2.
 
+- **D-76 (2026-11-11) The "unexpected moves" check (Q-127).** User: the method "still is
+  feeling about best of 5", the planner cannot make AlphaGo-style unexpected intermediates,
+  the search has no prior and its finisher is greedy: "how is everything adding up?". Whether
+  the search's plans hold intermediates the planner never makes was queued since 2026-11-03
+  and never measured. User: "proceed". **Check** (`scripts/novel_check.py`): per problem, the
+  4 planner runs, the search's finisher alone from the empty chip, and method-v2's search
+  (A3, `switch`, 900 s, 256 sims), plans kept and replayed. An **intermediate** is a droplet a
+  mix makes and no output delivers; a search intermediate is **novel** if its exact
+  composition is made by none of the 4 runs nor by the finisher alone (else the finisher, not
+  the search, made it), and **reused** if a later mix takes from it; one feeding 2+ later mixes
+  is counted apart (sharing). The reference the search must beat is the best of the 4 runs and
+  the finisher alone. **Problems:** val s1-s5 v2 and `val_emrcm_v1` (322, development only).
+  **Reading, fixed before the run:** the story holds if, on the problems where the search is
+  cheaper than the reference, at least half hold a novel reused intermediate and that share is
+  at least 20 points above the share on ties; otherwise the gains come from ordinary choices
+  made better. *Mac smoke (20 s, 4-6 problems), mechanics only:* the finisher-alone control
+  was added after the first try (on val_emrcm-0001 it took the novel count from 9 to 0 in one
+  run); the finisher alone cost the same as the best run on all 4 problems where the search won.
+
 ## 4. Experiments and results
 
 ### E-1 (2026-10-13) Exact search on the hand-checked cases (M5)
@@ -1886,6 +1905,24 @@ MRCM's intermediates on val_s2: 4 of 28 covered (chain D4), 5 of 28 (premix D3).
   (an exact lower bound on mixes left, or a constructive method's recipes, which is a planner
   again). (3) Built as SPEC 0.28 `hint_source: problem` (depth-4 chain in the recipe columns)
   for a copy-test comparison on stages 1–2 against the planner's hints.
+
+### E-74 (2026-11-11) Pilot A3 (D-75): passes; one finisher per problem keeps v1 and most of A's gain
+`outputs/bench/pilot_a3.jsonl` (coe9, 18 workers, commit c25dc2d, SPEC 0.41), the 242
+problems of E-69, fluid goal, 900 s; against E-69's v1 records (method = cheaper of search and
+the best of the 4 runs).
+- **A3 / v1:** N 4-5 **0.927** [0.904, 0.949], 38 / 52 / 0; DFMM losses 41 → 30 of 60 (A2 23).
+  N3 0.988 [0.973, 0.999], 5 / 25 / 0; s3 0.998 [0.995, 1.000], 2 / 38 / 0; s4 0.995 [0.989,
+  1.000], 6 / 32 / 2; s5 1.017 [1.000, 1.050], 1 / 40 / 1.
+- **Switches:** N 4-5 57 of 90 (median at leaf 2); N3 0 of 30; s3 1 of 40; s4 4; s5 6. Mean
+  leaves v1 / A2 / A3: N 4-5 34 / 7,214 / 3,357; N3 1,324 / 4,054 / 1,982.
+- **Losses vs v1:** 3 in all (s4 2: one switched, one not; s5 1: switched). The wins where
+  nothing switched (N3 5, s3 2) are run-to-run noise (search on a clock, other load), about
+  1%.
+- **Reading:** by D-75's bar A3 passes (N 4-5 below 0.98 with CI below 1 and fewer DFMM
+  losses; N3, s3, s4 at or below 1; s5's CI touches 1, resting on one problem). A3 is
+  method-v2. It leaves part of A2's gain (0.927 vs 0.884): 33 of 90 N 4-5 problems ran MRCM
+  under 20 s a leaf on this run's load and did not switch. The switch is machine- and
+  load-dependent (D-75's Mac trial); a budget-based form is the open refinement.
 
 ### E-73 (2026-11-10) One finisher per problem, by MRCM's average time: offline check
 Pilot records of E-69 / E-72 (coe9), no rerun. Rule tried: per problem, v1 (greedy MRCM at
