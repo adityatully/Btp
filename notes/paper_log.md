@@ -1158,6 +1158,26 @@ Format: date · decision · alternatives considered · why · evidence.
   shared caches make each CPU second worth less under load (395 vs 688 leaves), so runs should
   still use no more workers than free cores, and report the machine's load.
 
+- **D-79 (2026-11-11) Method-v3: the search alone, built (not yet frozen).** E-75: the search
+  alone carries every published-method verdict; E-78: its wins come with novel shared
+  intermediates; the user found the "best of 5" weak ("take 5 heuristics ... take the min, it
+  aint smth that great") but asked not to give up performance on s4-s5 (D-77 decides).
+  User: "proceed ... start building". **Method-v3** (`bench.METHOD`): the flat-prior search
+  alone, 256 sims, A3's `switch` finisher, CPU-time budget (D-78), and a **first plan**: the
+  plain sharing pass from the empty chip before the root, so every problem has a plan at once
+  (E-76: without the 4 runs, the root's MRCM finish left some s2-s3 problems without a plan
+  for up to 300 s). The root's own finish still sets the score's scale, so the search itself
+  is unchanged. The 4 runs stay in every record as baselines with their own times (so Q-144's
+  serial-or-parallel question no longer applies to our method). Each record also holds the
+  novel reused intermediates (E-78's test, against the 4 runs' plans and the root finish).
+  `reuse=` takes the answer key (bound, exact search, the published methods already run) from
+  earlier records, so the final runs compute only our method, the 4 runs and the 9 new
+  published methods. Not frozen: the budget on big problems waits for D-77.
+  *Mac trial (30 s, B1 answer keys reused, 3 problems):* test_s1-000 first plan 276 at 0.005 s,
+  ours 80 (best run 145), 1 novel of 3; test_s3-000 first 1,237, ours 1,236 (= best run);
+  test_s4-000 first plan at 3.1 s (the plain pass is seconds, not milliseconds, at T 7-10),
+  ours 1,516 vs best run 1,328 at 30 s (the D-77 question).
+
 ## 4. Experiments and results
 
 ### E-1 (2026-10-13) Exact search on the hand-checked cases (M5)
@@ -1938,10 +1958,11 @@ MRCM's intermediates on val_s2: 4 of 28 covered (chain D4), 5 of 28 (premix D3).
   for a copy-test comparison on stages 1–2 against the planner's hints.
 
 ### E-78 (2026-11-11) The unexpected-moves check (D-76): the story holds
-`outputs/novel/novel.jsonl` (coe9, commit 867226f, method-v2 search, 900 s), 321 of 322 val
-problems (val_s5-041 still running; its planner run takes hours), summarised with
-`novel_check.py summary=`. Reference = best of the 4 runs and the finisher alone.
-- **Search cheaper than the reference on 211 of 321; 192 of them (91%) hold a novel reused
+`outputs/novel/novel.jsonl` (coe9, commit 867226f, method-v2 search, 900 s, wall clock), all
+322 val problems, summarised with `novel_check.py summary=` (val_s5-041, the last, finished
+2026-11-11 and changes no count: the search is dearer than the reference there; 13 of 322 are
+dearer, 98 tie, 211 cheaper). Reference = best of the 4 runs and the finisher alone.
+- **Search cheaper than the reference on 211 of 322; 192 of them (91%) hold a novel reused
   intermediate, against 2 of 98 ties (2%).** 123 of the 211 hold one that feeds 2+ later
   mixes (a shared novel intermediate).
 - By set (cheaper / with novel (shared) / ties with novel): `val_emrcm_v1` 78 / 70 (37) / 1 of
