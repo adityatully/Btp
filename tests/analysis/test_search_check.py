@@ -454,6 +454,19 @@ def test_switch_finisher_leaves_out_the_root_and_switches_on_the_average() -> No
     assert rec["search_cost"] is not None
 
 
+def test_the_search_budget_is_cpu_time(monkeypatch: pytest.MonkeyPatch) -> None:
+    """D-78: the search's budget runs on `CLOCK` (this process's CPU time). With a clock that
+    jumps 100 s a reading, a 10 s search stops after its first leaf, however long the wall
+    clock says it took."""
+    assert SC.CLOCK is SC.time.process_time
+    ticks = iter(range(0, 10**9, 100))
+    monkeypatch.setattr(SC, "CLOCK", lambda: float(next(ticks)))
+    task = SC.tasks({"C"}, 1)[0]
+    rec = SC.run_task(task, "uniform", 256, OPTS | {"seconds": 10.0}, "share_mrcm")
+    assert rec["leaves"] <= 2 and rec["search_cost"] is not None
+    assert all(s % 100 == 0 for s, _ in rec["trace"])
+
+
 def test_planner_jumps_hold_the_planners_first_decision() -> None:
     """D-73: from the empty chip the jumps include the plain planner's first delivery group,
     one run of actions per (target, candidate), each longer than one action."""

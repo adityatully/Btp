@@ -211,14 +211,14 @@ def run_task(task: dict[str, Any], opts: dict[str, Any]) -> dict[str, Any]:
     out["bound"], out["construction"] = float(root.lower_bound), float(root.cost)
     optimum: Rational | None = root.cost if root.cost == root.lower_bound else None
     if optimum is None and opts["exact_seconds"] > 0:  # seeded with the construction only
-        t0 = time.perf_counter()
+        t0 = sc.CLOCK()
         plan, cost, st = ExactSearch(w).search(
             inst, SolveBudget(max_seconds=opts["exact_seconds"], max_nodes=opts["exact_nodes"])
         )
         out["exact"] = {
             "status": "timeout" if st.stopped else "optimal",
             "nodes": st.nodes_expanded,
-            "seconds": round(time.perf_counter() - t0, 1),
+            "seconds": round(sc.CLOCK() - t0, 1),
         }
         if not st.stopped and cost is not None:
             optimum = cost
@@ -232,14 +232,14 @@ def run_task(task: dict[str, Any], opts: dict[str, Any]) -> dict[str, Any]:
         for name, make in PUBLISHED.items():
             if name not in opts.get("methods", PUBLISHED):
                 continue
-            t0 = time.perf_counter()
+            t0 = sc.CLOCK()
             try:
-                st_ = stats(inst, name, emit(inst, make(inst)), time.perf_counter() - t0)
+                st_ = stats(inst, name, emit(inst, make(inst)), sc.CLOCK() - t0)
             except NotApplicable as e:
                 st_ = {
                     "cost": None,
                     "na": str(e)[:200],
-                    "seconds": round(time.perf_counter() - t0, 3),
+                    "seconds": round(sc.CLOCK() - t0, 3),
                 }
             except (IllegalActionError, ValueError, AssertionError) as e:  # recorded, never hidden
                 st_ = {"cost": None, "error": f"{type(e).__name__}: {e}"[:200]}
@@ -258,8 +258,8 @@ def run_task(task: dict[str, Any], opts: dict[str, Any]) -> dict[str, Any]:
     }
     out["planners"] = {}
     for name, make in makers.items():
-        t0 = time.perf_counter()
-        out["planners"][name] = stats(inst, name, make(), time.perf_counter() - t0)
+        t0 = sc.CLOCK()
+        out["planners"][name] = stats(inst, name, make(), sc.CLOCK() - t0)
         _check(rid, name, goal, out["planners"][name])
     found = [(_cost(s, goal), n) for n, s in out["planners"].items() if _cost(s, goal) is not None]
     out["best_planner"] = min(found)[0] if found else None
@@ -291,7 +291,7 @@ def run_task(task: dict[str, Any], opts: dict[str, Any]) -> dict[str, Any]:
         "switch_min_leaves": opts.get("switch_min_leaves", sc.SWITCH_MIN_LEAVES),
     }
     finisher = opts.get("finisher", METHOD["finisher"])
-    out["method"] = {**METHOD, "finisher": finisher, "jumps": opts.get("jumps", 0)}
+    out["method"] = {**METHOD, "finisher": finisher, "jumps": opts.get("jumps", 0), "clock": "cpu"}
     rec = sc.run_task(task_, METHOD["search"], opts["sims"], sopts, finisher)
     plan = rec["plan"]
     ours = stats(inst, "method", plan, rec["search_seconds"]) if plan else {"cost": None}

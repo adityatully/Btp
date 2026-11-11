@@ -25,7 +25,6 @@ from __future__ import annotations
 
 import json
 import sys
-import time
 from collections import defaultdict
 from multiprocessing import Pool
 from pathlib import Path
@@ -97,15 +96,15 @@ def run_task(task: dict[str, Any], opts: dict[str, Any]) -> dict[str, Any]:
     plans, costs, secs = {}, {}, {}
     # The search's own finisher run alone from the empty chip: not a planner run, so its
     # intermediates are not the search's doing either (they would be the finisher's)
-    t0 = time.perf_counter()
+    t0 = sc.CLOCK()
     alone = sc.StrongFinish(inst, lookahead=0)(PrepState.initial(inst))
-    secs["finisher_alone"] = round(time.perf_counter() - t0, 3)
+    secs["finisher_alone"] = round(sc.CLOCK() - t0, 3)
     finisher_plan = alone[0] if alone is not None else None
     finisher_cost = float(alone[1]) if alone is not None else None
     for name, make in makers.items():
-        t0 = time.perf_counter()
+        t0 = sc.CLOCK()
         plan = make()
-        secs[name] = round(time.perf_counter() - t0, 3)
+        secs[name] = round(sc.CLOCK() - t0, 3)
         if plan is not None:
             plans[name] = plan
             costs[name] = hs.plan_stats(inst, name, plan, 0.0)["cost"]

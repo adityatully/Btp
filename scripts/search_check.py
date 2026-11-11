@@ -174,6 +174,10 @@ C_PUCT = 1.5
 # ~0.5 s a leaf, where the search works; N = 4 ~9 s, where it starves); the root's finish
 # also fills MRCM's cache, so it gets AUTO_ROOT_LIMIT (Mac, val_emrcm_v1: N3-T1 37 s, N4-T1
 # 42 s, N5-T1 73 s, N4-T3 301 s, N5-T3 378 s; the plain pass 0.01-1.2 s)
+# D-78: every time budget and timing of a search, finisher or planner run is CPU time used by
+# this process, not wall time, so other jobs on a shared machine slow a run down without
+# changing its result (coe9, 2026-11-11: ~37 of 40 cores taken by other users)
+CLOCK = time.process_time
 AUTO_LIMIT, AUTO_ROOT_LIMIT = 2.0, 60.0
 # D-74 (pilot A2), fixed before the coe9 run: greedy MRCM checks leaves besides the plain
 # pass while it has used at most this share of the search's time
@@ -406,7 +410,7 @@ class Search:
         self.rng = rng  # breaks ties at random; without it ties go in candidate order (E-33)
         self.best: tuple[float, tuple[Action, ...], int] | None = None  # cost, plan, tail
         # (seconds, cost) each time the cheapest whole plan improves: the race of D-43
-        self.t0 = time.perf_counter()
+        self.t0 = CLOCK()
         self.trace: list[tuple[float, float]] = []
         self.c0 = 1.0
         self.leaves = 0
@@ -434,7 +438,7 @@ class Search:
     def _offer(self, cost: float, actions: tuple[Action, ...], tail: int = 0) -> None:
         if self.best is None or cost < self.best[0]:
             self.best = (cost, actions, tail)
-            self.trace.append((round(time.perf_counter() - self.t0, 3), cost))
+            self.trace.append((round(CLOCK() - self.t0, 3), cost))
 
     def leaf(self, obs: dict[str, Any], actions: tuple[Action, ...], info: dict | None) -> Node:
         """A node for the env's current state: its prior and its value."""
@@ -547,7 +551,7 @@ class Search:
         capped = False
         while not root.terminal:
             for _ in range(sims):
-                if time.perf_counter() > self.deadline:
+                if CLOCK() > self.deadline:
                     capped = True
                     break
                 self.simulate(root)
@@ -662,9 +666,9 @@ class AutoFinish:
         self.calls += 1
         if self.mode == "share":
             return self._plain(state)
-        t0 = time.perf_counter()
+        t0 = CLOCK()
         found = self.mrcm(state)
-        took = time.perf_counter() - t0
+        took = CLOCK() - t0
         if self.calls == 1:
             self.root_seconds = round(took, 3)
         if took <= (self.root_limit if self.calls == 1 else self.limit):
@@ -695,7 +699,7 @@ class TieredFinish:
         self.mrcm = mrcm if mrcm is not None else StrongFinish(inst, lookahead=0)
         self.fails = self.mrcm.fails
         self.mode = "tiered"
-        self.start = time.perf_counter()
+        self.start = CLOCK()
         self.mrcm_seconds = 0.0
         self.mrcm_calls = self.mrcm_wins = self.calls = 0
         self.root_seconds: float | None = None
@@ -705,12 +709,12 @@ class TieredFinish:
         plain = finish_from(state, self.inst, WEIGHTS)
         if plain is None:
             self.fails["no order finishes"] = self.fails.get("no order finishes", 0) + 1
-        elapsed = time.perf_counter() - self.start
+        elapsed = CLOCK() - self.start
         if self.calls > 1 and self.mrcm_seconds > self.share * elapsed:
             return plain
-        t0 = time.perf_counter()
+        t0 = CLOCK()
         found = self.mrcm(state)
-        took = time.perf_counter() - t0
+        took = CLOCK() - t0
         self.mrcm_seconds += took
         self.mrcm_calls += 1
         if self.calls == 1:
@@ -748,9 +752,9 @@ class SwitchFinish:
         self.calls += 1
         if self.tiered is not None:
             return self.tiered(state)
-        t0 = time.perf_counter()
+        t0 = CLOCK()
         found = self.mrcm(state)
-        took = time.perf_counter() - t0
+        took = CLOCK() - t0
         if self.calls == 1:
             self.root_seconds = round(took, 3)
             return found
@@ -819,17 +823,17 @@ def run_task(
     env = build_env(cfg, [inst])
     task = dict(task)
     if task["planner"] is None:  # set T: the sharing pass from the empty chip, off the clock
-        t0 = time.perf_counter()
+        t0 = CLOCK()
         start = finish_from(PrepState.initial(inst), inst, WEIGHTS)
         if start is None:
             raise RuntimeError(f"{inst.instance_id}: the sharing pass does not finish")
-        task["planner"], task["planner_seconds"] = float(start[1]), time.perf_counter() - t0
+        task["planner"], task["planner_seconds"] = float(start[1]), CLOCK() - t0
     if task["set"] == "W":  # D-66: the new planner, off the clock; skip if it closes the gap
-        t0 = time.perf_counter()
+        t0 = CLOCK()
         new = hs.plan_stats(
             inst, "share_mrcm_look3", share_plan(inst, WEIGHTS, lookahead=3, mrcm=True), 0.0
         )["cost"]
-        task["new_planner"], task["planner_seconds"] = new, time.perf_counter() - t0
+        task["new_planner"], task["planner_seconds"] = new, CLOCK() - t0
         task["old_planner"] = task["planner"]
         if new is not None and new < task["planner"]:
             task["planner"] = new
@@ -842,7 +846,7 @@ def run_task(
                 "search_cost": None,
                 "closed_by_planner": True,
             }
-    t0 = time.perf_counter()
+    t0 = CLOCK()
     finish: (
         MrcmFinish | GraphFinish | StrongFinish | AutoFinish | TieredFinish | SwitchFinish | None
     ) = None
@@ -883,7 +887,7 @@ def run_task(
         jump_share=float(opts.get("jump_share", 0.5)),
     )
     out = search.run(sims)
-    stats = hs.plan_stats(inst, f"search_{kind}", out["plan"], time.perf_counter() - t0)
+    stats = hs.plan_stats(inst, f"search_{kind}", out["plan"], CLOCK() - t0)
     opt, cost = task["optimum"], stats["cost"]
     if opt is not None and cost is not None and cost < opt - 1e-9:  # a bug (rule 9)
         raise RuntimeError(f"{inst.instance_id}: search plan {stats['cost']} < optimum")

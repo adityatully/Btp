@@ -1,6 +1,12 @@
 # MEDA Design Automation — Codebase Specification
 
-Version 0.41 · 2026-11-10
+Version 0.42 · 2026-11-11
+
+Changes in 0.42 (paper log D-78): every time budget and timing in `scripts/search_check.py`
+(the search's deadline and trace, the leaf finishers' switch and share timings, planner and
+published-method timings in `bench.py` and `novel_check.py`) is CPU time used by the process
+(`search_check.CLOCK = time.process_time`), not wall time. `bench.py` records `"clock": "cpu"`
+in `method`. Records from before 0.42 are wall time.
 
 Changes in 0.41 (pilot A3, paper log D-75, E-72, E-73): `scripts/search_check.py` gains the
 `switch` leaf finisher (`SwitchFinish`): greedy MRCM at every leaf (v1) until MRCM's leaf
