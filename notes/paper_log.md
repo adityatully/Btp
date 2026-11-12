@@ -1208,6 +1208,19 @@ Format: date · decision · alternatives considered · why · evidence.
   search's own moves are part of the problem. A pass points to a stronger finish on the final
   plan (or on the best leaves) as the fix.
 
+- **D-82 (2026-11-12) Can the network narrow the search's choices on big problems (E-81)?**
+  E-81: on s4-s5 the tree reaches only 0-2 moves, as each leaf needs a minutes-long finish and
+  every step has dozens of legal moves. User: "do we reintroduce the network for this? just a
+  thought", then "Build the check" (an experiment, not the Q-125 claim decision). The value
+  head cannot rank siblings (E-46, E-47, E-50), so the narrower role tested is the policy head
+  as a filter: the finisher still judges, the network only says which moves to try. **Check**
+  (`scripts/prior_check.py`, round 2's network `copy_v`, offline, CPU): on val s3-s5, run
+  method-v3's search (300 s CPU), keep plans that beat A3's best run, and rank each move the
+  tree chose under the network among all legal moves (s3 as the contrast). **Reading, fixed
+  before the run:** on s4-s5 the network can narrow the choices if the search's moves sit in
+  its top 10% of legal moves at least half the time and in its top 5 on at least half the
+  positions with 50+ legal moves; otherwise the network stays out of the method.
+
 ## 4. Experiments and results
 
 ### E-1 (2026-10-13) Exact search on the hand-checked cases (M5)
