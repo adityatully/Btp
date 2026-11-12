@@ -1,6 +1,14 @@
 # MEDA Design Automation — Codebase Specification
 
-Version 0.43 · 2026-11-11
+Version 0.44 · 2026-11-12
+
+Changes in 0.44 (method-v3 frozen, paper log D-83): no code change. Method-v3 (0.43,
+`bench.METHOD`) is the paper's method for the final runs: the flat-prior search alone, 256
+simulations per move, 900 s of CPU time, A3's `switch` leaf finisher (our sharing planner,
+greedy, with MRCM's trees as extra recipes while fast enough), the plain sharing pass's plan
+before the root. No final lookahead finish. The 4 planner runs are baselines (ablations of our
+own planner), not part of the method. On s4-s5 the search is depth-limited (E-81) and is dearer
+than the best of the 4 runs on a few problems; no published method beats it there (E-51, E-75).
 
 Changes in 0.43 (method-v3, paper log D-79): `scripts/bench.py`'s `METHOD` is method-v3: the
 flat-prior search alone (the 4 planner runs are reported as baselines, not part of the method;
