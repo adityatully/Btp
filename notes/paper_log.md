@@ -1987,6 +1987,25 @@ MRCM's intermediates on val_s2: 4 of 28 covered (chain D4), 5 of 28 (premix D3).
   again). (3) Built as SPEC 0.28 `hint_source: problem` (depth-4 chain in the recipe columns)
   for a copy-test comparison on stages 1–2 against the planner's hints.
 
+### E-81 (2026-11-12) Finisher check (D-81): the tree picks only 0-2 moves of 22-174
+`outputs/bench/finisher.jsonl` on coe9 (`finisher_check.py`, commit 45c08b8, method-v3 search,
+900 s CPU, 10 workers), A3's 10 val s4-s5 losers; 9 done (val_s5-041 still running after 1 h,
+its lookahead-3 finish).
+- **The search chose only 0-2 moves of plans 22-174 steps long** on all 9; the rest is the
+  finisher's. On big problems the method is the finisher plus one or two searched moves.
+- **Lookahead-3 finish of the search's prefix reaches the best run on 4 of 9 (bar 8): fails.**
+  It helps where the best run is `share_mrcm_look3`: s5-038 2,758 vs greedy 3,130 (best run
+  2,780), s5-033 1,691 (= best run), s4-036 964 (best 975), s4-025 2,355 (=). It does not reach
+  the runs that won with other variants: `share_orders` (s4-012 2,607 vs 2,600; s4-017 2,265
+  vs 2,264), `share_look3` without MRCM (s4-010 3,463 vs 3,460), and s4-011 (3,182 vs 3,180),
+  s4-035 (1,930 vs 1,900). Remaining gaps 0.03-1.6%.
+- Lookahead-3 finishes take 8-2,342 s CPU (greedy MRCM 194-313 s on the long ones): one
+  finish costs more than the search's whole budget allows per leaf.
+- **Reading:** the root cause of the s4-s5 losses is depth, not time or one finisher: each
+  leaf needs a full finish (minutes on long plans), so the tree never gets past the first
+  moves, and the plan is only as good as one planner variant, while the best of 4 runs gets
+  four. The greedy finisher is the cause on s5-038 and s5-033 only.
+
 ### E-80 (2026-11-12) Causal check (D-80): the novel intermediates cause the gains
 `outputs/novel/causal.jsonl` on coe9 (`causal_check.py`, commit e1c6492, method-v3 search,
 300 s CPU, 24 workers), 59 of E-78's winning problems with a novel intermediate (up to 10 per
