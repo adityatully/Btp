@@ -2000,6 +2000,21 @@ MRCM's intermediates on val_s2: 4 of 28 covered (chain D4), 5 of 28 (premix D3).
   again). (3) Built as SPEC 0.28 `hint_source: problem` (depth-4 chain in the recipe columns)
   for a copy-test comparison on stages 1–2 against the planner's hints.
 
+### E-82 (2026-11-12) Prior check (D-82): the network cannot pick the search's moves
+`outputs/bench/prior.jsonl` on coe9 (`prior_check.py`, commit a25a1f3, round 2's network
+`copy_v`, method-v3 search 300 s CPU, 24 workers), val s3-s5 (122), fluid, A3's best run as
+the reference.
+- **Search beats the best run at 300 s on 54 of 82 s4-s5** (s4 25/40, s5 29/42; s3 25/40).
+- **Ranks of the tree's moves under the network (s4-s5, 147 moves):** median rank 6 of a
+  median 34 legal moves; **in its top 10% on 48 of 147 (33%; a flat prior gives 10%)**; in its
+  top 5 on **13 of 55** positions with 50+ legal moves (24%). By set, top 10%: s3 17/49,
+  s4 13/57, s5 35/90.
+- **Reading (D-82): fails** (bar: half and half). The network is about 3x better than flat
+  but would have to keep a third or more of the moves to keep most of the search's winners:
+  a 2-3x narrowing at best, against leaves that cost minutes each. It stays out of the method.
+- Aside: even on s3 and s5 the tree contributes about 2-3 moves per winning plan (49 moves on
+  25 s3 wins, 90 on 29 s5 wins).
+
 ### E-81 (2026-11-12) Finisher check (D-81): the tree picks only 0-2 moves of 22-174
 `outputs/bench/finisher.jsonl` on coe9 (`finisher_check.py`, commit 45c08b8, method-v3 search,
 900 s CPU, 10 workers), A3's 10 val s4-s5 losers; 9 done (val_s5-041 still running after 1 h,
