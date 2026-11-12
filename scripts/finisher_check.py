@@ -63,7 +63,7 @@ def losers(records: Path) -> dict[str, dict[str, Any]]:
             continue
         a = alone(r)
         if a is not None and a > r["best_planner"] + 1e-9:
-            costs = {n: s.get("cost") for n, s in r["planners"].items()}
+            costs = {n: (s.get("by_goal") or {}).get("fluid") for n, s in r["planners"].items()}
             won = min((c, n) for n, c in costs.items() if c is not None)[1]
             secs = {n: s.get("seconds") for n, s in r["planners"].items()}
             out[r["id"]] = {

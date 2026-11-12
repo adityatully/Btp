@@ -34,8 +34,8 @@ def _bench(rid: str, s: str, best: float, trace: list[float]) -> dict:
         "goal": "fluid",
         "best_planner": best,
         "planners": {
-            "share": {"cost": best + 5, "seconds": 1.0},
-            "share_mrcm_look3": {"cost": best, "seconds": 9.0},
+            "share": {"by_goal": {"fluid": best + 5}, "seconds": 1.0},
+            "share_mrcm_look3": {"by_goal": {"fluid": best}, "seconds": 9.0},
         },
         "ours": {"trace": [[i, c] for i, c in enumerate(trace)]},
     }
