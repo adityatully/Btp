@@ -1221,6 +1221,19 @@ Format: date · decision · alternatives considered · why · evidence.
   its top 10% of legal moves at least half the time and in its top 5 on at least half the
   positions with 50+ legal moves; otherwise the network stays out of the method.
 
+- **D-83 (2026-11-12) Method-v3 frozen (SPEC 0.44).** E-79 (an hour does not fix the s4-s5
+  losses), E-81 (the cause is depth: the tree picks 0-2 moves of 22-174, the rest is one
+  planner variant), E-82 (the network cannot narrow the moves). On s4-s5 every loss is to one
+  of our own planner variants, not a published method (few apply there: E-51; every
+  published-method verdict holds without the runs: E-75); the search still beats the best run
+  on about 2 of 3 s4-s5 problems (E-78, E-82). User: "we can fix the method". **Method-v3 as
+  built in D-79**, 900 s CPU on every set, no final lookahead finish (it would fix 2 of E-81's
+  9, at up to 2,342 s more CPU after the budget; offered as a note, not part of the method).
+  The 4 runs are reported as ablations of our own planner. Reported limit: on long plans the
+  search is depth-limited and up to ~2% dearer than the best planner variant on a few
+  problems. D-77 closed by E-79 and E-81. Next: the final runs B1-B3 with all published
+  methods and `reuse=`.
+
 ## 4. Experiments and results
 
 ### E-1 (2026-10-13) Exact search on the hand-checked cases (M5)

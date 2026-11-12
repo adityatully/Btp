@@ -57,7 +57,7 @@ chats. Last updated 2026-11-03.*
 | Q-125 | Change the claim to "search over a planner, with learning where the planner is weak", and stop trying to replace the planner on s3-s5? | Open, waiting on the user; after D-54 (plan 4.2) |
 | Q-126 | Can a value head rank sibling moves if it reads the candidate moves (and hints), or is trained to rank instead of to hit the cost? | Closed → E-50: ranking helps (0.38 → 0.52), below the 0.55 bar |
 | Q-128 | Does the search improve a published planner (MRCM) put at its leaves, as it improves ours? | Closed → E-55: yes, below MRCM on 7 of 13 of set B (bar 5), 5.1% below on average |
-| Q-144 | How do we count the 4 planner runs' time: one after another (serial, today), side by side (parallel), or the search beside them too (E-71)? | Moot for method-v3 (D-79): the runs are baselines with their own times, not part of our method; closes when v3 is frozen |
+| Q-144 | How do we count the 4 planner runs' time: one after another (serial, today), side by side (parallel), or the search beside them too (E-71)? | Closed → D-83: method-v3 frozen; the runs are baselines with their own times, not part of our method |
 | Q-143 | Can the search drop the 4 planner runs if the planner's decisions are moves in it (planner jumps, E-68)? | Closed → E-70: no; v3 fails both bars (dearer than the runs on 10.3%, bar 2%; 1.054 of v1), and jumps slow the search |
 | Q-142 | Why is our method 5-9x the bound on 4-5-fluid mixtures at 1/512, and why does DFMM beat it on 660 of 2,046 (E-66)? | Closed → E-74: the bound is loose there (DFMM also 5-6x) and the MRCM finisher was too slow for the search (E-67); A3 (one finisher per problem, D-75) is 7.3% cheaper at N 4-5, DFMM losses 41 → 30 of 60, level elsewhere; A3 is method-v2 |
 | Q-141 | Which of the 13 unbuilt methods in the folder do we build, and in what order (L-9)? | Closed → L-10 to L-18: all built, one by one (user); Dong collapses to one mix per droplet in our engine, Fukui and SIMOP partly reproduced |
@@ -625,7 +625,7 @@ hopeless positions as dearer on average (1,361 vs 1,197) but not the move into o
 causes left: dead ends are a small share of the value data, and the value head reads only the
 global token (Q-111).
 
-**Q-144 How do we count the planner runs' time (E-71)?** · Open
+**Q-144 How do we count the planner runs' time (E-71)?** · **Closed → D-83** (moot: the runs are baselines)
 (2026-11-10) Today the 4 runs are counted one after another before the search (F-18), so
 97 B1 pairs have no plan by 900 s. Re-timed from the B1 records: side by side, 0 by 900 s and
 8 by 60 s (was 397), costs within 1%. Options: parallel (4 cores, search after the slowest)
