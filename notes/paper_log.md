@@ -1196,6 +1196,18 @@ Format: date · decision · alternatives considered · why · evidence.
   recipes; finishing before the first costs 463 (the reference), after it 402, after the
   second 338 (the search's cost): one move explains 51% of the gain, the two together 100%.
 
+- **D-81 (2026-11-12) Is the greedy leaf finisher the root cause of the s4-s5 losses (E-79)?**
+  E-79: an hour does not fix 5 of A3's 10 losers, and 3 of them stop improving after the switch.
+  The winning runs are mostly `share_mrcm_look3` (lookahead 3, E-77); the search finishes each
+  leaf greedily. Guess: on long plans the tree picks only the first moves and the greedy finish
+  does the rest. User: "Yes, build it". **Check** (`scripts/finisher_check.py`): run method-v3's
+  search (900 s CPU) on the same 10, take its best plan, and finish the tree's part (the plan
+  minus the finisher's tail) three ways: plain sharing pass, greedy MRCM, MRCM lookahead 3.
+  **Reading, fixed before the run:** the greedy finisher is the root cause if the lookahead-3
+  finish of the search's prefix is at most the best run on at least 8 of 10; otherwise the
+  search's own moves are part of the problem. A pass points to a stronger finish on the final
+  plan (or on the best leaves) as the fix.
+
 ## 4. Experiments and results
 
 ### E-1 (2026-10-13) Exact search on the hand-checked cases (M5)
@@ -1974,6 +1986,43 @@ MRCM's intermediates on val_s2: 4 of 28 covered (chain D4), 5 of 28 (premix D3).
   (an exact lower bound on mixes left, or a constructive method's recipes, which is a planner
   again). (3) Built as SPEC 0.28 `hint_source: problem` (depth-4 chain in the recipe columns)
   for a copy-test comparison on stages 1–2 against the planner's hints.
+
+### E-80 (2026-11-12) Causal check (D-80): the novel intermediates cause the gains
+`outputs/novel/causal.jsonl` on coe9 (`causal_check.py`, commit e1c6492, method-v3 search,
+300 s CPU, 24 workers), 59 of E-78's winning problems with a novel intermediate (up to 10 per
+set, the 4 runs under 120 s in total).
+- **Outside the planner's recipes: 247 of 253 novel intermediates (98%)** are made by no
+  target's own plan (each target alone, plain and with MRCM's trees); all 6 exceptions on s4.
+- **Ablation: one novel move explains at least half the search's gain on 46 of 59 (78%).**
+  By set: s1 8/10, s2 8/10, s3 9/9, s4 8/10, s5 9/10, `val_emrcm_v1` 4/10. Median share
+  explained by the best single move 1.00 (emrcm 0.33, s2 0.75); by all novel moves from the
+  first one on, 1.00 in every set (the cost before the first novel move is no better than the
+  reference).
+- **Reading (D-80): holds.** The droplets are made for several targets at once (not a step of
+  any one target's recipe), and finishing just after a novel move instead of just before
+  accounts for the gain. On the 3-fluid mixtures (`val_emrcm_v1`) the gain is spread over
+  several novel moves rather than one. Caveats: shares are capped at 1 (a move can be worth
+  more than the whole gain, as the finisher after it is greedy); the ablation uses the
+  search's own finisher, so "worth" is measured by that finisher.
+
+### E-79 (2026-11-12) Fair time (D-77): an hour fixes half the losses; fails the bar
+`outputs/bench/fair_1h.jsonl` on coe9 (`/tmp/fair_few.py`, commit 6959ef5, A3 search
+(`switch`), 3,600 s, 3 workers, the 10 val s4-s5 problems where A3's search lost (E-77);
+A3's recorded best run is the reference). Clock: as `fair_few.py` sets it (D-78: CPU time
+for code at or after 9f617a6); coe9 had ~37 of 40 cores held by another user's jobs when it
+started.
+- **At 3,600 s: cheaper than the best run on 3 (s4-012 2,597 vs 2,600; s4-035 1,865 vs 1,900;
+  s4-036 952 vs 975), level on 2 (s4-011, s4-017), dearer on 5:** s4-010 3,463 vs 3,460
+  (0.1%), s4-025 2,371 vs 2,355 (0.7%), s5-033 1,699 vs 1,691 (0.5%), s5-038 2,826 vs 2,780
+  (1.7%), s5-041 4,155 vs 3,992 (4.1%; 12 leaves in the hour).
+- **The pattern is the finisher mode.** All 5 that stayed in MRCM mode (`share_mrcm`) reached
+  or beat the best run except s4-010 (by 3). Of the 5 that switched to `tiered`, 3 did not
+  move at all from 900 s to 3,600 s (s4-025, s5-033, s5-038; 1,668, 175 and 137 leaves) and
+  s5-041 is starved; only s4-036 improved.
+- **Reading (D-77, at most 2 of 10 dearer): fails.** Time alone is not the root cause; after
+  the switch the search stalls. Over all 82 val s4-s5 the search alone at 1 h is dearer than
+  the best run on 5 (6%), by 0.1-4.1%. The next lever (D-77's fail branch) is the finisher
+  after the switch.
 
 ### E-78 (2026-11-11) The unexpected-moves check (D-76): the story holds
 `outputs/novel/novel.jsonl` (coe9, commit 867226f, method-v2 search, 900 s, wall clock), all
