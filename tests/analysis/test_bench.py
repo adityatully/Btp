@@ -175,3 +175,24 @@ def test_dmfb_checks_flag_a_plan_below_nfsp() -> None:
     assert "less fluid cost than NFSP: 1 (must be 0)" in text
     assert "dmfb_sweep-007 method 66 < NFSP 130" in text
     assert "dearer than NFSP: 0" in text
+
+
+def test_skip_resumes_a_run_without_the_pairs_already_done(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A restarted run (more workers) skips the pairs its earlier records hold."""
+    import json
+
+    tasks = B.tasks(["test_s1_v1"], ["fluid"], 2)
+    old = tmp_path / "old.jsonl"
+    old.write_text(json.dumps({"set": "test_s1_v1", "id": tasks[0]["id"], "goal": "fluid"}))
+    ran: list[str] = []
+    monkeypatch.setattr(
+        B, "run_task", lambda t, o: ran.append(t["id"]) or {k: t[k] for k in ("set", "id", "goal")}
+    )
+    monkeypatch.setattr(B, "summarise", lambda p: "")
+    new = tmp_path / "new.jsonl"
+    B.main(["sets=test_s1_v1", "goals=fluid", "limit=2", f"skip={old}", f"out={new}"])
+    assert ran == [tasks[1]["id"]]
+    with pytest.raises(ValueError, match="skip"):
+        B.main(["sets=test_s1_v1", "goals=fluid", "limit=2", f"skip={old}", f"out={old}"])

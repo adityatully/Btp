@@ -50,6 +50,8 @@ answer counts. `finisher=switch` (D-75, pilot A3) is v1's greedy MRCM at every l
 MRCM's leaf finishes (root left out) average more than `switch_mean` seconds (default 20) over
 at least `switch_min_leaves` (default 3), then `tiered`. Records keep
 `mrcm_calls`, `mrcm_wins` and `mrcm_seconds`.
+`skip=<records>[,..]` resumes a run: pairs already in those records are not run again (write
+the rest to a new `out`, then summarise the files concatenated).
 `grow=g max_sims=S` (D-87 pilot, leftover time): when the search plays its plan to the end
 before the budget, it searches again from the root with g times the sims, up to S; records
 keep `ours.rounds` (sims, cheapest cost, seconds per pass; the first pass is method-v3).
@@ -691,7 +693,17 @@ def main(argv: list[str]) -> None:
             limit,
         )
     ]
+    # resume: skip the (set, id, goal) pairs already in these records (a run restarted with
+    # more workers writes the rest to a new `out`; summarise the files concatenated)
+    done_ = {
+        (r["set"], r["id"], r["goal"])
+        for path in filter(None, args.get("skip", "").split(","))
+        for r in map(json.loads, Path(path).read_text().splitlines())
+    }
+    todo = [x for x in todo if (x[0]["set"], x[0]["id"], x[0]["goal"]) not in done_]
     out = Path(args.get("out", "outputs/bench/b1.jsonl"))
+    if done_ and out.resolve() in {Path(p).resolve() for p in args["skip"].split(",")}:
+        raise ValueError(f"out={out} is one of the skip= records: write the rest elsewhere")
     out.parent.mkdir(parents=True, exist_ok=True)
     workers = int(args.get("workers", 1))
     print(f"{len(todo)} (problem, goal) pairs, {workers} workers, commit {commit}", flush=True)
