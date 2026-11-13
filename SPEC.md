@@ -1,6 +1,19 @@
 # MEDA Design Automation — Codebase Specification
 
-Version 0.44 · 2026-11-12
+Version 0.46 · 2026-11-12
+
+Changes in 0.46 (M10 built, paper log E-83): `meda.pipeline` gains `platform.py`, `opgraph.py`,
+`schedule.py` and `schedule_ilp.py` and `configs/platform/meda_default.yaml` (14.2-14.5). Three
+details settled while building: a dispense ends exactly when its consumer starts, so dispensed
+droplets are never stored (14.3); without detection an output is a zero-tick `DELIVER` (14.3);
+list scheduling starts an op only if the ops left can still run one at a time in plan order
+within storage (14.4), after `val_s5-006` (capacity 2) deadlocked without it.
+
+Changes in 0.45 (execution harness design, paper log D-84): section 14 becomes the design of the
+execution harness (`meda.pipeline`): platform model, operation graph, list scheduler with
+storage and detector changeover, schedule validator and metrics, exact ILP check (14.1-14.5);
+milestones M10-M12 (16); new rows in 15. Design only; no code yet. Sample-prep code and every
+reported number are unchanged.
 
 Changes in 0.44 (method-v3 frozen, paper log D-83): no code change. Method-v3 (0.43,
 `bench.METHOD`) is the paper's method for the final runs: the flat-prior search alone, 256
@@ -600,8 +613,12 @@ meda-da/
 │   │   ├── evaluate.py        # run solver/agent on a benchmark -> results table
 │   │   ├── compare.py         # tables: gaps to optimum and to baselines
 │   │   └── plots.py
-│   ├── pipeline/              # reserved for later stages; interfaces only (section 14)
-│   │   └── interfaces.py
+│   ├── pipeline/              # execution harness (section 14)
+│   │   ├── interfaces.py
+│   │   ├── platform.py        # counts and durations (M10)
+│   │   ├── opgraph.py         # DAG -> operations (M10)
+│   │   ├── schedule.py        # list scheduler, validator, metrics (M10)
+│   │   └── schedule_ilp.py    # exact check, small graphs (M10)
 │   ├── utils/
 │   │   ├── seeding.py
 │   │   ├── logging.py
@@ -2221,20 +2238,140 @@ vs number of targets; each producer has a fixed colour across all figures).
 
 ---
 
-## 14. Reserved later stages (`meda.pipeline`)
+## 14. Execution harness (`meda.pipeline`)
 
-Do not implement yet. Define only these interfaces in `pipeline/interfaces.py` so the DAG format
-is designed with them in mind:
+*0.45 (paper log D-84); M10 built in 0.46 (E-83). Source: the user's document "MEDA execution
+after the sample-prep DAG" (2026-11-10), sections 1-14.*
+
+### 14.1 Purpose and scope
+The harness runs any mixing DAG (section 7) through the chip's later stages and returns what the
+plan costs to execute: completion time, storage, washes, failures. It is the exact simulator for
+every stage after sample preparation, as `meda.core` is for sample preparation, and the cost
+oracle the DAG was designed for. Every stage is classical first; a stage gets search or learning
+only after the harness has measured where execution time goes (D-84).
+
+The research question it serves (MTMD-specific, D-84): **do the savings from shared
+intermediates survive execution, and if not, can planning that sees execution cost keep them?**
+Sharing is where our method gains (E-78, E-80), and it is what makes droplets wait on the chip.
+
+Stages and milestones, in build order (16):
+
+| Stage | Module | Milestone |
+| --- | --- | --- |
+| Platform model (counts and durations) | `pipeline/platform.py` | M10 (built) |
+| Operation graph builder | `pipeline/opgraph.py` | M10 (built) |
+| List scheduler + schedule validator + exact check | `pipeline/schedule.py`, `pipeline/schedule_ilp.py` | M10 (built) |
+| Geometry, placement, executor, A* router | later | M11 (designed after M10) |
+| Wash rule, detector changeover on the grid, cost record | later | M12 (designed after M11) |
+
+Rules 1-9 of section 2 apply, with "core" read as "harness" for rules 2, 5, 6, 8 and 9: time is
+an integer number of ticks, every value is exact, the scheduler is deterministic, every physical
+number lives in config, and an impossible schedule raises an error naming the instance.
+
+### 14.2 Platform model (`pipeline/platform.py`, `configs/platform/*.yaml`)
+`Platform` is a frozen dataclass read from config. M10 needs counts and durations only; cells
+and coordinates join in M11.
+
+| Field | Meaning | Default (`meda_default.yaml`) | Status |
+| --- | --- | --- | --- |
+| `tick_ms` | length of one tick, for reporting only | 1000 | placeholder |
+| `mixers` | mixes that can run at once (bounded by area) | 4 | placeholder (a Mix-8 block is ~7% of a 30x30 array) |
+| `ports_per_fluid` | dispense ports per reservoir, capacity 1 each | 1 | doc §2 |
+| `detectors` | detection sites, capacity 1 each | 2 | placeholder (1-4 in the literature) |
+| `storage_capacity` | droplets that may wait on chip at once (count mode) | from the instance's chip (5.2) | SPEC 5.2 |
+| `dispense_ticks` | one dispense at a port | 1 | placeholder |
+| `mix_ticks` | one mix, any k:l | 2 | placeholder |
+| `detect_ticks` | detector hold time per droplet | 4 | placeholder |
+| `changeover_ticks` | detector wash between two droplets of different composition | 2 | placeholder |
+
+Every placeholder is an open physical decision (15). The first measurements (plan phase 8) are
+repeated across a small grid of these values, so no conclusion rests on one guess.
+
+### 14.3 Operation graph (`pipeline/opgraph.py`)
+`build_opgraph(dag, instance, assay) -> OpGraph` turns a validated mixing DAG into the
+operations the chip runs. Each operation has an id, a kind, a duration, the resource kind it
+needs and its predecessor operations.
+
+| Op kind | Made from | Resource | Duration |
+| --- | --- | --- | --- |
+| `DISPENSE` | each edge out of a RESERVOIR node (one droplet of that volume); ends exactly when its consumer starts | a port of that fluid | `dispense_ticks` |
+| `MIX` | each MIX node | a mixer | `mix_ticks` |
+| `DETECT` | each OUTPUT node, if `assay.detect` | a detector | `detect_ticks` (+ changeover, 14.4) |
+| `DELIVER` | each OUTPUT node, if not `assay.detect` | none | 0 |
+| `DISCARD` | each WASTE node | none | 0 |
+
+- Partial takes are not separate operations: a consumer takes its volume when it starts (the
+  ~1 s aliquot step is inside `mix_ticks`).
+- **Droplets.** A droplet is the output of a DISPENSE, MIX or (for detection) an OUTPUT node.
+  It exists from its producer's end until its last consumer starts (DISCARD and DETECT count as
+  consumers). While it exists and is not inside a running operation it is **stored**. This is
+  the same rule as 12.1, now including droplets waiting for a detector (doc §6). Dispensed
+  droplets go straight to their consumer (just in time), so they are never stored.
+- `AssaySpec` (an argument of `build_opgraph`, default `detect=True`): every delivered droplet
+  is detected once, then discarded. Further assay steps (incubation, a second mix with a sample) are added
+  only when a benchmark needs them (Protein, IVD in M12).
+- The graph builder checks the DAG with `validate` first and raises on any failure.
+
+### 14.4 Scheduler (`pipeline/schedule.py`)
+`ListScheduler(priority).schedule(graph, platform) -> Schedule`; `Schedule` holds, per
+operation, a start tick, an end tick and a resource instance (`("mixer", 2)`, `("port", fluid,
+0)`, `("detector", 1)`).
+
+Rules every schedule meets (checked by `validate_schedule`, which raises naming the instance):
+1. **Precedence:** an operation starts at or after the end of each predecessor.
+2. **Capacity:** a resource instance runs at most one operation at a time.
+3. **Storage:** at every tick the stored droplets number at most `storage_capacity`.
+4. **Detector changeover:** two consecutive DETECTs on one detector with different
+   compositions are separated by at least `changeover_ticks`.
+5. **Completeness:** every operation is scheduled once, with its stated duration.
+
+**List scheduling** (the classical method, doc §4). Each step, at the earliest tick where
+something can start:
+- *Ready* operations: every predecessor scheduled. An op fed by dispenses has a lead of
+  `dispense_ticks`: its dispenses run on ports just before it starts, so its decision tick is
+  its start minus the lead.
+- Ready operations are taken in priority order and started if a resource instance is free and
+  starting it keeps rule 3, counting droplets whose users are not all scheduled as stored for
+  ever, **and** if the ops left could still run one at a time in plan order within storage
+  afterwards (a safety check, as in the banker's algorithm: the DAG validator's replay makes the
+  plan order storage-feasible, 7.3). Without it, critical-path order boxed itself in on
+  `val_s5-006` (capacity 2). Resource instances are used in time order. Priority `critical_path` (default): the longest duration path from
+  the operation to any sink, ties broken by fewer stored droplets after the start, then the
+  DAG's `(step, id)`. Priority `plan_order`: the DAG's `(step, id)` alone (as 12.1).
+- Binding: the free instance with the lowest index; for a detector, the one that can start
+  soonest (changeover included), one needing no changeover first.
+- If nothing ready can start now or at any later tick when storage frees, the scheduler raises
+  `ScheduleDeadlock` naming the instance, the tick and the stored droplets; never a silent
+  stretch.
+
+**Exact check** (`pipeline/schedule_ilp.py`, `exact_makespan`, scipy `milp`): a time-indexed
+ILP over the same rules 1-3 and 5 that minimises the makespan, with a tick horizon from the
+list schedule; a dispense's port use is written on its consumer's start. It returns the
+makespan (None if it found no schedule within its time limit), whether it is proved optimal,
+and the solver's lower bound. Seconds on s3-size plans; no answer in 60 s on the largest s4-s5
+plans (E-84). Detector changeover is left out of the ILP, so the exact check runs with
+`changeover_ticks = 0`. It measures how far list scheduling is from the optimum, as exact
+search did for sample prep.
+
+**Schedule metrics** (`schedule_metrics(schedule, graph) -> ScheduleMetrics`, exact integers):
+`makespan`; `storage_peak`; `storage_ticks` (stored droplets summed over ticks, doc §6:
+occupancy x duration); `detector_wait` (ticks delivered droplets wait for a detector);
+`mixer_busy`, `port_busy`, `detector_busy` (summed busy ticks).
+
+The abstract list schedule of 12.1 stays as the tier-1 proxy in `dag_metrics`; the harness
+scheduler is separate and does not change any reported sample-prep number.
+
+### 14.5 Interfaces (`pipeline/interfaces.py`)
 ```python
 class Scheduler(Protocol):
-    def schedule(self, dag: MixingDAG, chip_spec) -> "Schedule": ...      # start time + resource per node
-class Router(Protocol):
-    def route(self, requests: list["RouteRequest"], chip_state) -> "RouteResult": ...  # (droplet, source, target) list per time slot
-class CostOracle(Protocol):
-    def evaluate(self, dag: MixingDAG) -> "TrueCost": ...                 # completion time, washes, ...
+    def schedule(self, graph: OpGraph, platform: Platform) -> Schedule: ...
+class Router(Protocol):        # M11; contract fixed in the doc's section 8
+    def route(self, requests: list["RouteRequest"], chip_state) -> "RouteResult": ...
+class CostOracle(Protocol):    # M12
+    def evaluate(self, dag: MixingDAG) -> "TrueCost": ...
 ```
-A `CostOracle` result will later replace or refine the reward (tier-2 cost). Plan for it: cache
-results by DAG hash, and allow a learned surrogate to predict it.
+A `CostOracle` result will later refine the sample-prep objective (tier-2 cost): cache results
+by DAG hash, and allow a learned surrogate to predict it.
 
 ---
 
@@ -2252,6 +2389,9 @@ results by DAG hash, and allow a learned surrogate to predict it.
 | Split-error model for phase 2 | none | `core/noise.py` | Literature / hardware data |
 | Realistic M, fluid count and storage capacity of the target platform (centre of the training ranges of 1.3) | suggested ranges in 1.3 | generator configs | Supervisor |
 | Exact targets (ε = 0) or a tolerance ε > 0; `max_denominator` as a chip input or only a search bound | ε = 0; chip config | targets; `chip.max_denominator` | Supervisor, assay |
+| Harness durations (dispense, mix, detect hold, detector changeover) and tick length | placeholders 1 / 2 / 4 / 2 ticks, 1 tick = 1 s | `configs/platform` (14.2) | Literature, supervisor |
+| Mixers that run at once, detector count | 4, 2 | `configs/platform` (14.2) | Supervisor |
+| Mixing in reserved modules, during transport, or hybrid | modules (harness first) | M11 design | Supervisor (doc §15 q1) |
 
 ---
 
@@ -2348,6 +2488,23 @@ Remaining, in order:
 **M9 — Reserved.** MCTS / AlphaZero-style search; literature baselines with reproduction tests;
 preference-conditioned training; noise model; pipeline interfaces to scheduler/router.
 
+
+**M10 — Harness part 1: scheduling (14.2-14.4).** Platform config, operation graph builder,
+list scheduler, schedule validator, schedule metrics, exact ILP check.
+*Accept:* (a) the doc's worked example (four 2-tick mixes, M1 and M2 feed M3, M4 independent,
+2 mixers, no dispense or detect) gives makespan 4 and no stored droplet under `critical_path`,
+and makespan 6 with M1's output stored 2 ticks under the order M1, M4 / M2 / M3; (b) every
+plan of `val_s1_v2` ... `val_s5_v2` from the sharing pass schedules without error and passes
+`validate_schedule`; tampering with a start, a resource or a duration makes it fail with the
+right rule; (c) same input, same schedule; (d) on the sharing pass's plans for
+`tiny_exact_v1` the ILP's makespan is at most the list schedule's, and equal on the hand case
+of (a).
+
+Met 2026-11-12 (E-83, `tests/pipeline/test_schedule.py`; (b) is `pytest -m slow`).
+
+**M11 — Harness part 2: geometry, placement, executor, router.** Designed after M10 passes.
+
+**M12 — Harness part 3: washing, cost record, assay benchmarks.** Designed after M11.
 ---
 
 ## 17. Tests

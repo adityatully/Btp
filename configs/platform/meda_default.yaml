@@ -1,0 +1,13 @@
+# Execution platform for the harness (SPEC 14.2). Counts and durations only (M10); cells and
+# coordinates join in M11. Every value marked "placeholder" is an open physical decision
+# (SPEC 15, Q-146): plan 8.3 repeats its measurements over a grid of them.
+name: meda_default
+tick_ms: 1000              # length of one tick, for reporting only (placeholder)
+mixers: 4                  # mixes that can run at once (placeholder; a Mix-8 block is ~7% of 30x30)
+ports_per_fluid: 1         # dispense ports per reservoir, one droplet at a time each (doc section 2)
+detectors: 2               # detection sites, capacity 1 each (placeholder; 1-4 in the literature)
+storage_capacity: null     # null = the instance's chip limit (SPEC 5.2)
+dispense_ticks: 1          # one dispense at a port (placeholder)
+mix_ticks: 2               # one mix, any k:l (placeholder)
+detect_ticks: 4            # detector hold time per droplet (placeholder)
+changeover_ticks: 2        # detector wash between droplets of different composition (placeholder)

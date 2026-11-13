@@ -1,1 +1,1 @@
-"""Reserved later stages (scheduler, router, cost oracle). Interfaces only (SPEC section 14)."""
+"""Execution harness: platform, operation graph, scheduler (SPEC section 14)."""
