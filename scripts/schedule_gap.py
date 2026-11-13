@@ -11,7 +11,8 @@ Reading (D-85, fixed before the run): scheduling is done if the better list sche
 <= 1.05 x the optimum and is within 10% on >= 90% of plans. Otherwise: search over priorities.
 
 Arguments are key=value: `sets` (comma list, default tiny_exact_v1 and val_s1_v2..val_s5_v2),
-`limit` per set, `ilp_seconds` (60), `out` (records, jsonl). Summary only:
+`limit` per set, `ids` (comma list: only these problems), `ilp_seconds` (60), `workers` (1),
+`out` (records, jsonl). Summary only:
 `summary=<records.jsonl>`.
 """
 
@@ -21,6 +22,7 @@ import json
 import sys
 import time
 from dataclasses import replace
+from multiprocessing import Pool
 from pathlib import Path
 from typing import Any
 
@@ -67,6 +69,12 @@ def record(
     out["ilp_seconds"] = round(time.process_time() - t0, 3)
     out["status"] = "ok"
     return out
+
+
+def _job(job: tuple[str, Instance, float]) -> dict[str, Any]:
+    name, inst, ilp_seconds = job
+    platform = replace(Platform.load(), changeover_ticks=0)
+    return record(name, inst, weights(), platform, ilp_seconds)
 
 
 def summarise(records: list[dict[str, Any]]) -> dict[str, Any]:
@@ -119,19 +127,27 @@ def main(argv: list[str]) -> None:
         return
     sets = args["sets"].split(",") if "sets" in args else SETS
     limit = int(args["limit"]) if "limit" in args else None
+    ids = set(args["ids"].split(",")) if "ids" in args else None
     ilp_seconds = float(args.get("ilp_seconds", 60))
+    workers = int(args.get("workers", 1))
     out = Path(args.get("out", "outputs/schedule_gap/records.jsonl"))
     out.parent.mkdir(parents=True, exist_ok=True)
-    platform = replace(Platform.load(), changeover_ticks=0)
-    w = weights()
+    jobs = [
+        (name, inst, ilp_seconds)
+        for name in sets
+        for inst in BenchmarkSet.read(name, BENCHMARKS_DIR).instances[:limit]
+        if ids is None or inst.instance_id in ids
+    ]
+    if ids is not None and len(jobs) != len(ids):
+        found = {inst.instance_id for _, inst, _ in jobs}
+        raise SystemExit(f"ids not found in {sets}: {sorted(ids - found)}")
     records = []
-    with open(out, "w") as fh:
-        for name in sets:
-            for inst in BenchmarkSet.read(name, BENCHMARKS_DIR).instances[:limit]:
-                r = record(name, inst, w, platform, ilp_seconds)
-                records.append(r)
-                fh.write(json.dumps(r) + "\n")
-                fh.flush()
+    with open(out, "w") as fh, Pool(workers) as pool:
+        for r in pool.imap_unordered(_job, jobs):
+            records.append(r)
+            fh.write(json.dumps(r) + "\n")
+            fh.flush()
+            print(f"{len(records)}/{len(jobs)} {r['id']} list {r.get('list')} ilp {r.get('ilp')}")
     print(json.dumps(summarise(records), indent=2))
 
 
