@@ -87,6 +87,9 @@ chats. Last updated 2026-11-03.*
 | Q-91 | Do robust-aliquot, Dong 2024 or e-MRCM narrow the claim? | 6.1 |
 | Q-95 | The real platform: M, mixer footprint, reservoirs, cost weights, router as cost oracle | Supervisor |
 | Q-96 | Do the generalisation claims hold (unseen sizes and constraints)? | 5.2, 6.4 |
+| Q-145 | Do the savings from shared intermediates survive execution (time, storage, detector queues), and if not, can execution-aware planning keep them? | 8.3, then 8.5 |
+| Q-146 | What are realistic MEDA durations (dispense, mix, detect hold, detector changeover), mixer count and detector count? | Literature, supervisor; 8.3 sweeps placeholders (SPEC 14.2) |
+| Q-147 | Is list scheduling close enough to the optimal schedule (within 5% on average), or does scheduling need search? | Yes on 184 graded plans (E-84: 1.011, s1-s3 all optimal); open for the 28 largest s4-s5 plans the ILP could not answer in 60 s |
 
 ---
 
@@ -929,6 +932,22 @@ can the router serve as a cost oracle?** · **Open → supervisor** (§8 of the 
 
 **Q-96 Do the generalisation claims hold on unseen sizes and constraints?** · **Open → plan
 5.2, 6.4**
+
+**Q-145 Do the savings from shared intermediates survive execution?** · **Open → plan 8.3, then
+8.5** (D-84, 2026-11-12) Our method wins by making intermediates no heuristic makes and sharing
+them (E-78, E-80). Shared droplets wait longer on the chip (storage, obstacles) and feed
+detector queues. The M10 scheduler measures makespan and storage x duration for our plans
+against the planner's and the published methods'. If sharing costs time, 8.5 makes the search
+see it.
+
+**Q-147 Is list scheduling close enough to the optimal schedule?** · **Open → plan 8.2**
+(D-85, 2026-11-12) Bar: the better of critical-path and plan-order priority averages <= 1.05 x
+the ILP optimum and is within 10% on >= 90% of plans. E-83 saw critical path lose to plan order
+on 2 of 6 s3 plans.
+
+**Q-146 What are realistic MEDA durations, mixer and detector counts?** · **Open → literature,
+supervisor** (D-84) SPEC 14.2 uses placeholders (dispense 1, mix 2, detect 4, changeover 2
+ticks; 4 mixers, 2 detectors). Plan 8.3 repeats its measurements over a grid of them.
 
 ## N. Early rungs and checks
 

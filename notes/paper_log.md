@@ -1233,6 +1233,34 @@ Format: date · decision · alternatives considered · why · evidence.
   search is depth-limited and up to ~2% dearer than the best planner variant on a few
   problems. D-77 closed by E-79 and E-81. Next: the final runs B1-B3 with all published
   methods and `reuse=`.
+- **D-84 (2026-11-12) Execution harness: classical first, scheduling is engineering (SPEC
+  0.45).** Sample prep is closing (method-v3, D-83); the next stages are scheduling, placement,
+  routing and washing, designed from the user's document "MEDA execution after the sample-prep
+  DAG" (2026-11-10). Decided with the user: (1) **no RL scheduler by default.** Scheduling a
+  DAG is classical resource-constrained scheduling (list scheduling, ILP, GA, storage-aware
+  SRS/RMS; doc §4: learning it has low novelty); MTMD changes its inputs (storage, identical
+  droplets, split timing, detector changeover), not the problem. (2) **Every stage: classical,
+  measure the gap and where time goes, then search over the classical stage; learn only where
+  search is too slow** (sample prep's lesson: E-36 to E-61, the network added nothing over
+  search, E-39, E-54, E-82). The router is the likely place for learning (called thousands of
+  times live, many droplets, contamination). (3) **The research question for the later stages
+  is MTMD-specific:** do the savings from shared intermediates (E-78, E-80) survive execution,
+  and if not, can planning that sees execution cost keep them (Q-145)? Alternatives: RL agent
+  per stage (old plan, PROJECT_CONTEXT §5; rejected as default: no evidence it is needed),
+  routing-based synthesis first (doc §5: needs a MEDA mixing model that does not exist).
+  Built next: M10 (platform, operation graph, list scheduler, validator, ILP check), after the
+  user reviews SPEC 14. Durations are placeholders (Q-146). Plan phase 8.
+
+- **D-85 (2026-11-12) Scheduling gap: is list scheduling close enough to the optimum (plan
+  8.2, Q-147)?** `scripts/schedule_gap.py`: the sharing pass's plans on `tiny_exact_v1` and
+  `val_s1_v2` ... `val_s5_v2` (development sets), default platform with `changeover_ticks = 0`
+  (the ILP has no changeover). Per plan: makespan of list scheduling under `critical_path` and
+  `plan_order`, their better one, and the ILP optimum (60 s limit; a timeout is reported, not
+  dropped). **Reading fixed in advance:** *scheduling is done* if the better list schedule
+  averages <= 1.05 x the optimum and is within 10% on >= 90% of plans; then 8.3 runs with list
+  scheduling. Otherwise the next step is a search over priorities (still no RL), judged the
+  same way. Also reported: how often each priority is the better one (E-83 hinted plan order
+  sometimes wins), ILP time, and per stage.
 
 ## 4. Experiments and results
 
@@ -2012,6 +2040,68 @@ MRCM's intermediates on val_s2: 4 of 28 covered (chain D4), 5 of 28 (premix D3).
   (an exact lower bound on mixes left, or a constructive method's recipes, which is a planner
   again). (3) Built as SPEC 0.28 `hint_source: problem` (depth-4 chain in the recipe columns)
   for a copy-test comparison on stages 1–2 against the planner's hints.
+
+### E-85 (2026-11-13) Final B2 part (a), method-v3 with all 16 published methods: beats 11, level with NFSP and Dong
+coe9, `scripts/bench.py` at `6161ea9` (SPEC 0.44, method-v3 frozen, D-83),
+`outputs/bench/b2a_v3.jsonl` (132 problems of `litbench_paper_v1` x 3 goals = 396 pairs; reuses
+`b2_paper.jsonl`). **Our method is the same as E-65 to the last digit** (60 s = 900 s; these
+small problems end early): against our planner fluid 0.932 (56 / 76 / 0), steps 0.998
+(35 / 97 / 0), waste 0.765 (62 / 70 / 0), never dearer; above proved optima fluid 1.6% (86),
+steps 0 (108), waste 2.6% (78); no plan 0.
+
+**Reading (D-69, own goal, 900 s), 16 methods:**
+- **Beats** (own goal, n): DFM steps 120, Generic steps 128, FacDA fluid 120, MRCM fluid 131,
+  e-MRCM fluid 131, DFMM waste 119, MTWM waste 119, robust waste 105 (0.750), TVODA fluid 116
+  (0.905), WSPM fluid 128 (0.960), Fukui fluid 119 (0.695).
+- **Level:** NFSP fluid 128 (1.000 [0.989, 1.016], 111 / 13 / 4, as E-65); Dong fluid 10
+  (all 10 tied, under every goal).
+- **Too few problems (D-69):** MTMD 3, DDMT 2, SIMOP 2 (all won).
+- Off own goal: every method beaten under every goal except NFSP waste reads "loses"
+  (1.046 [1.015, 1.085], 110 / 12 / 6; small-waste ratios, as E-65) and robust fluid level
+  (0.987 [0.972, 1.008], 95 / 7 / 3).
+- Losses anywhere: 1 each to FacDA, MTWM, TVODA (fluid), 3 to robust (fluid), 1 to WSPM
+  (steps), NFSP 4 fluid / 6 waste. Supersedes E-65 as the paper's B2(a) table.
+
+### E-84 (2026-11-13) Scheduling gap (D-85): list scheduling is optimal on small and medium plans; the largest are ungraded
+`scripts/schedule_gap.py`, records `outputs/schedule_gap/records_all.jsonl` (212 plans: the
+sharing pass on `tiny_exact_v1`, `val_s1_v2` ... `val_s5_v2`; default platform, changeover 0;
+ILP 60 s CPU, Mac). SPEC 0.46 + the ILP timeout fix below.
+- **Bar met as written** on the 184 plans the ILP answered: the better list schedule is 1.011 x
+  the optimum on average, within 10% on 97.3%, at the optimum on 169 (max 1.54).
+- **By stage:** tiny, s1, s2, s3: at the optimum on all 130 (ILP under 2.2 s). s4: 1.024, 95%
+  within 10%, on its 20 answered plans. s5: 1.048, 88% within 10% (below the 90% line alone).
+- **Not graded:** the ILP found no schedule in 60 s on 28 of 212 (13%): 20 of 40 s4 and 8 of
+  42 s5, the largest plans (90-406 operations). HiGHS's own bound there is useless (~0). A simple
+  bound (max of critical path with dispense lead, mix work / mixers, detect work / detectors)
+  puts the list schedule at 1.48 x it on average (1.06-3.26; within 10% on 1 of 28). That bound
+  ignores ports and storage, so it is loose; the true gap on these plans is unknown, between
+  "none" and "up to ~3x".
+- **Priorities:** critical path better on 18, plan order on 13, tied on the rest; neither
+  dominates (mean 1.017 vs 1.018 of the optimum). Taking the better of the two is cheap.
+- **Bug fixed during the run:** `exact_makespan` crashed when HiGHS hit its time limit with no
+  schedule; it now returns no makespan and the proved bound (`IlpResult.lower_bound`), test
+  added. Records of s4-s5 re-run after the fix.
+- **Reading:** scheduling is done for small and medium plans (s1-s3, most of s4-s5). Whether
+  list scheduling is good on the largest plans is open (Q-147 stays open for them).
+
+### E-83 (2026-11-12) M10 built: list scheduling of sample-prep plans (SPEC 0.46)
+`meda.pipeline` (`platform.py`, `opgraph.py`, `schedule.py`, `schedule_ilp.py`),
+`configs/platform/meda_default.yaml` (placeholder durations: dispense 1, mix 2, detect 4,
+changeover 2 ticks; 4 mixers, 2 detectors), `tests/pipeline/test_schedule.py` (23 tests;
+acceptance (b) under `-m slow`). Uncommitted at writing.
+- **Acceptance met:** (a) the doc's 4-mix example: critical path gives makespan 4, nothing
+  stored; plan order gives 6 with M1's output stored 2 ticks. (b) Every sharing-pass plan of
+  `val_s1_v2` to `val_s5_v2` schedules under both priorities and passes `validate_schedule`;
+  tampered schedules fail on the right rule. (c) Deterministic. (d) The ILP is never above the
+  list schedule on `tiny_exact_v1` (equal on all 10 plans tried) and gives 4 on the hand case.
+- **Design finding:** plain list scheduling deadlocked on `val_s5-006` (storage capacity 2):
+  critical-path order filled storage with droplets nothing could use up. Fixed by a safety
+  check: an op starts only if the remaining ops can still run one at a time in plan order
+  within storage (the DAG validator guarantees the plan order). Regression test added.
+- **First look (illustrative, 6 problems of `val_s3_v2`, no conclusion):** critical-path
+  priority is sometimes *worse* than plan order (val_s3-000 18 vs 17, val_s3-002 20 vs 18 ticks;
+  the ILP finds 17 and 18), so the priority rule matters; the ILP solves s3-size plans in under
+  1 s. Measuring this properly is plan 8.2.
 
 ### E-82 (2026-11-12) Prior check (D-82): the network cannot pick the search's moves
 `outputs/bench/prior.jsonl` on coe9 (`prior_check.py`, commit a25a1f3, round 2's network
