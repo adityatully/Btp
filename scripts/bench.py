@@ -50,6 +50,9 @@ answer counts. `finisher=switch` (D-75, pilot A3) is v1's greedy MRCM at every l
 MRCM's leaf finishes (root left out) average more than `switch_mean` seconds (default 20) over
 at least `switch_min_leaves` (default 3), then `tiered`. Records keep
 `mrcm_calls`, `mrcm_wins` and `mrcm_seconds`.
+`grow=g max_sims=S` (D-87 pilot, leftover time): when the search plays its plan to the end
+before the budget, it searches again from the root with g times the sims, up to S; records
+keep `ours.rounds` (sims, cheapest cost, seconds per pass; the first pass is method-v3).
 
 B2 (D-70), the papers' own experiments: `sets=litbench_paper_v1` under all three goals and
 `sets=test_emrcm_v1 goals=fluid methods=dfm,facda,generic,dfmm,mrcm,emrcm` (e-MRCM's
@@ -326,6 +329,8 @@ def run_task(task: dict[str, Any], opts: dict[str, Any]) -> dict[str, Any]:
         "switch_mean": opts.get("switch_mean", sc.SWITCH_MEAN),
         "switch_min_leaves": opts.get("switch_min_leaves", sc.SWITCH_MIN_LEAVES),
         "first_plan": opts.get("first_plan", METHOD["first_plan"]),
+        "grow": opts.get("grow", 1),
+        "max_sims": opts.get("max_sims"),
     }
     finisher = opts.get("finisher", METHOD["finisher"])
     out["method"] = {
@@ -334,6 +339,8 @@ def run_task(task: dict[str, Any], opts: dict[str, Any]) -> dict[str, Any]:
         "jumps": opts.get("jumps", 0),
         "first_plan": sopts["first_plan"],
         "portfolio": opts.get("portfolio", METHOD["portfolio"]),
+        "grow": sopts["grow"],
+        "max_sims": sopts["max_sims"],
     }
     rec = sc.run_task(task_, METHOD["search"], opts["sims"], sopts, finisher)
     plan = rec["plan"]
@@ -350,6 +357,7 @@ def run_task(task: dict[str, Any], opts: dict[str, Any]) -> dict[str, Any]:
         mrcm_wins=rec["mrcm_wins"],
         mrcm_seconds=rec["mrcm_seconds"],
         first_plan=rec["first_plan"],
+        rounds=rec["rounds"],
     )
     # D-79: the unexpected-moves check (D-76, E-78) on every record: the search's intermediates
     # that none of the 4 runs nor its root finish make, and that a later mix reuses
@@ -663,6 +671,9 @@ def main(argv: list[str]) -> None:
         # D-75: pilot A3's per-problem switch (finisher=switch)
         "switch_mean": float(args.get("switch_mean", sc.SWITCH_MEAN)),
         "switch_min_leaves": int(args.get("switch_min_leaves", sc.SWITCH_MIN_LEAVES)),
+        # D-87 pilot: leftover time, search again with `grow` x the sims up to `max_sims`
+        "grow": int(args.get("grow", 1)),
+        "max_sims": int(args["max_sims"]) if "max_sims" in args else None,
     }
     limit = int(args["limit"]) if "limit" in args else None
     # D-79: earlier records whose answer key (bound, exact search, published methods) is reused

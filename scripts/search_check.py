@@ -546,8 +546,39 @@ class Search:
             nd.total[i] += end.value
             nd.best = min(nd.best, end.best)
 
-    def run(self, sims: int) -> dict[str, Any]:
+    def run(self, sims: int, grow: int = 1, max_sims: int | None = None) -> dict[str, Any]:
+        """Search with `sims` simulations per move. D-87 (leftover time): when a pass plays the
+        plan to its end before the deadline and `grow` > 1, search again from the root with
+        `grow` times the simulations, up to `max_sims`; the cheapest plan of every pass counts.
+        `rounds` keeps each pass's sims, the cheapest cost after it and the time at its end."""
+        out = self._pass(sims)
+        self.rounds = [(sims, self.best[0] if self.best else None, self._now())]
+        while (
+            grow > 1
+            and self.collect is None
+            and out["played_to_end"]
+            and not out["capped"]
+            and sims * grow <= (max_sims or sims)
+            and CLOCK() < self.deadline
+        ):
+            sims *= grow
+            kept = self.root_finish  # the novelty check reads the first pass's root (D-79)
+            out = self._pass(sims, root_only=True)  # `_offer` keeps only cheaper plans
+            self.root_finish = kept
+            self.rounds.append((sims, self.best[0] if self.best else None, self._now()))
+        if self.best is not None:
+            out.update(plan=self.best[1], tail=self.best[2])
+        return out
+
+    def _now(self) -> float:
+        return round(CLOCK() - self.t0, 3)
+
+    def _pass(self, sims: int, root_only: bool = False) -> dict[str, Any]:
         obs, _ = self.env.reset(options={"instance": self.inst})
+        if root_only:  # a later pass (D-87): fresh tree, same scale and first plan
+            root = self.leaf(obs, (), None)
+            root.value = 0.0
+            return self._descend(root, sims)
         if self.first_plan:
             first = finish_from(PrepState.initial(self.inst), self.inst, WEIGHTS)
             if first is not None and len(first[0]) <= self.inst.step_limit:
@@ -564,6 +595,9 @@ class Search:
             self.c0 = max(self.net(obs, len(self.env.legal))[1], 1.0)
             root = self.leaf(obs, (), None)
         root.value = 0.0
+        return self._descend(root, sims)
+
+    def _descend(self, root: Node, sims: int) -> dict[str, Any]:
         past: list[Node] = []
         capped = False
         while not root.terminal:
@@ -904,7 +938,7 @@ def run_task(
         jump_share=float(opts.get("jump_share", 0.5)),
         first_plan=bool(opts.get("first_plan", False)),
     )
-    out = search.run(sims)
+    out = search.run(sims, int(opts.get("grow", 1)), opts.get("max_sims"))
     stats = hs.plan_stats(inst, f"search_{kind}", out["plan"], CLOCK() - t0)
     opt, cost = task["optimum"], stats["cost"]
     if opt is not None and cost is not None and cost < opt - 1e-9:  # a bug (rule 9)
@@ -927,6 +961,7 @@ def run_task(
         jumps=k,
         jump_share=float(opts.get("jump_share", 0.5)) if k > 0 else None,
         first_plan=bool(opts.get("first_plan", False)),
+        rounds=search.rounds,
         **{f"search_{k}": v for k, v in stats.items()},
     )
     if opts.get("keep_plan"):  # bench.py: the plans themselves, in-process only (not JSON)
