@@ -6,8 +6,10 @@ from __future__ import annotations
 from typing import Any, Protocol
 
 from meda.core.dag import MixingDAG
+from meda.pipeline.geometry import Cell, Rect, Shape
 from meda.pipeline.opgraph import OpGraph
 from meda.pipeline.platform import Platform
+from meda.pipeline.router import ChipState, RouteRequest, RouteResult
 from meda.pipeline.schedule import Schedule
 
 
@@ -20,10 +22,20 @@ class Scheduler(Protocol):
 
 
 class Router(Protocol):
-    """M11: paths for a list of (droplet, source, target) moves before a deadline, or failure;
-    reports time taken, cells newly contaminated, success (doc section 8)."""
+    """Paths for a list of moves (14.8, the doc's section 8): reserves a path for every request
+    in `state`, or nothing; reports success, the first failed request and the ticks taken."""
 
-    def route(self, requests: list[Any], chip_state: Any) -> Any: ...
+    name: str
+
+    def route(self, requests: list[RouteRequest], state: ChipState) -> RouteResult: ...
+
+
+class Placer(Protocol):
+    """A module rectangle for a mix served from tick `t`, or None if no room (14.7)."""
+
+    name: str
+
+    def place(self, shape: Shape, sources: list[Cell], state: ChipState, t: int) -> Rect | None: ...
 
 
 class CostOracle(Protocol):

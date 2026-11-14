@@ -1,0 +1,34 @@
+# Grid platform for the execution harness, M11 (SPEC 14.6-14.10, paper log D-88, L-19).
+# Unit-cell convention: one cell holds one volume unit of the DAG. 1 tick = one move of a 1x1
+# droplet by one cell in any of 8 directions (Nakamura et al. 2026). Operation times are in
+# library units; `unit_ticks` converts them to ticks. Every value is a placeholder (Q-146, Q-149).
+name: meda_grid
+grid: [60, 60]             # rows x cols; any size (literature 15x15 to 100x100+, L-19)
+spacing: 1                 # empty cells kept between droplets, and the module guard ring
+edge_margin: 4             # border band kept free of modules (Mandal 2025: 4-wide routing lanes)
+ports_per_fluid: 1         # dispense ports per fluid, on the west then north edge
+detectors: 2               # detection sites on the east edge
+detector_shape: [3, 3]     # Kundu 2025 Table 1
+waste_ports: 2             # on the south edge
+dead_cells: []             # [[row, col], ...], static obstacles
+mixers: null               # optional cap on mixes at once; null = area alone limits mixing
+storage_capacity: null     # null = the instance's chip limit (SPEC 5.2)
+unit_ticks: 5              # ticks per library time unit; a 3x3 mix = 15 cells travelled
+dispense_units: 3          # Li 2017: dispense 3 s vs mix 2 s
+detect_units: 4            # placeholder; optical detection time depends on the assay
+changeover_units: 2        # detector change between different compositions (placeholder)
+split_ticks: 1             # a take from a stored droplet (Nakamura 2026: split = 1 unit)
+route_horizon: null        # null = 4 (H + W) ticks after a request's release
+# droplet footprint [rows, cols] by volume (up to and including max_volume), near-square
+footprints:
+  - {max_volume: 1, shape: [1, 1]}
+  - {max_volume: 2, shape: [1, 2]}
+  - {max_volume: 4, shape: [2, 2]}
+  - {max_volume: 6, shape: [2, 3]}
+  - {max_volume: 9, shape: [3, 3]}
+  - {max_volume: 12, shape: [3, 4]}
+# mixer module by mix volume: SAR mixers of Kundu 2025 Table 1; the 9-10 entry is extrapolated
+mixer_library:
+  - {max_volume: 4, shape: [3, 3], units: 3}
+  - {max_volume: 8, shape: [4, 4], units: 4}
+  - {max_volume: 10, shape: [4, 5], units: 5}

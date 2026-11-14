@@ -57,10 +57,14 @@ class Op:
 
 @dataclass(frozen=True, slots=True)
 class Droplet:
-    """A droplet made by `producer` and used (whole or in parts) by `consumers`."""
+    """A droplet made by `producer` and used (whole or in parts) by `consumers`. `volume` is
+    its volume and `takes[i]` the units `consumers[i]` takes (14.3, from M11; they sum to
+    `volume`). Zero and empty when unknown (hand-made graphs)."""
 
     producer: int
     consumers: tuple[int, ...]
+    volume: int = 0
+    takes: tuple[int, ...] = ()
 
 
 @dataclass(frozen=True, slots=True)
@@ -126,6 +130,12 @@ def build_opgraph(
     def consumer_ops(node_id: int) -> list[int]:
         return sorted(op_of[c] for c, _ in children[node_id])
 
+    def takes(node_id: int) -> tuple[int, ...]:
+        by_op: dict[int, int] = defaultdict(int)
+        for c, v in children[node_id]:
+            by_op[op_of[c]] += v
+        return tuple(by_op[o] for o in sorted(by_op))
+
     ops: list[Op] = []
     droplets: list[Droplet] = []
     for n in order:
@@ -143,7 +153,8 @@ def build_opgraph(
                         fluid=nodes[p].fluid_id,
                     )
                 )
-                droplets.append(Droplet(did, (op_of[n.id],)))
+                vol = sum(v for c, v in children[p] if c == n.id)
+                droplets.append(Droplet(did, (op_of[n.id],), vol, (vol,)))
         kind, duration = kind_of[n.type]
         oid = op_of[n.id]
         after_end = tuple(sorted(op_of[p] for p in parents[n.id] if p in op_of))
@@ -168,7 +179,9 @@ def build_opgraph(
             )
         )
         if n.type is NodeType.MIX:
-            droplets.append(Droplet(oid, tuple(consumer_ops(n.id))))
+            droplets.append(
+                Droplet(oid, tuple(sorted(set(consumer_ops(n.id)))), n.volume, takes(n.id))
+            )
     ops.sort(key=lambda o: o.id)
     cap = platform.storage_capacity or instance.chip.storage_capacity
     return OpGraph(dag.instance_id, tuple(ops), tuple(droplets), cap)

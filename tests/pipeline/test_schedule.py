@@ -101,7 +101,10 @@ def test_opgraph_of_the_shared_plan() -> None:
     assert [o.feeds for o in g.ops[:2]] == [2, 2] and g.ops[3].feeds == 4
     assert g.ops[4].after_end == (2,) and g.ops[6].after_end == (2,)
     # the 1/2 droplet (op 2) is used by both later mixes; each waste waits for the detection
-    assert Droplet(2, (4, 6)) in g.droplets
+    assert any(d.producer == 2 and d.consumers == (4, 6) for d in g.droplets)
+    # volumes (M11): every droplet's takes sum to its volume; the 1/2 droplet is 2 units
+    assert all(sum(d.takes) == d.volume > 0 for d in g.droplets)
+    assert next(d for d in g.droplets if d.producer == 2).takes == (1, 1)
     assert g.ops[9].after_start == (8,) and g.ops[10].after_start == (7,)
     assert g.ops[7].composition == Composition.from_ints((3, 1), 4)
     assert g.storage_capacity == SHARED.chip.storage_capacity

@@ -1,6 +1,18 @@
 # MEDA Design Automation — Codebase Specification
 
-Version 0.46 · 2026-11-12
+Version 0.47 · 2026-11-14
+
+Changes in 0.47 (M11 design, paper log D-88, L-19): section 14 gains the grid harness design:
+chip geometry and layout, any chip size, unit-cell convention (14.6), the published MEDA mixer
+library (14.7), module placement (14.7), the space-time A* router behind the fixed
+router contract (14.8), the executor that runs list scheduling on the grid with real travel
+(14.9), and the run validator and metrics (14.10); the `Router` protocol in 14.5 is filled in;
+milestone M11 gets its acceptance criteria (16); new rows in 15. Built in the same version
+(E-90): `pipeline/geometry.py`, `router.py`, `placement.py`, `executor.py`, `run_check.py`,
+`configs/platform/meda_grid.yaml`; the opgraph's droplets gain `volume` and `takes`. Details
+settled while building: the edge band is 4 cells; ports half west, half north; inputs are in
+their module at the mix's first tick; pieces of one droplet are exempt from spacing while they
+separate; spacing is judged against t - 1, t, t + 1. M10 numbers are unchanged.
 
 Changes in 0.46 (M10 built, paper log E-83): `meda.pipeline` gains `platform.py`, `opgraph.py`,
 `schedule.py` and `schedule_ilp.py` and `configs/platform/meda_default.yaml` (14.2-14.5). Three
@@ -2261,7 +2273,10 @@ Stages and milestones, in build order (16):
 | Platform model (counts and durations) | `pipeline/platform.py` | M10 (built) |
 | Operation graph builder | `pipeline/opgraph.py` | M10 (built) |
 | List scheduler + schedule validator + exact check | `pipeline/schedule.py`, `pipeline/schedule_ilp.py` | M10 (built) |
-| Geometry, placement, executor, A* router | later | M11 (designed after M10) |
+| Chip geometry and layout | `pipeline/geometry.py` | M11 (designed, 14.6) |
+| Module placement | `pipeline/placement.py` | M11 (designed, 14.7) |
+| Space-time A* router | `pipeline/router.py` | M11 (designed, 14.8) |
+| Executor (list scheduling on the grid), run validator and metrics | `pipeline/executor.py`, `pipeline/run_check.py` | M11 (designed, 14.9-14.10) |
 | Wash rule, detector changeover on the grid, cost record | later | M12 (designed after M11) |
 
 Rules 1-9 of section 2 apply, with "core" read as "harness" for rules 2, 5, 6, 8 and 9: time is
@@ -2306,7 +2321,9 @@ needs and its predecessor operations.
   It exists from its producer's end until its last consumer starts (DISCARD and DETECT count as
   consumers). While it exists and is not inside a running operation it is **stored**. This is
   the same rule as 12.1, now including droplets waiting for a detector (doc §6). Dispensed
-  droplets go straight to their consumer (just in time), so they are never stored.
+  droplets go straight to their consumer (just in time), so they are never stored. From M11
+  (0.47) each droplet also carries its volume and each consumer the volume it takes, for
+  footprints and takes on the grid (14.6, 14.9).
 - `AssaySpec` (an argument of `build_opgraph`, default `detect=True`): every delivered droplet
   is detected once, then discarded. Further assay steps (incubation, a second mix with a sample) are added
   only when a benchmark needs them (Protein, IVD in M12).
@@ -2365,13 +2382,172 @@ scheduler is separate and does not change any reported sample-prep number.
 ```python
 class Scheduler(Protocol):
     def schedule(self, graph: OpGraph, platform: Platform) -> Schedule: ...
-class Router(Protocol):        # M11; contract fixed in the doc's section 8
-    def route(self, requests: list["RouteRequest"], chip_state) -> "RouteResult": ...
+class Router(Protocol):        # M11 (14.8); contract fixed in the doc's section 8
+    def route(self, requests: list[RouteRequest], state: ChipState) -> RouteResult: ...
+class Placer(Protocol):        # M11 (14.7)
+    def place(self, op: Op, sources: list[Cell], state: ChipState) -> Rect | None: ...
 class CostOracle(Protocol):    # M12
     def evaluate(self, dag: MixingDAG) -> "TrueCost": ...
 ```
 A `CostOracle` result will later refine the sample-prep objective (tier-2 cost): cache results
 by DAG hash, and allow a learned surrogate to predict it.
+
+### 14.6 Chip geometry (`pipeline/geometry.py`)
+*0.47, design (D-88).* M10 counts resources; on MEDA the real limit is area: mixers, waiting
+droplets and paths share one electrode array, and a mixer can be formed anywhere (doc §2, §6).
+M11 replaces the mixer count with the grid.
+
+- **Grid.** `grid: [H, W]` cells, any size: a platform value, never a constant (default
+  60 x 60; measurements sweep 30 x 30, 60 x 60, 100 x 100 and report the smallest that runs a
+  plan). Literature (L-19): fabricated MEDA chips are 60 x 30 (Li 2017) and 60 x 80 (Liang
+  2021); synthesis benchmarks use 15 x 15 to 70 x 70 (Kundu 2025), routing papers 10 x 10 to
+  180 x 180, the supervisor's exact router 25 x 25 to 100 x 100 (Nakamura et al. 2026).
+  **Unit-cell convention** (as Kundu 2025 and Nakamura 2026): one cell holds one volume unit of
+  the DAG, so a droplet of volume v covers about v cells. (Li 2017's physical electrodes are
+  finer: a droplet spans 5 x 5 to 15 x 15 of them.) `dead_cells` (default none) are static
+  obstacles.
+- **Droplet footprint.** A droplet of volume v covers a rectangle from `footprints` (default the
+  near-square: 1 -> 1x1, 2 -> 1x2, 3-4 -> 2x2, 5-6 -> 2x3, 7-9 -> 3x3, 10-12 -> 3x4; one entry
+  per volume up to M (the test sets reach M = 10), else an error naming the volume). No
+  morphing in M11: the shape is fixed by volume.
+- **Spacing** (doc §8, constraints 5-6). Two droplets keep at least `spacing` empty cells
+  between their footprints (default 1), in space and in time: a droplet may not enter a cell
+  next to where another droplet was one tick before. Exceptions, and only these: inputs
+  merging inside their own module (14.7), and a part leaving its parent after a take (14.9).
+  A diagonal move is not allowed past a dead cell orthogonally next to it.
+- **Layout** (`layout(instance, platform) -> Chip`, deterministic). `ports_per_fluid` ports per
+  fluid of the instance, half spread evenly along the west edge and the rest along the north
+  edge;
+  `detectors` detection cells spread evenly along the east edge; `waste_ports` (default 2)
+  along the south edge. A dispensed droplet appears on the cells next to its port. Explicit
+  coordinates in config override the rule. If they do not fit, an error names the instance,
+  the edge and the count.
+- **Edge band.** No module or its ring is placed within `edge_margin` cells of the border
+  (default 4, Mandal 2025's routing lanes; wide enough for the largest footprint), so a ring
+  corridor always joins ports, detectors and waste.
+
+### 14.7 Placement (`pipeline/placement.py`)
+*0.47, design (D-88).* Module-based mixing (15; doc §5 recommends it for the harness).
+
+- A MIX gets a **module** from the `mixer_library` by its volume k + l: a rectangle and a
+  mix time. Default, the MEDA split-and-recombine (SAR) mixers of the published module
+  library (Kundu et al. 2025, Table 1; L-19): volume <= 4 -> 3 x 3, 3 units; <= 8 -> 4 x 4, 4
+  units; 9-10 -> 4 x 5, 5 units (extrapolated, no source). A volume without a module raises an
+  error naming it. Around it a guard ring of `spacing` cells (Mandal et al. 2025: module height
+  4 + 2). It is reserved from the tick its first input starts towards it until the mix ends. Inputs merge inside it; the shuttle
+  pattern inside is not simulated (`mix_ticks` covers it). No other droplet enters the module
+  or its ring while it is reserved.
+- **Online placement** is how the HSM synthesis flow works (Li et al. 2017, L-19): an operation
+  placed when it becomes ready, or waiting for the next event if it does not fit.
+- **Storage in place.** When a mix ends, its product stays where it is (at the module's anchor)
+  as a stored droplet with its own footprint and ring; the rest of the module frees
+  (`storage_policy: in_place`; a storage region is a later option, doc §6).
+- **Classical placer.** Among positions whose module and ring are free for the reservation
+  window (no other module, stored droplet or its ring, dead cell, the edge band, or a reserved
+  path cell in that window), take the one with the smallest total travel distance
+  (Chebyshev, 8 directions) from the op's inputs (its ports, its parents' cells); ties: the
+  smallest (row, col). No position free: the op waits (14.9). The M10 `mixers` count still
+  caps mixing if set (`null` in grid platforms: area alone limits mixing).
+
+### 14.8 Router (`pipeline/router.py`)
+*0.47, design (D-88).* The contract is the doc's section 8, fixed once so a learned router or
+the supervisor's Dijkstra router can replace the classical one.
+
+- **In:** `RouteRequest(droplet, shape, source, goal, release)` per droplet (goal = an anchor
+  inside a module, a detection cell or a waste port), and `ChipState`: dead cells, module
+  reservations over time, stored droplets, and the **reservation table** of every path
+  already planned (cell x tick). Spacing is judged against every other droplet's footprint at
+  ticks t - 1, t and t + 1, so two paths planned in either order keep it. Exempt: droplets
+  bound for the same op (they merge there), and pieces of one droplet (a stored droplet, its
+  remainder, its parts, a droplet leaving a detector) during the first
+  `max(shape) + spacing + 1` ticks of the later one, judged at the earlier of the two ticks
+  compared.
+- **Out:** `RouteResult`: per droplet a path (one anchor per tick from `release` to arrival,
+  then held at the goal until its op starts), or a failure naming the first droplet without a
+  path; the ticks taken and the cells covered (for residue in M12).
+- **Classical router** (doc §14 step 6): prioritised space-time A* (cooperative A*): the
+  requests in the given order, each path found with every earlier one reserved. Moves: the 8
+  neighbours or wait, one cell per tick for every shape (shape-dependent velocity is a later
+  table, doc §8 constraint 1). Heuristic: the shortest distance past dead cells and droplets
+  parked for good (admissible; an unreachable goal fails at once). Spacing (14.6) is a mask, never a penalty. Search horizon
+  `route_horizon` ticks after `release` (default 4 (H + W)); beyond it the request fails.
+- **All or nothing:** a call either reserves every requested path or none.
+
+### 14.9 Executor (`pipeline/executor.py`)
+*0.47, design (D-88).* The doc's clock loop (§7) as **list scheduling on the grid**: the M10
+schedule is computed once and gives the order; the executor gives the real times, with travel,
+space and routes. A failed route or a full chip makes an op wait and retry at the next event
+(the doc's loop 1, a stretch), so the run never commits to a time it cannot keep.
+
+- **Priority:** the start order of the better M10 list schedule for the same graph and
+  durations (the smaller makespan of its two priorities; ties by op id), with as many mixers
+  as mixes (area, not a count, limits mixing on the grid). Its makespan is
+  `schedule_makespan`, the run without travel. Graph: `grid_opgraph`, the M10 graph with each
+  mix lasting its module's time.
+- **At each event tick** (an op ends, a droplet arrives, a reservation ends), take the ready
+  ops (as in 14.4: predecessors ended, `after_start` met, storage count and plan-order safety
+  kept) in priority order and try to commit each:
+  - MIX: a free port per dispensed input for `dispense_ticks`, a module (14.7), and router
+    paths for all inputs: dispensed droplets from their ports, takes from their stored
+    parents. It starts when the last input arrives; the inputs are in the module at that tick
+    and merge after it.
+  - DETECT: the detector that can start soonest (changeover as 14.4) and a path to it (the
+    droplet covers the site's top-left cells, shifted in to stay on the chip; the site and the
+    droplet are reserved as one region); held `detect_ticks`; then a path to a waste port.
+  - DISCARD, DELIVER: a path to the nearest waste port with a route; the droplet leaves the
+    chip on arrival.
+  An op that cannot get space or a route stays ready and is retried at the next event.
+- **Takes from a stored droplet** (partial takes, 14.3). A take of u units from a stored droplet
+  of volume V costs `split_ticks` (default 1): the part starts on the parent's anchor, the parent
+  shrinks to the footprint of V - u at the same anchor, and the pair is exempt from spacing for
+  the part's first `spacing + 1` moves. The last take moves the whole droplet.
+- **End:** the run ends when every op has ended and every droplet has left the chip; that tick
+  is the makespan (doc §10, flush included).
+- **Deadlock:** if no op can commit, nothing moves and nothing runs, the executor raises
+  `ExecutionDeadlock` naming the instance, the tick, the stored droplets and why each ready op
+  waits (space, route, storage, port, detector). Never a silent stretch. Measurement scripts
+  record it as a failed run.
+- **Out:** a `Run`: per op its start, end, module and resource; per droplet its path (one
+  anchor per tick); the event log.
+
+### 14.10 Run validator and metrics (`pipeline/run_check.py`)
+`validate_run(run, graph, chip, platform)` replays the run tick by tick and raises `RunError`
+naming the instance and every broken rule:
+1. **Continuity:** a droplet moves at most one cell (8 neighbours) per tick and stays on the chip.
+2. **Spacing and obstacles:** 14.6's spacing in space and time between droplets, and against
+   other modules and their rings, dead cells; only the stated exceptions.
+3. **Operations:** each op's inputs are in its module (or on its detector) at its start; its
+   duration; precedence and storage count on take times (an op "starts" for 14.4's rules when
+   its first input leaves its holder; a dispensed droplet is never stored); storage count <=
+   `storage_capacity`; port and detector capacity and changeover (as 14.4).
+4. **Volume:** the takes from a droplet sum to its volume; each droplet leaves the chip at a
+   waste port after its last use.
+5. **Completeness:** every op runs once; every output is detected (or delivered).
+
+`run_metrics(run, graph)` (exact integers): `makespan`; `schedule_makespan` (the M10 makespan,
+no travel); `travel_ticks` (droplet moves summed); `storage_ticks` (as 14.4) and
+`storage_cell_ticks` (cells of stored droplets with their rings, summed over ticks: the area
+version, doc §6); `peak_cells` (cells covered by droplets, rings and modules at once);
+`space_wait` and `route_wait` (ticks ready ops waited for a module or a route); `route_calls`,
+`route_failures`; `detector_wait`.
+
+**Not in M11** (later, each behind config): contamination and washing (M12), shape-dependent
+velocity and morphing, mixer size by volume, a storage region, heaters and incubation,
+electrode wear, split error, mixing during transport (15).
+
+**Time base.** 1 tick = one move of a 1 x 1 droplet by one cell in any of 8 directions (the unit
+time of Nakamura et al. 2026). Operation times are in library **units**, and `unit_ticks`
+converts them (default 5). Durations in units: dispense 3, mix by module (3-5), detect 4
+(placeholder), changeover 2, split 0 (one tick). How many cells a droplet travels during one
+mix is the number the results depend on most, and the literature spans it widely (L-19): from
+about 3 (a mix of ~2 s, Li 2017, with a unit cell several electrodes wide at ~183 ms per
+electrode, Mandal 2025) to H + W - 1 (Kundu 2025's own assumption: 59 cells on 30 x 30). So
+every measurement sweeps `unit_ticks` in {1, 5, 20}: a 3 x 3 mix = 3, 15 or 60 cells (Q-149).
+
+**Grid platform defaults** (`configs/platform/meda_grid.yaml`, all placeholders, Q-146, Q-149):
+`grid` 60 x 60, the SAR `mixer_library` above, `spacing` 1, `edge_margin` 4, `waste_ports` 2,
+`ports_per_fluid` 1, `detectors` 2 (3 x 3 cells each, fixed on the east edge), `mixers` cap
+null, `unit_ticks` 5, `split_ticks` 1, `route_horizon` 4 (H + W).
 
 ---
 
@@ -2392,6 +2568,9 @@ by DAG hash, and allow a learned surrogate to predict it.
 | Harness durations (dispense, mix, detect hold, detector changeover) and tick length | placeholders 1 / 2 / 4 / 2 ticks, 1 tick = 1 s | `configs/platform` (14.2) | Literature, supervisor |
 | Mixers that run at once, detector count | 4, 2 | `configs/platform` (14.2) | Supervisor |
 | Mixing in reserved modules, during transport, or hybrid | modules (harness first) | M11 design | Supervisor (doc §15 q1) |
+| Chip size, mixer library, spacing, edge band, port/detector/waste positions | 60 x 60 (swept 30-100), SAR library (Kundu 2025), 1, 2, perimeter rule | `configs/platform/meda_grid.yaml` (14.6-14.7) | Supervisor, literature (L-19) |
+| Droplet move time against op durations (cells travelled per mix) | 15 cells per 3 x 3 mix (`unit_ticks` 5), swept 3 / 15 / 60 | `unit_ticks` (14.10) | Literature, supervisor (Q-149) |
+| Where products wait: in place or a storage region | in place | `storage_policy` (14.7) | M11 results |
 
 ---
 
@@ -2502,7 +2681,22 @@ of (a).
 
 Met 2026-11-12 (E-83, `tests/pipeline/test_schedule.py`; (b) is `pytest -m slow`).
 
-**M11 — Harness part 2: geometry, placement, executor, router.** Designed after M10 passes.
+**M11 — Harness part 2: geometry, placement, router, executor (14.6-14.10).** Designed in 0.47
+(D-88). Built in this order, each with its tests: layout and footprints; router; placer;
+executor; validator and metrics; the measurement script (plan 8.4).
+*Accept:* (a) router hand cases: one droplet on an empty grid takes the Chebyshev distance;
+around a stored droplet it takes the shortest legal detour (length worked by hand); two
+droplets crossing never break spacing; an impossible request fails and reserves nothing;
+(b) area is the resource: on a grid with room for one module, two independent mixes run one
+after the other (the second reports `space_wait`), on a grid with room for two they overlap;
+(c) every plan of the sharing pass on `val_s1_v2` ... `val_s3_v2` runs on the default grid
+platform and passes `validate_run`; on `val_s4_v2`, `val_s5_v2` each plan either passes or
+raises `ExecutionDeadlock` naming the instance; tampering with a path (a 2-cell jump, an
+overlap, an input not at its module) fails with the right rule; (d) same input, same run;
+(e) `makespan` and `schedule_makespan` >= the critical path, on every plan of (c); (f) one
+`val_s5_v2` plan runs in under 10 s on the Mac (the measurement needs thousands of runs).
+
+Met 2026-11-14 (E-90, `tests/pipeline/test_grid.py`; (c) is `pytest -m slow`).
 
 **M12 — Harness part 3: washing, cost record, assay benchmarks.** Designed after M11.
 ---
