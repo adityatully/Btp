@@ -37,6 +37,7 @@ chats. Last updated 2026-11-03.*
 | Q-41 | What's the reference ("best known") every grading uses? | 2.1 |
 | Q-42 | Can we prove more optima on the val sets? | 2.2 |
 | Q-49 | How do the agent and planner compare with published heuristics? Could one be a better teacher? | 2.4 (stages 1–2), 6.3 (all) |
+| Q-148 | Do the gaps on small problems (s1 6% above optima, deep 1:1 dilutions, NFSP level) close if the search uses its leftover time? | D-87 pilot (`grow_check.py`, val s1-s3) |
 | Q-101 | Has the agent been fully trained (all stages, regime chosen, 3 seeds)? | 3.5, 3.6, 5.4 |
 | Q-103 | Is the mini benchmark's problem set big enough and unseen? | 2.4 |
 | Q-104 | Should MRCM become part of our planner and teacher for mixtures? | Open, no step yet (E-29) |
@@ -87,9 +88,10 @@ chats. Last updated 2026-11-03.*
 | Q-91 | Do robust-aliquot, Dong 2024 or e-MRCM narrow the claim? | 6.1 |
 | Q-95 | The real platform: M, mixer footprint, reservoirs, cost weights, router as cost oracle | Supervisor |
 | Q-96 | Do the generalisation claims hold (unseen sizes and constraints)? | 5.2, 6.4 |
-| Q-145 | Do the savings from shared intermediates survive execution (time, storage, detector queues), and if not, can execution-aware planning keep them? | 8.3, then 8.5 |
+| Q-145 | Do the savings from shared intermediates survive execution (time, storage, detector queues), and if not, can execution-aware planning keep them? | time: E-89; routing: 8.4 |
 | Q-146 | What are realistic MEDA durations (dispense, mix, detect hold, detector changeover), mixer count and detector count? | Literature, supervisor; 8.3 sweeps placeholders (SPEC 14.2) |
-| Q-147 | Is list scheduling close enough to the optimal schedule (within 5% on average), or does scheduling need search? | Yes on 184 graded plans (E-84: 1.011, s1-s3 all optimal); open for the 28 largest s4-s5 plans the ILP could not answer in 60 s |
+| Q-147 | Is list scheduling close enough to the optimal schedule (within 5% on average), or does scheduling need search? | Small and medium plans yes (E-84: s1-s3 all optimal); largest s4-s5 plans no: 1.077 x the ILP's best on 17 graded, up to 1.24, plan order beats critical path 16/0 (E-87); 11 ungraded. Open: search over priorities for them? |
+| Q-149 | How far does a MEDA droplet travel during one mix (move time against op durations), and how big is a mixer module for each mix volume? | Literature, supervisor; 8.4 sweeps 3/15/60 cells per 3 x 3 mix (D-88, L-19) |
 
 ---
 
@@ -938,7 +940,16 @@ can the router serve as a cost oracle?** · **Open → supervisor** (§8 of the 
 them (E-78, E-80). Shared droplets wait longer on the chip (storage, obstacles) and feed
 detector queues. The M10 scheduler measures makespan and storage x duration for our plans
 against the planner's and the published methods'. If sharing costs time, 8.5 makes the search
-see it.
+see it. *Schedule half answered 2026-11-14 (E-89): no time cost on many targets (0.936 x no
+sharing; level with published methods); 6-12% slower than published methods on s1-s2. Storage
+x time 1.3-3.9x: the routing half stays open → plan 8.4.*
+
+**Q-149 How far does a droplet travel during one mix, and how big is a mixer?** · **Open →
+literature, supervisor; 8.4 sweeps it** (D-88, 2026-11-14) On the grid, run time is travel plus
+operations, so what matters is their ratio: cells a droplet moves during one mix. Literature
+(L-19) spans ~3 (Li 2017's 2 s mix) to ~60 (Kundu 2025's assumption); default 15, swept 3 / 15 /
+60. Mixers from Kundu 2025's library (3 x 3 up to 4 units, 4 x 4 up to 8); nothing published
+above 8 units (our sets reach 10).
 
 **Q-147 Is list scheduling close enough to the optimal schedule?** · **Open → plan 8.2**
 (D-85, 2026-11-12) Bar: the better of critical-path and plan-order priority averages <= 1.05 x

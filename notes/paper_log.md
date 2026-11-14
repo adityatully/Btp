@@ -1262,6 +1262,68 @@ Format: date · decision · alternatives considered · why · evidence.
   same way. Also reported: how often each priority is the better one (E-83 hinted plan order
   sometimes wins), ILP time, and per stage.
 
+- **D-86 (2026-11-13) Does sharing cost run time on the chip (plan 8.3, Q-145)?**
+  `scripts/sharing_time.py`: per problem of `test_s1_v1` ... `test_s5_v1`, `test_heldout_v1`,
+  each producer's plan is turned into chip steps and scheduled (`meda.pipeline`, the better of
+  the two list priorities, E-87), on the default platform and two variants (mix 4 ticks;
+  detect 8 and changeover 4) so no verdict rests on one guessed duration. Producers: our
+  method (method-v3 search, **60 s** CPU: the paper's short column, Q-139; 900 s is too long
+  for the free cores), the plain sharing pass and `share_mrcm_look3` (our planner), the cheapest
+  construction (naive or split tree: no droplet shared between targets; it always has a plan,
+  while naive and most published heuristics decline many-target problems), and the fast published heuristics DFM, FacDA, Generic, DFMM,
+  MRCM, e-MRCM. Per plan: makespan, `storage_ticks`, `storage_peak`, `detector_wait`, fluid
+  cost (fluid goal), sharing count (12.1). **Reading fixed in advance**, per comparator, on
+  the problems both solve, paired, default platform, stages 3-5 + held-out (many targets)
+  and s1-s2 reported apart: makespan ratio ours / comparator, mean with 95% bootstrap CI.
+  *Sharing costs time* if the mean is > 1.05 with the CI above 1.00; *no cost* if the CI lies
+  within [0.95, 1.05]; *saves time* if the mean is < 0.95 with the CI below 1.00; otherwise
+  *unclear*. Reported beside it: the fluid-cost ratio (what the time buys) and the
+  `storage_ticks` ratio. The verdict counts as robust if both variants give the same one.
+  First run on the Mac without our method (planner vs the rest), then the full run on coe9.
+- **D-87 (2026-11-13) Pilot: leftover time on small problems (Q-148).** User, after E-85/E-86
+  and an honest look at the gaps (s1 6.0% above proved optima, E-64; d 7-8 dilutions 0.7-5.3%
+  above NFSP, E-86; NFSP only level on fluid, E-85): "lets try the cheap fix once". None of the
+  earlier pilots (A, A2, A3, v3) aimed at these gaps. Cause guessed: method-v3 stops once 256
+  sims per move have played the plan to its end, seconds into a 900 s budget (60 s = 900 s on
+  every small set). **Fix:** when a pass ends early, search again from the root with 4x the
+  sims, up to 4,096 (`search_check.Search.run(grow, max_sims)`, `bench.py grow=4
+  max_sims=4096`); the cheapest plan of any pass counts, so it is never dearer, and the first
+  pass is method-v3 itself (`ours.rounds`). **Pilot:** val s1-s3 v2, fluid, coe9 (4 free
+  cores); never the test sets. `dmfb_sweep_v1` is every d 4-8 dyadic CF, so it has no val
+  twin: the B3 rerun is a true test. **Bar (`scripts/grow_check.py`, fixed before the run):**
+  joins the method if cheaper than pass 1 on at least 10% of the problems pooled, or a third of
+  the mean gap to proved optima is closed; else dropped and method-v3 stays (D-83). If it
+  joins: SPEC change, then B1 s1-s3, B2(a) and B3 rerun (small problems; B1 s4-s5 and B2(b)
+  use the full budget already).
+- **D-88 (2026-11-14) M11 design: the grid harness (SPEC 0.47, 14.6-14.10, plan 8.4).** After
+  E-89 (sharing costs no schedule time but droplets wait 1.3-3.9x longer) and the user's points:
+  a mixer count is a DMFB idea (on MEDA a mixer is any free patch of electrodes, so mixers,
+  waiting droplets and paths share one area); travel time was zero; and scheduling runs once
+  while routing runs again and again (doc §7). **Decisions:** (1) the grid replaces the mixer
+  count: modules are placed anywhere free, and a full chip makes an op wait (area is the
+  resource); (2) module-based mixing (doc §5's harness default), one 8 x 8 module size, products
+  wait in place; (3) the M10 schedule is computed once and gives the order; the executor runs
+  list scheduling on the grid and finds the real times with travel, space and routes, so a
+  failed route is a wait and retry (the doc's loop 1) and never a broken promise; (4) classical
+  router: prioritised space-time A* behind the doc's fixed contract, 8 directions, spacing in
+  space and time as a mask, all-or-nothing per op; (5) out of M11: washing (M12), shape
+  velocity, morphing, mixer size by volume, heaters, wear, split error. **Time base:** 1 tick =
+  one move of one cell; M10 durations x 20 (40 cells travelled per mix); that ratio is unknown
+  for MEDA (Q-149), so it is swept. **Measurement after the build (8.4, reading fixed now):** the
+  E-89 producers and test sets run on the grid, on 30 x 30 and 60 x 60 and with 10, 40 and 160
+  cells per mix. Per comparator, paired: (a) *runs*: the share of problems that finish without
+  deadlock; sharing *costs feasibility* if ours finishes on at least 5 points fewer; (b) grid
+  makespan ratio ours / comparator on problems both finish, read with D-86's rule; (c) beside
+  it: `storage_cell_ticks` ratio and the travel overhead `makespan / schedule_makespan`. A
+  verdict counts as robust if every grid variant where both finish on at least 90% gives the
+  same one. Many targets and s1-s2 reported apart, as D-86.
+  *Amended the same day, before any code, after the literature check (L-19):* chip size is a
+  platform value, default 60 x 60, swept 30 / 60 / 100 with the smallest size that runs a plan
+  reported; the unit-cell convention (one cell per volume unit); mixers from the published MEDA
+  SAR library by volume (3 x 3 for <= 4 units, 4 x 4 for <= 8), not one 8 x 8 block; time in
+  ticks of one 1 x 1 move with ops in library units x `unit_ticks`, swept so a 3 x 3 mix = 3, 15
+  or 60 cells (replaces 10 / 40 / 160 cells per mix and the 30 x 30 / 60 x 60 grid above).
+
 ## 4. Experiments and results
 
 ### E-1 (2026-10-13) Exact search on the hand-checked cases (M5)
@@ -2040,6 +2102,100 @@ MRCM's intermediates on val_s2: 4 of 28 covered (chain D4), 5 of 28 (premix D3).
   (an exact lower bound on mixes left, or a constructive method's recipes, which is a planner
   again). (3) Built as SPEC 0.28 `hint_source: problem` (depth-4 chain in the recipe columns)
   for a copy-test comparison on stages 1–2 against the planner's hints.
+
+### E-90 (2026-11-14) M11 built: the grid harness runs every val plan, no violation, no deadlock; real run time 2-3.5x the no-travel schedule
+Mac, SPEC 0.47 (uncommitted at the time), `pipeline/geometry.py`, `router.py`, `placement.py`,
+`executor.py`, `run_check.py`, `configs/platform/meda_grid.yaml` (60 x 60, SAR mixers, 15 cells
+per 3 x 3 mix); tests `tests/pipeline/test_grid.py`. **Acceptance (SPEC 16, M11):** (a) router
+hand cases pass (Chebyshev 5 on an empty grid; detour 6 around a parked droplet, worked by hand;
+crossing droplets keep spacing; an impossible request fails and reserves nothing); (b) area is
+the resource: with room for one module two mixes run one after the other (space waits), with
+room for two they overlap; (c) all 202 sharing-pass plans of val_s1_v2 ... val_s5_v2 run and pass
+`validate_run`, none deadlocks (s4-s5 allowed to); tampering with a path, a position or a module
+fails with the right rule; (d) same input, same run; (e) makespan and schedule makespan >= the
+critical path on every plan; (f) the largest val plans (357 and 406 ops) run in 7.0 s and
+9.1 s. **Bugs the validator caught while building, all fixed before the numbers:** the last
+input was one cell outside its module on the tick before the mix; two pieces of one droplet
+taken a tick apart blocked each other (exemption now covers every piece of a droplet while they
+separate, judged at the earlier tick of the two compared). **First numbers (not a reading;
+D-88's run is plan 8.4 step 6):** makespan / no-travel schedule makespan, mean (max): s1 2.73
+(3.19), s2 2.59 (3.16), s3 2.64 (3.49), s4 2.17 (2.77), s5 2.45 (3.17). Travel, not mixing,
+is most of a run on 60 x 60 at 15 cells per mix; the largest s5 plan waits mostly on storage
+(storage count wait 18,262 op-ticks). Speed: the router first re-checked every droplet ever
+made at every tick (37 s on the largest plan); filtering to droplets still on the chip and a
+whole-grid BFS brought it to 7 s with the same runs.
+
+### E-89 (2026-11-14) Sharing and run time, D-86 final run: our search's plans cost no time on many targets; on s1-s2 they run 6-12% slower than published methods
+coe9, `scripts/sharing_time.py` (as at `99c49ac`), `outputs/sharing_time/coe9_full.jsonl`:
+the six test sets, `method=1` (method-v3 search, 60 s CPU), 4 workers. "Ours" = the search's
+plans. Ratios are ours / comparator, paired on problems both solve; default platform unless said.
+- **Many targets (s3-s5 + held-out, 405 problems) vs the no-sharing construction:** *saves time*,
+  0.936 (CI [0.921, 0.952]), faster on 233, slower on 85, for 43% less fluid cost (0.568). The price:
+  storage x time 3.9x. Slow mix 0.969 (unclear, CI below 1), slow detect 0.969 (no cost): not
+  robust by D-86's letter, but never slower.
+- **Vs the plain sharing pass:** *no cost* on all three platforms (0.996), 13% cheaper fluid.
+- **Vs published methods on many targets** (only 10-28 problems they accept): Generic *saves time*
+  (0.842, 12); DFM 1.050, FacDA 1.009, DFMM 1.071, e-MRCM 1.027 (28): *unclear*, CIs straddle 1;
+  MRCM 1.050 (CI [1.008, 1.104], slower on 4 of 17, faster on 0) *unclear*, *costs time* under
+  slow mix. Our fluid is 7-41% cheaper against each.
+- **s1-s2 (200 problems):** vs construction 1.033 and the plain pass 1.036 (*unclear*, CIs just
+  above 1). Vs published single-target methods ours *costs time*: DFM 1.118 (78), FacDA 1.101
+  (78), DFMM 1.098 (99), MRCM = e-MRCM 1.061 (105); Generic level (0.995). Fluid 11-40% cheaper,
+  storage x time 1.5-1.7x.
+- **Reading (D-86):** on the MTMD problems the paper is about, sharing does not cost run time
+  (faster than no sharing, level with the published methods where they apply). On single and
+  two-target problems our cheaper plans run 6-12% longer than the published heuristics': the
+  fluid saving comes with a longer schedule there. Everywhere the cost that grows is waiting
+  droplets (storage x time 1.3-3.9x), which matters to routing (M11). Supersedes E-88's
+  preliminary numbers. Q-145 answered for the schedule; its routing half stays open (plan 8.4).
+
+### E-88 (2026-11-13) Sharing and run time, first look (D-86, planner as stand-in): no time cost, more waiting droplets
+Mac, `scripts/sharing_time.py` at `99c49ac`, `outputs/sharing_time/mac_fast.jsonl`: 20
+problems per test set (120), our method replaced by `share_mrcm_look3` (the search runs on
+coe9); default platform unless said. **Preliminary**, not D-86's final run.
+- **Many targets (s3-s5, held-out, 80 problems) vs the no-sharing construction:** our planner's
+  plans run 4.5% *faster* (0.955, CI [0.927, 0.983], faster on 41, slower on 12) for 36% less
+  fluid cost. D-86 verdict: *unclear* by the letter (mean not below 0.95), but the CI is below 1:
+  sharing does not cost time. Same with slow mixes; *no cost* with slow detection.
+- **But droplets wait more:** storage x time 54 vs 23 ticks on average (2.4x), peak waiting
+  droplets 2.7 vs 1.4. Sharing keeps intermediates alive for later targets.
+- **Vs published heuristics** (only where they accept the problem: 5-12 of 80 many-target
+  problems): as fast or faster (DFM, FacDA, Generic, e-MRCM: *saves time*; DFMM, MRCM: unclear,
+  0 slower), with less waiting.
+- **s1-s2 (40):** no time cost against the construction or the plain pass.
+- **Reading so far:** sharing buys fluid without costing run time in the schedule; its price
+  is more droplets waiting on the chip. Waiting droplets block the router (doc section 6), so
+  the cost, if any, shows up at routing (M11), not scheduling. To confirm with the search's own
+  plans (coe9 run, D-86).
+
+### E-87 (2026-11-13) Scheduling gap on the 28 largest plans: list scheduling is 5-24% off; plan order beats critical path
+coe9, `scripts/schedule_gap.py` at `752a9ae` (SPEC 0.46), `outputs/schedule_gap/large28.jsonl`
+(the 28 s4-s5 plans the ILP did not answer in 60 s in E-84; 600 s CPU per ILP, 4 workers).
+- **Graded 17 of 28** (11 found no schedule in 600 s; 6 of the 17 not proved optimal, so their
+  ratios understate the gap). On these: the better list schedule is 1.077 x the ILP's best
+  (max 1.24), within 10% on 11 of 17, at it on 5. s4 1.055 (13), s5 1.148 (4).
+- **Critical path is the wrong default on large plans:** plan order is better on 16 of 17, 0
+  the other way (mean 1.077 vs 1.192 x the ILP's best). On E-84's smaller plans they were even.
+- **D-85 reading:** with E-84, 201 of 212 plans graded: 1.017 x optimum on average, within 10%
+  on 94.5% (derived from both summaries): **the bar is met overall**, but not on the largest
+  many-target plans, which are the MTMD cases that matter. 11 plans (90-406 operations) stay
+  ungraded.
+- **So:** scheduling is done for small and medium plans; on large ones list scheduling leaves
+  5-24% (a lower bound) and its priority rule matters. D-85's fallback applies there: a search
+  over priorities (classical, no RL).
+
+### E-86 (2026-11-13) Final B3, method-v3: the 1:1 engine check passes again, same numbers as E-67
+coe9, `scripts/bench.py` at `6161ea9` (SPEC 0.44, method-v3), `outputs/bench/b3_v3.jsonl`
+(`dmfb_sweep_v1`, 491 dyadic 1:1 dilutions d 4-8, fluid goal; reuses `b3.jsonl`). A test,
+never a win (D-71). **Checks pass:** 3a 0, 3b 0. Every number equals E-67: ours / NFSP (441
+solved) d 4-6 1.000, d 7 1.007, d 8 1.053; ours / proved optimum 1.073 (180); ours / planner
+0.641 (436 / 55 / 0); 60 s = 900 s. The 7 methods new since E-67: MTMD, DDMT, Fukui beat
+(0.641, the same plans as DFM); robust 0.984 (110, 55 / 55 / 0); Dong 5 ties; MTWM 1.012
+(27 / 396 / 68) and TVODA 1.011 (27 / 397 / 67) level; WSPM 0.989 (394 / 76 / 21) level;
+SIMOP 1.032 (7 / 411 / 73) and FacDA 1.036 (0 / 417 / 74), NFSP 1.027 (0 / 383 / 58) cheaper
+on some deep dilutions: method-v3 is not optimal on deep 1:1 dilutions, as E-67 says. The
+"0 problems (too few)" lines in the reading are methods whose own goal is steps or waste,
+which B3 does not run (fluid only). Supersedes E-67 as the paper's B3 table.
 
 ### E-85 (2026-11-13) Final B2 part (a), method-v3 with all 16 published methods: beats 11, level with NFSP and Dong
 coe9, `scripts/bench.py` at `6161ea9` (SPEC 0.44, method-v3 frozen, D-83),
@@ -3844,6 +4000,24 @@ independent reference (oracle, optimum, bound, validator) catches it.**
   rest 0; papers' set 2. Tests: `tests/solvers/test_simop.py`.
 
 ---
+- **L-19 (2026-11-14) The MEDA chip model for the grid harness (D-88, Q-149).** Read from the
+  user's routing library (`~/Downloads/routing`). **Chip size:** fabricated MEDA chips 60 x 30
+  (Li et al., TBioCAS 2017, HSM) and 60 x 80 (Liang et al., ICML 2021, MARL, 17.2 mm², 1 kHz,
+  reservoirs on the sides); synthesis benchmarks 15 x 15 to 70 x 70 (Kundu et al., TIST 2025,
+  RLPM; "sufficiently large" chip per test case, plus the smallest chip that fits); 24 x 72
+  (Mandal et al., TODAES 2025); routing 10 x 10 to 180 x 180 (Liang 2022 DRL); exact routing of
+  one volume-2 droplet up to 100 x 100 (Nakamura, Yamashita, Tomiyama, Gupta, VLSID 2026: 1 time
+  unit = a 1 x 1 move in 8 directions; 2 x 1 moves 1 along its long side, 2 otherwise; split 1;
+  morph 2). **Mixers:** module library of Kundu 2025 Table 1: 2 x 2 circular (cap 2, time 10),
+  2 x 4 circular (4, 7), 3 x 3 SAR (4, 3), 4 x 4 SAR (8, 4), L-circular (4, 5); detector,
+  heater, cooler 3 x 3 (detector time 1). Guard ring 1 cell (Mandal 2025: module height 4 + 2;
+  routing lanes 4 wide). **Times:** Li 2017 dispense 3 s, mix (2 x 2 array) 2 s, dilute 3 s,
+  sensing 0.01 s; its velocity model was validated on the fabricated chip with droplets 5 x 5 to
+  15 x 15 electrodes; a droplet needs ~183 ms per electrode at 1 kHz (Mandal 2025, from Li's
+  model). Kundu 2025 assumes crossing the chip (H + W - 1 cells) takes one 3 x 3 SAR mix.
+  **Scheduling:** HSM schedules online: a ready operation is placed when it fits, else waits
+  for the next event (our executor, 14.9). **Gaps:** no published move-time-per-mix in unit
+  cells (spans ~3 to ~60), no MEDA mixer above 8 units, optical detection time varies by assay.
 
 ## 7. Figure and table ideas
 
