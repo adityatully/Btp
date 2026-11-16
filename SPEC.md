@@ -1,6 +1,15 @@
 # MEDA Design Automation — Codebase Specification
 
-Version 0.49 · 2026-11-15
+Version 0.50 · 2026-11-16
+
+Changes in 0.50 (turning, paper log D-92, plan 8.6 step 2 part 2a): **default physical
+assumption changed.** The router may turn a droplet that is not square (h x w -> w x h) at a
+fixed anchor in `morph_ticks` ticks (its longer side; Nakamura et al. 2026), holding the turn
+box (the square of its longer side) mid-turn; it must arrive in its own shape (`turns: true`;
+`false` = 0.49). Router contract (14.8): `RouteResult` gains `shapes`, a footprint per tick for
+a droplet that turns; `Body` gains the same (`shape_at`, `rects_from`); placement, the
+executor's look-ahead and the run validator read footprints per tick; rule 1 checks turns;
+`trip_floor` allows turns. Split and merge on the way stay out (Q-153).
 
 Changes in 0.49 (shape-dependent speed, paper log D-90, L-21): **default physical assumption
 changed.** A move now takes `GridPlatform.move_ticks(shape, direction)` ticks (14.8): horizontal
@@ -2422,8 +2431,8 @@ M11 replaces the mixer count with the grid.
   obstacles.
 - **Droplet footprint.** A droplet of volume v covers a rectangle from `footprints` (default the
   near-square: 1 -> 1x1, 2 -> 1x2, 3-4 -> 2x2, 5-6 -> 2x3, 7-9 -> 3x3, 10-12 -> 3x4; one entry
-  per volume up to M (the test sets reach M = 10), else an error naming the volume). No
-  morphing in M11: the shape is fixed by volume.
+  per volume up to M (the test sets reach M = 10), else an error naming the volume).
+  The droplet keeps this shape except while the router turns it (0.50, 14.8).
 - **Spacing** (doc §8, constraints 5-6). Two droplets keep at least `spacing` empty cells
   between their footprints (default 1), in space and in time: a droplet may not enter a cell
   next to where another droplet was one tick before. Exceptions, and only these: inputs
@@ -2478,7 +2487,8 @@ the supervisor's Dijkstra router can replace the classical one.
   slowest `move_ticks`, 0.49), judged at the earlier of the two ticks compared.
 - **Out:** `RouteResult`: per droplet a path (one anchor per tick from `release` to arrival,
   then held at the goal until its op starts), or a failure naming the first droplet without a
-  path; the ticks taken and the cells covered (for residue in M12).
+  path; the ticks taken and the cells covered (for residue in M12); per droplet that turns, its
+  footprint per tick (`shapes`, 0.50; empty if it keeps its shape).
 - **Classical router** (doc §14 step 6): prioritised space-time A* (cooperative A*): the
   requests in the given order, each path found with every earlier one reserved. Moves: the 8
   neighbours or wait; a move takes `move_ticks(shape, direction)` ticks *(0.49, L-21)*, the
@@ -2486,7 +2496,14 @@ the supervisor's Dijkstra router can replace the classical one.
   height for a vertical one (time = volume / cells on the leading edge, the Ritsumeikan
   group's model after Li et al. 2017), diagonal = the longer side (`diagonal_rule: max`,
   Nakamura et al. 2026) or width + height (`sum`, Shiro et al. 2022); `uniform` = one tick for
-  every shape (M11). The model is assumed, not calibrated (L-21), so it is config and swept. Heuristic: the shortest distance past dead cells and droplets
+  every shape (M11). The model is assumed, not calibrated (L-21), so it is config and swept.
+  **Turns** *(0.50, D-92)*: with `turns: true` (default) a droplet that is not square may also
+  turn in place, h x w -> w x h at the same top-left anchor, in `morph_ticks` = its longer side
+  (Nakamura et al. 2026: 2 for 2 x 1); for the ticks before it lands it holds the turn box (the
+  square of its longer side, covering both shapes; conservative, the shapes in between are not
+  modelled). A droplet must arrive in its own shape, so placement and the executor are
+  unchanged. The search runs over (anchor, orientation, tick); the heuristic counts an anchor
+  open if either orientation fits there. Heuristic: the shortest distance past dead cells and droplets
   parked for good, in moves times the cheapest move (admissible; an unreachable goal fails at
   once). Spacing (14.6) is a mask, never a penalty. Search horizon
   `route_horizon` ticks after `release` (default 4 (H + W) times the droplet's slowest move);
@@ -2539,7 +2556,10 @@ space and routes. A failed route or a full chip makes an op wait and retry at th
 `validate_run(run, graph, chip, platform)` replays the run tick by tick and raises `RunError`
 naming the instance and every broken rule:
 1. **Continuity:** a droplet moves to one of its 8 neighbours, no sooner than `move_ticks` for
-   its shape and direction after it reached its current anchor, and stays on the chip.
+   its shape and direction after it reached its current anchor, and stays on the chip. A turn
+   (0.50) keeps the anchor, holds the turn box, lands in the other orientation no sooner than
+   `morph_ticks` after it began, and only a droplet that is not square turns; no move mid-turn;
+   a droplet starts and ends in its own shape.
 2. **Spacing and obstacles:** 14.6's spacing in space and time between droplets, and against
    other modules and their rings, dead cells; only the stated exceptions.
 3. **Operations:** each op's inputs are in its module (or on its detector) at its start; its
@@ -2553,14 +2573,14 @@ naming the instance and every broken rule:
 `run_metrics(run, graph)` (exact integers): `makespan`; `schedule_makespan` (the M10 makespan,
 no travel); `travel_ticks` (droplet moves summed); `transit_ticks` (ticks from release to
 arrival, summed over trips) and `trip_floor` (the same trips' shortest lengths on the empty
-chip, 0.48), so `transit_ticks - trip_floor` is the detours and waits inside paths; `storage_ticks` (as 14.4) and
+chip, 0.48; with turns where allowed, 0.50), so `transit_ticks - trip_floor` is the detours and waits inside paths; `storage_ticks` (as 14.4) and
 `storage_cell_ticks` (cells of stored droplets with their rings, summed over ticks: the area
 version, doc §6); `peak_cells` (cells covered by droplets, rings and modules at once);
 `space_wait` and `route_wait` (ticks ready ops waited for a module or a route); `route_calls`,
 `route_failures`; `detector_wait`.
 
-**Not in M11** (later, each behind config): contamination and washing (M12), shape change
-(morphing) and splitting on the way (D-90 part 2), mixer size by volume, a storage region,
+**Not in M11** (later, each behind config): contamination and washing (M12), morphing into
+other shapes than the turn (0.50) and splitting on the way (D-90 part 2, Q-153), mixer size by volume, a storage region,
 heaters and incubation, electrode wear, split error, mixing during transport (15).
 
 **Time base.** 1 tick = one move of a 1 x 1 droplet by one cell in any of 8 directions (the unit
@@ -2576,7 +2596,7 @@ every measurement sweeps `unit_ticks` in {1, 5, 20}: a 3 x 3 mix = 3, 15 or 60 c
 `grid` 60 x 60, the SAR `mixer_library` above, `spacing` 1, `edge_margin` 4, `waste_ports` 2,
 `ports_per_fluid` 1, `detectors` 2 (3 x 3 cells each, fixed on the east edge), `mixers` cap
 null, `unit_ticks` 5, `split_ticks` 1, `route_horizon` 4 (H + W) x the slowest move, `move_rule` extent,
-`diagonal_rule` max (0.49).
+`diagonal_rule` max (0.49), `turns` true (0.50).
 
 ---
 

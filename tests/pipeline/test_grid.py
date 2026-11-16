@@ -24,7 +24,14 @@ from meda.pipeline.router import (
     free_distances,
     turn_distances,
 )
-from meda.pipeline.run_check import RunError, RunRule, check_run, run_metrics, validate_run
+from meda.pipeline.run_check import (
+    RunError,
+    RunRule,
+    _check_motion,
+    check_run,
+    run_metrics,
+    validate_run,
+)
 from meda.pipeline.schedule import critical_path
 from meda.solvers.baselines.share import ShareSolver
 from tests.core.helpers import chip, dilution
@@ -229,6 +236,80 @@ def test_free_router_options_take_the_fastest_trip() -> None:
     split = FreeRouter(turn=True, split=True).route([req], _bare(8, 16))
     assert len(plain.paths[0]) - 1 == 30 and len(split.paths[0]) - 1 == 18
     assert split.paths[0][0] == (2, 0) and split.paths[0][-1] == (2, 10)
+
+
+# ---------------------------------------------------------------- turning (0.50, D-92)
+
+
+def test_astar_turns_on_a_long_trip_along_the_slow_side() -> None:
+    """The free case above, now with A*: 1 x 2 from (3, 0) to (3, 6) takes 10 ticks with
+    turns (turn 2, 6 moves at 1, turn back 2), 12 without; it holds the 2 x 2 turn box for one
+    tick each turn and ends in its own shape."""
+    st = _bare(8, 12)
+    req = RouteRequest(1, (1, 2), 2, (3, 0), (3, 6), 0, to_waste=True)
+    res = AStarRouter().route([req], st)
+    assert res.ok and len(res.paths[0]) - 1 == 10
+    shapes = res.shapes[0]
+    assert shapes == st.bodies[1].shapes and len(shapes) == len(res.paths[0])
+    assert shapes[0] == shapes[-1] == (1, 2) and shapes.count((2, 2)) == 2
+    assert shapes.count((2, 1)) == 7  # the tick it lands turned, then 6 one-tick moves
+    st = _bare(8, 12)
+    st.gp = replace(st.gp, turns=False)
+    res = AStarRouter().route([req], st)
+    assert res.ok and len(res.paths[0]) - 1 == 12 and res.shapes == ((),)
+
+
+def test_astar_does_not_turn_when_it_does_not_pay() -> None:
+    """3 cells sideways: 6 ticks as it is, 7 with two turns."""
+    st = _bare(10, 10)
+    res = AStarRouter().route([RouteRequest(1, (1, 2), 2, (0, 0), (0, 3), 0, to_waste=True)], st)
+    assert res.ok and len(res.paths[0]) - 1 == 6 and res.shapes == ((),)
+
+
+def test_turning_gets_a_droplet_through_a_one_cell_gap() -> None:
+    """A wall of dead cells along row 3 with one gap at col 3: a 1 x 2 droplet cannot pass as
+    it is, but can turned to 2 x 1. Every footprint keeps off the dead cells."""
+    dead = frozenset((3, c) for c in range(7) if c != 3)
+    gp = _small(7, 7)
+    chip_ = Chip("hand", 7, 7, {}, (), (), dead, Rect(0, 0, 7, 7))
+    req = RouteRequest(1, (1, 2), 2, (0, 0), (5, 0), 0, to_waste=True)
+    st = ChipState(chip_, replace(gp, turns=False))
+    assert not AStarRouter().route([req], st).ok
+    st = ChipState(chip_, gp)
+    res = AStarRouter().route([req], st)
+    assert res.ok and res.shapes[0]
+    body = st.bodies[1]
+    for t in range(body.start, body.arrival + 1):
+        rect = body.rect(t)
+        assert rect is not None and not any(cell in dead for cell in rect.cells())
+    issues: list[str] = []
+    _check_motion(body, gp, lambda rule, msg: issues.append(msg))
+    assert not issues
+
+
+def test_checker_rejects_bad_turns() -> None:
+    """A 1 x 2 turn takes 2 ticks through the 2 x 2 box: one tick is too fast, a move inside
+    the box is not allowed, and a droplet must end in its own shape."""
+    gp = _small(8, 8)
+
+    def issues(
+        path: tuple[tuple[int, int], ...],
+        shapes: tuple[tuple[int, int], ...],
+        shape: tuple[int, int] = (1, 2),
+    ) -> str:
+        out: list[str] = []
+        body = Body(1, shape, 2, 0, path, INF, "move", shapes=shapes)
+        _check_motion(body, gp, lambda rule, msg: out.append(msg))
+        return "; ".join(out)
+
+    own, turned, box = (1, 2), (2, 1), (2, 2)
+    here = ((0, 0),)
+    assert issues(here * 5, (own, box, turned, box, own)) == ""
+    assert "needs 2" in issues(here * 3, (own, turned, own))
+    assert "moves while it turns" in issues(((0, 0), (0, 0), (1, 0)), (own, box, turned))
+    assert "mid-turn" in issues(((0, 0), (0, 0), (0, 1), (0, 1)), (own, box, box, turned))
+    assert "own shape" in issues(here * 3, (own, box, turned))
+    assert "may not turn" in issues(here * 2, (box, box), shape=box)
 
 
 def test_checker_rejects_a_droplet_moving_too_fast() -> None:

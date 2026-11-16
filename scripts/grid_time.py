@@ -26,7 +26,8 @@ Arguments are key=value: `sets` (comma list, default the six test sets), `limit`
 `free` (1: also play each plan with `FreeRouter` and record `free_makespan`, the routing gap
 of D-89; 2: also `free_turn_makespan` and `free_split_makespan`, D-91; default 0),
 `min_targets` (only problems with at least that many targets), `move_rule` and
-`diagonal_rule` (override the platform's speed model, L-21), `workers`, `out`.
+`diagonal_rule` (override the platform's speed model, L-21), `turns` (0/1: whether A* may turn
+droplets, 0.50), `workers`, `out`.
 """
 
 from __future__ import annotations
@@ -78,7 +79,7 @@ def variant(size: int, units: int) -> str:
 
 
 def platforms(
-    sizes: tuple[int, ...], units: tuple[int, ...], moves: dict[str, str] | None = None
+    sizes: tuple[int, ...], units: tuple[int, ...], moves: dict[str, Any] | None = None
 ) -> dict[str, GridPlatform]:
     base = replace(_BASE, **(moves or {}))
     return {
@@ -308,6 +309,9 @@ def main(argv: list[str]) -> None:
                 recs += [json.loads(line) for line in fh]
         print(json.dumps(summarise(recs), indent=2))
         return
+    moves: dict[str, Any] = {k: args[k] for k in ("move_rule", "diagonal_rule") if k in args}
+    if "turns" in args:
+        moves["turns"] = args["turns"] == "1"
     sets = args["sets"].split(",") if "sets" in args else list(st.SETS)
     limit = int(args["limit"]) if "limit" in args else None
     opts = {
@@ -319,7 +323,7 @@ def main(argv: list[str]) -> None:
         "units": tuple(int(x) for x in args.get("units", "1,5,20").split(",")),
         "check": args.get("check", "1") == "1",
         "free": int(args.get("free", "0")),
-        "moves": {k: args[k] for k in ("move_rule", "diagonal_rule") if k in args},
+        "moves": moves,
     }
     out = Path(args.get("out", "outputs/grid_time/records.jsonl"))
     out.parent.mkdir(parents=True, exist_ok=True)

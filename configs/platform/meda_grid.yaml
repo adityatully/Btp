@@ -22,6 +22,8 @@ route_horizon: null        # null = 4 (H + W) x the droplet's slowest move, tick
 move_rule: extent          # ticks per move by shape (L-21): horizontal = width, vertical = height;
                            # uniform = 1 tick for every shape (M11, E-90-E-93)
 diagonal_rule: max         # diagonal = longer side (Nakamura 2026); sum = width + height (Shiro 2022)
+turns: true                # the router may turn a droplet (h x w -> w x h) on the way, morph_ticks
+                           # = its longer side (Nakamura 2026), arriving in its own shape; false = M11
 # droplet footprint [rows, cols] by volume (up to and including max_volume), near-square
 footprints:
   - {max_volume: 1, shape: [1, 1]}

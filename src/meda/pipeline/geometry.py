@@ -106,6 +106,7 @@ class GridPlatform:
     route_horizon: int | None
     move_rule: str
     diagonal_rule: str
+    turns: bool
     footprints: tuple[SizeRule, ...]
     mixer_library: tuple[SizeRule, ...]
 
@@ -137,6 +138,8 @@ class GridPlatform:
                 bad(f"{name} must be null or an int >= 1")
         if self.move_rule not in ("uniform", "extent"):
             bad("move_rule must be 'uniform' or 'extent'")
+        if not isinstance(self.turns, bool):
+            bad("turns must be true or false")
         if self.diagonal_rule not in ("max", "sum"):
             bad("diagonal_rule must be 'max' or 'sum'")
         for table in ("footprints", "mixer_library"):
@@ -205,6 +208,21 @@ class GridPlatform:
         """Ticks to turn a droplet of `shape` into its rotation (h x w -> w x h): its longer side
         (Nakamura et al. 2026: 2 for 2 x 1 <-> 1 x 2); 1 under `move_rule: uniform`."""
         return 1 if self.move_rule == "uniform" else max(shape)
+
+    def turned(self, shape: Shape) -> Shape:
+        """The shape a droplet of `shape` takes after a turn (h x w -> w x h)."""
+        return (shape[1], shape[0])
+
+    def turn_box(self, shape: Shape) -> Shape:
+        """The footprint held during a turn at a fixed anchor: the square of the longer side,
+        which covers the shape before and after (a conservative bound on the shapes in
+        between)."""
+        m = max(shape)
+        return (m, m)
+
+    def can_turn(self, shape: Shape) -> bool:
+        """Whether the router may turn a droplet of `shape` (`turns` on, not square)."""
+        return self.turns and shape[0] != shape[1]
 
     def horizon_for(self, shape: Shape) -> int:
         """Search horizon in ticks for a droplet of `shape`: `route_horizon`, or by default

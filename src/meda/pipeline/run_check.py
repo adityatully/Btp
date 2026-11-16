@@ -24,6 +24,7 @@ executor and router made it, and raises `RunError` naming the instance and every
 from __future__ import annotations
 
 from collections import defaultdict
+from collections.abc import Callable
 from dataclasses import dataclass
 from enum import Enum
 from itertools import combinations, pairwise
@@ -33,7 +34,7 @@ import numpy as np
 from meda.pipeline.executor import Run
 from meda.pipeline.geometry import Cell, Chip, GridPlatform, Shape, at
 from meda.pipeline.opgraph import OpGraph, OpKind
-from meda.pipeline.router import INF, Body, exempt, free_distances
+from meda.pipeline.router import INF, Body, exempt, free_distances, turn_distances
 from meda.pipeline.schedule import peak, stored_intervals
 
 
@@ -84,6 +85,58 @@ def _last_tick(b: Body, horizon: int) -> int:
     return int(b.end) - 1 if b.end != INF else horizon
 
 
+def _check_motion(b: Body, gp: GridPlatform, bad: Callable[[RunRule, str], None]) -> None:
+    """Rule 1 for one body: moves to a neighbour, no faster than `move_ticks` for the shape it
+    holds; turns (0.50) keep the anchor, go through the turn box for at least `morph_ticks`
+    and land in the other orientation; it ends in its own shape."""
+    own, other, box = b.shape, gp.turned(b.shape), gp.turn_box(b.shape)
+    if b.shapes:
+        if len(b.shapes) != len(b.path):
+            bad(RunRule.CONTINUITY, f"body {b.id}: {len(b.shapes)} shapes for {len(b.path)} ticks")
+            return
+        if not gp.can_turn(own):
+            bad(RunRule.CONTINUITY, f"body {b.id}: a {own} droplet may not turn")
+            return
+        if any(x not in (own, other, box) for x in b.shapes):
+            bad(RunRule.CONTINUITY, f"body {b.id} takes a shape other than {own}, {other}, {box}")
+            return
+        if b.shapes[0] != own or b.shapes[-1] != own:
+            bad(RunRule.CONTINUITY, f"body {b.id} does not start and end in its own shape")
+    held = 0  # index where the droplet reached its current anchor and orientation
+    turn = 0  # index of the last tick before the current turn
+    for i, (p, q) in enumerate(pairwise(b.path), start=1):
+        s0, s1 = b.shape_at(i - 1), b.shape_at(i)
+        if s0 != s1:  # a turn starts or lands
+            if p != q:
+                bad(RunRule.CONTINUITY, f"body {b.id} moves while it turns at tick {b.start + i}")
+            if s0 != box:
+                turn = i - 1
+            if s1 != box:
+                before = b.shape_at(turn)
+                if before == s1 or i - turn < gp.morph_ticks(own):
+                    bad(
+                        RunRule.CONTINUITY,
+                        f"body {b.id} turns {before} -> {s1} in {i - turn} ticks, "
+                        f"needs {gp.morph_ticks(own)}",
+                    )
+                held = i
+            continue
+        if p == q:
+            continue
+        if b.shapes and s0 == box:
+            bad(RunRule.CONTINUITY, f"body {b.id} moves mid-turn at tick {b.start + i}")
+        dr, dc = q[0] - p[0], q[1] - p[1]
+        if max(abs(dr), abs(dc)) > 1:
+            bad(RunRule.CONTINUITY, f"body {b.id} jumps from {p} to {q}")
+        elif i - held < gp.move_ticks(s0, dr, dc):
+            bad(
+                RunRule.CONTINUITY,
+                f"body {b.id} moves {p} -> {q} in {i - held} ticks, "
+                f"needs {gp.move_ticks(s0, dr, dc)} for a {s0} droplet",
+            )
+        held = i
+
+
 def check_run(run: Run, graph: OpGraph, chip: Chip, gp: GridPlatform) -> list[RunIssue]:
     issues: list[RunIssue] = []
 
@@ -100,22 +153,11 @@ def check_run(run: Run, graph: OpGraph, chip: Chip, gp: GridPlatform) -> list[Ru
     rec = run.records
     # ---- 1. continuity and bounds
     for b in bodies:
-        held = 0  # index where the droplet reached its current anchor
-        for i, (p, q) in enumerate(pairwise(b.path), start=1):
-            if p == q:
+        _check_motion(b, gp, bad)
+        for i, p in enumerate(b.path):
+            if i and p == b.path[i - 1] and b.shape_at(i) == b.shape_at(i - 1):
                 continue
-            dr, dc = q[0] - p[0], q[1] - p[1]
-            if max(abs(dr), abs(dc)) > 1:
-                bad(RunRule.CONTINUITY, f"body {b.id} jumps from {p} to {q}")
-            elif i - held < gp.move_ticks(b.shape, dr, dc):
-                bad(
-                    RunRule.CONTINUITY,
-                    f"body {b.id} moves {p} -> {q} in {i - held} ticks, "
-                    f"needs {gp.move_ticks(b.shape, dr, dc)} for a {b.shape} droplet",
-                )
-            held = i
-        for p in set(b.path):
-            rect = at(p, b.shape)
+            rect = at(p, b.shape_at(i))
             if not chip.inside(rect):
                 bad(RunRule.CONTINUITY, f"body {b.id} leaves the chip at {p}")
             elif any(cell in chip.dead for cell in rect.cells()):
@@ -137,7 +179,9 @@ def check_run(run: Run, graph: OpGraph, chip: Chip, gp: GridPlatform) -> list[Ru
             ra = a.rect(t)
             if ra is None:
                 continue
-            moving = any(x.pos(u) != x.pos(u - 1) for x in (a, b) for u in (t - 1, t, t + 1, t + 2))
+            moving = any(
+                x.rect(u) != x.rect(u - 1) for x in (a, b) for u in (t - 1, t, t + 1, t + 2)
+            )
             if not moving and t not in (lo + 1, hi - 1):
                 continue
             for u in (t - 1, t, t + 1):
@@ -311,7 +355,10 @@ def run_metrics(run: Run, graph: OpGraph, chip: Chip, gp: GridPlatform) -> RunMe
             transit += len(b.path) - 1
             key = (b.shape, b.path[-1])
             if key not in dists:
-                dists[key] = free_distances(chip, gp, b.shape, b.path[-1])
+                if gp.can_turn(b.shape):
+                    dists[key] = turn_distances(chip, gp, b.shape, b.path[-1])
+                else:
+                    dists[key] = free_distances(chip, gp, b.shape, b.path[-1])
             floor += int(dists[key][b.path[0]])
         if b.role == "stored" and b.end != INF:
             g = at(b.path[0], b.shape).inflate(sp)

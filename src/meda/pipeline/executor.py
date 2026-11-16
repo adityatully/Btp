@@ -402,10 +402,8 @@ class _Exec:
         for b in st.bodies.values():
             if b.end <= t:
                 continue
-            first = max(t, b.start) - b.start
-            for p in set(b.path[min(first, len(b.path) - 1) :]):
-                if Rect(p[0], p[1], *b.shape).gap(rect) < sp:
-                    return True
+            if any(r.gap(rect) < sp for r in b.rects_from(t)):
+                return True
         return False
 
     def try_leave(self, o: Op, t: int) -> str | None:

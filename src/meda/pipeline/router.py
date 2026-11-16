@@ -50,7 +50,9 @@ class Body:
     travelling into (exempt from that op's region and from the op's other inputs). `parent`:
     the body that ended where this one starts (a take, a continuation). `droplet`: the
     opgraph droplet it carries (index), if any. `role`: "move", "stored", "detect" or "mix"
-    (inputs merged in a module)."""
+    (inputs merged in a module). `shapes[i]`: its footprint at tick `start + i` if it turns on
+    the way (0.50: `shape`, its turn, or the turn box mid-turn); empty: `shape` throughout. It
+    always ends in `shape`."""
 
     id: int
     shape: Shape
@@ -63,15 +65,25 @@ class Body:
     parent: int | None = None
     droplet: int | None = None
     to_waste: bool = False
+    shapes: tuple[Shape, ...] = ()
 
     def pos(self, t: int) -> Cell | None:
         if t < self.start or t >= self.end:
             return None
         return self.path[min(t - self.start, len(self.path) - 1)]
 
+    def shape_at(self, i: int) -> Shape:
+        """Footprint at path index `i` (held after the last one)."""
+        return self.shapes[min(i, len(self.shapes) - 1)] if self.shapes else self.shape
+
     def rect(self, t: int) -> Rect | None:
         p = self.pos(t)
-        return None if p is None else at(p, self.shape)
+        return None if p is None else at(p, self.shape_at(t - self.start))
+
+    def rects_from(self, t: int) -> set[Rect]:
+        """Every footprint the body covers at tick `t` or later (placement looks ahead)."""
+        first = min(max(t, self.start) - self.start, len(self.path) - 1)
+        return {at(p, self.shape_at(i)) for i, p in enumerate(self.path) if i >= first}
 
     @property
     def arrival(self) -> int:
@@ -173,13 +185,15 @@ class RouteRequest:
 @dataclass(frozen=True, slots=True)
 class RouteResult:
     """`paths[i]` for request i (empty if the call failed); `failed`: index of the first
-    request without a path; `ticks`: the latest arrival minus the earliest release."""
+    request without a path; `ticks`: the latest arrival minus the earliest release;
+    `shapes[i]`: request i's footprint per tick if it turns (else empty, see `Body.shapes`)."""
 
     ok: bool
     paths: tuple[tuple[Cell, ...], ...]
     failed: int | None
     ticks: int
     reason: str = ""
+    shapes: tuple[tuple[Shape, ...], ...] = ()
 
 
 class AStarRouter:
@@ -190,18 +204,25 @@ class AStarRouter:
     def route(self, requests: list[RouteRequest], state: ChipState) -> RouteResult:
         scratch = state.copy()
         paths: list[tuple[Cell, ...]] = []
+        shapes: list[tuple[Shape, ...]] = []
         for i, req in enumerate(requests):
-            path, why = self._one(req, scratch)
-            if path is None:
+            found, why = self._one(req, scratch)
+            if found is None:
                 return RouteResult(False, (), i, 0, why)
+            path, shp = found
             paths.append(path)
-            _reserve(req, path, scratch)
+            shapes.append(shp)
+            _reserve(req, path, scratch, shp)
         state.bodies = scratch.bodies
         state.regions = scratch.regions
-        return _done(requests, paths)
+        return _done(requests, paths, shapes)
 
     # ---- one request
-    def _one(self, req: RouteRequest, state: ChipState) -> tuple[tuple[Cell, ...] | None, str]:
+    def _one(
+        self, req: RouteRequest, state: ChipState
+    ) -> tuple[tuple[tuple[Cell, ...], tuple[Shape, ...]] | None, str]:
+        """A fastest path for `req` with every body in `state` reserved: anchors per tick and,
+        if it turns, footprints per tick (empty if not); or None and why."""
         chip, gp = state.chip, state.gp
         h, w = req.shape
         rows, cols = chip.height - h + 1, chip.width - w + 1
@@ -222,35 +243,52 @@ class AStarRouter:
             req.parent,
             req.droplet,
         )
+        # orientations: 0 = its own shape, 1 = turned; 2 = mid-turn (the turn box)
+        turns = gp.can_turn(req.shape)
+        forms: list[Shape] = [req.shape]
+        if turns:
+            forms += [gp.turned(req.shape), gp.turn_box(req.shape)]
         # droplets still on the chip from the tick before the release, with their exemptions
         others = [b for b in state.bodies.values() if b.id != req.body_id and b.end >= req.release]
         until = {b.id: exempt_until(probe, b, gp) for b in others}
         regions = [g for g in state.regions if g.owner != req.dest]
         static = state.static_grid()
+        big_h, big_w = static.shape
+
+        def full(mask: np.ndarray) -> np.ndarray:
+            """`mask` over the anchors where its shape fits, padded with True to the chip."""
+            out = np.ones((big_h, big_w), dtype=bool)
+            out[: mask.shape[0], : mask.shape[1]] = mask
+            return out
+
         # obstacles that stay for good from the release on: the heuristic and a fast check
         parked = static.copy()
         for b in others:
             if b.end == INF and b.arrival <= req.release and req.release >= until[b.id]:
-                state.paint(parked, at(b.path[-1], b.shape).inflate(gp.spacing))
+                state.paint(parked, at(b.path[-1], b.shape_at(len(b.path) - 1)).inflate(gp.spacing))
         for g in regions:
             if g.t0 <= req.release and g.t1 == INF:
                 state.paint(parked, g.rect.inflate(gp.spacing))
-        parked_bad = window_any(parked, req.shape, 0)
+        # an anchor is open to the heuristic if either orientation fits there (admissible)
+        parked_bad = full(window_any(parked, req.shape, 0))
+        if turns:
+            parked_bad &= full(window_any(parked, forms[1], 0))
         dist = _distances(parked_bad, req.goal)
         if dist[req.source] < 0:
             return None, "no path past parked droplets"
-        cache: dict[int, np.ndarray] = {}
-        fixed = window_any(static, req.shape, 0)
+        cache: dict[tuple[int, int], np.ndarray] = {}
+        fixed = [full(window_any(static, f, 0)) for f in forms]
 
-        def region_bad(t: int) -> np.ndarray:
+        def region_bad(t: int, o: int) -> np.ndarray:
             g = np.zeros_like(static)
             for reg in regions:
                 if reg.active(t):
                     state.paint(g, reg.rect.inflate(gp.spacing))
-            return window_any(g, req.shape, 0) | fixed
+            return full(window_any(g, forms[o], 0)) | fixed[o]
 
-        def bad(t: int) -> np.ndarray:
-            if t not in cache:
+        def bad(t: int, o: int) -> np.ndarray:
+            """Anchors where orientation `o` may not be at tick `t` (padded to the chip)."""
+            if (t, o) not in cache:
                 occ = np.zeros_like(static)
                 for b in others:
                     if b.end < t - 1 or b.start > t + 1:
@@ -261,64 +299,86 @@ class AStarRouter:
                         rect = b.rect(u)
                         if rect is not None:
                             state.paint(occ, rect)
-                cache[t] = window_any(occ, req.shape, gp.spacing) | region_bad(t)
-            return cache[t]
+                cache[(t, o)] = full(window_any(occ, forms[o], gp.spacing)) | region_bad(t, o)
+            return cache[(t, o)]
 
         t0 = req.release
-        if bad(t0)[req.source]:
+        if bad(t0, 0)[req.source]:
             return None, "source blocked at release"
         horizon = gp.horizon_for(req.shape)
         limit = t0 + horizon
-        cost = {m: gp.move_ticks(req.shape, *m) for m in MOVES}
-        step = min(k for m, k in cost.items() if m != (0, 0))  # admissible: moves x cheapest
-        start = (req.source[0], req.source[1], t0)
-        heap: list[tuple[int, int, int, int, int]] = [
-            (int(dist[req.source]) * step, int(dist[req.source]), t0, *req.source)
+        cost = [{m: gp.move_ticks(f, *m) for m in MOVES} for f in forms[:2]]
+        # admissible: moves x the cheapest move of either orientation
+        step = min(k for cst in cost for m, k in cst.items() if m != (0, 0))
+        morph = gp.morph_ticks(req.shape)
+        # search nodes: (row, col, orientation, tick)
+        start = (req.source[0], req.source[1], 0, t0)
+        heap: list[tuple[int, int, int, int, int, int]] = [
+            (int(dist[req.source]) * step, int(dist[req.source]), t0, *req.source, 0)
         ]
-        came: dict[tuple[int, int, int], tuple[int, int, int] | None] = {start: None}
+        came: dict[tuple[int, int, int, int], tuple[int, int, int, int] | None] = {start: None}
         while heap:
-            _, _, t, r, c = heapq.heappop(heap)
-            if (r, c) == req.goal:
-                return _unroll((r, c, t), came), ""
+            _, _, t, r, c, o = heapq.heappop(heap)
+            if (r, c) == req.goal and o == 0:
+                return _unroll((r, c, o, t), came, forms), ""
             if t >= limit:
                 continue
+            steps: list[tuple[int, int, int, int]] = []  # (row, col, orientation, ticks)
             for dr, dc in MOVES:
                 nr, nc = r + dr, c + dc
-                if not (0 <= nr < rows and 0 <= nc < cols):
+                if not (0 <= nr < big_h and 0 <= nc < big_w):
                     continue
-                if dr and dc and (fixed[r + dr, c] or fixed[r, c + dc]):
+                if dr and dc and (fixed[o][r + dr, c] or fixed[o][r, c + dc]):
                     continue  # no diagonal past a dead cell
-                k = cost[(dr, dc)]
-                key = (nr, nc, t + k)
-                if key in came or dist[nr, nc] < 0 or bad(t + k)[nr, nc]:
+                steps.append((nr, nc, o, cost[o][(dr, dc)]))
+            if turns:
+                steps.append((r, c, 1 - o, morph))
+            for nr, nc, no, k in steps:
+                key = (nr, nc, no, t + k)
+                if key in came or dist[nr, nc] < 0 or bad(t + k, no)[nr, nc]:
                     continue
-                # a k-tick move holds the droplet where it is until it lands
-                if any(bad(u)[r, c] for u in range(t + 1, t + k)):
+                # a k-tick move holds the droplet where it is until it lands; a turn holds the
+                # turn box at its anchor
+                hold = 2 if no != o else o
+                if any(bad(u, hold)[r, c] for u in range(t + 1, t + k)):
                     continue
-                came[key] = (r, c, t)
+                came[key] = (r, c, o, t)
                 hv = int(dist[nr, nc])
-                heapq.heappush(heap, (t + k - t0 + hv * step, hv, t + k, nr, nc))
+                heapq.heappush(heap, (t + k - t0 + hv * step, hv, t + k, nr, nc, no))
         return None, f"no path within {horizon} ticks"
 
 
 def _unroll(
-    node: tuple[int, int, int], came: dict[tuple[int, int, int], tuple[int, int, int] | None]
-) -> tuple[Cell, ...]:
-    """One anchor per tick from the search tree: a k-tick move holds the old anchor k - 1
-    ticks, then lands."""
-    nodes: list[tuple[int, int, int]] = []
-    cur: tuple[int, int, int] | None = node
+    node: tuple[int, int, int, int],
+    came: dict[tuple[int, int, int, int], tuple[int, int, int, int] | None],
+    forms: list[Shape],
+) -> tuple[tuple[Cell, ...], tuple[Shape, ...]]:
+    """Anchors and footprints per tick from the search tree: a k-tick move holds the old
+    anchor k - 1 ticks, then lands; a k-tick turn holds the turn box k - 1 ticks, then lands
+    turned. Footprints are empty if the droplet never turns."""
+    nodes: list[tuple[int, int, int, int]] = []
+    cur: tuple[int, int, int, int] | None = node
     while cur is not None:
         nodes.append(cur)
         cur = came[cur]
     nodes.reverse()
     path: list[Cell] = [(nodes[0][0], nodes[0][1])]
+    shapes: list[Shape] = [forms[nodes[0][2]]]
     for a, b in pairwise(nodes):
-        path += [(a[0], a[1])] * (b[2] - a[2] - 1) + [(b[0], b[1])]
-    return tuple(path)
+        k = b[3] - a[3]
+        hold = forms[2] if a[2] != b[2] else forms[a[2]]
+        path += [(a[0], a[1])] * (k - 1) + [(b[0], b[1])]
+        shapes += [hold] * (k - 1) + [forms[b[2]]]
+    turned = any(n[2] for n in nodes)
+    return tuple(path), tuple(shapes) if turned else ()
 
 
-def _reserve(req: RouteRequest, path: tuple[Cell, ...], state: ChipState) -> None:
+def _reserve(
+    req: RouteRequest,
+    path: tuple[Cell, ...],
+    state: ChipState,
+    shapes: tuple[Shape, ...] = (),
+) -> None:
     """Add the body that carries `req` along `path` to `state`."""
     end: float = req.release + len(path) if req.to_waste else INF
     state.put(
@@ -334,18 +394,23 @@ def _reserve(req: RouteRequest, path: tuple[Cell, ...], state: ChipState) -> Non
             req.parent,
             req.droplet,
             req.to_waste,
+            shapes,
         )
     )
 
 
-def _done(requests: list[RouteRequest], paths: list[tuple[Cell, ...]]) -> RouteResult:
+def _done(
+    requests: list[RouteRequest],
+    paths: list[tuple[Cell, ...]],
+    shapes: list[tuple[Shape, ...]] | None = None,
+) -> RouteResult:
     ticks = (
         max(r.release + len(p) - 1 for r, p in zip(requests, paths, strict=True))
         - min(r.release for r in requests)
         if requests
         else 0
     )
-    return RouteResult(True, tuple(paths), None, ticks)
+    return RouteResult(True, tuple(paths), None, ticks, "", tuple(shapes or ()))
 
 
 def free_distances(chip: Chip, gp: GridPlatform, shape: Shape, goal: Cell) -> np.ndarray:

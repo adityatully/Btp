@@ -13,7 +13,7 @@ from __future__ import annotations
 
 import numpy as np
 
-from meda.pipeline.geometry import Cell, Rect, Shape, at, window_any
+from meda.pipeline.geometry import Cell, Rect, Shape, window_any
 from meda.pipeline.router import ChipState
 
 
@@ -30,9 +30,8 @@ class NearestPlacer:
         for b in state.bodies.values():
             if b.end <= t:
                 continue
-            first = max(t, b.start) - b.start
-            for p in set(b.path[min(first, len(b.path) - 1) :]):
-                state.paint(busy, at(p, b.shape))
+            for rect in b.rects_from(t):
+                state.paint(busy, rect)
         bad = window_any(busy, shape, sp)
         inner = chip.interior
         ok = np.zeros_like(bad)
