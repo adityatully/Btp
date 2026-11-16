@@ -1323,6 +1323,79 @@ Format: date · decision · alternatives considered · why · evidence.
   SAR library by volume (3 x 3 for <= 4 units, 4 x 4 for <= 8), not one 8 x 8 block; time in
   ticks of one 1 x 1 move with ops in library units x `unit_ticks`, swept so a 3 x 3 mix = 3, 15
   or 60 cells (replaces 10 / 40 / 160 cells per mix and the 30 x 30 / 60 x 60 grid above).
+- **D-89 (2026-11-15) Routing direction and the routing gap first (SPEC 0.48, L-20).** After
+  the literature map (L-20) and a talk-through of the pipeline with the user. **Direction
+  (user):** routing is the next contribution; a MARL router (doc §8/§13: one shared network,
+  MAPPO, CTDE) with the published shape-dependent velocity, morphing and splitting (L-20 B: Shiro
+  2022 onward, Eenhakkattu Mana 2024, Li 2016/17), for many
+  droplets at once; L-20 found no RL router with that physics (RL routers keep shapes fixed and
+  every move equal; that physics is only in exact 1-2 droplet work). **Module- vs routing-based
+  synthesis stays open** (doc §15 #1; it hinges on a MEDA mixing-during-transport model, #2);
+  the router work is needed for both. **Order (each gives the next its input or a go/no-go):**
+  (1) measure the routing gap; (2) shape physics in the grid model and the contract; (3) A*
+  on that physics, checked against the Dijkstra router (Nakamura et al. 2026) on 1-2 droplets; (4) record
+  router calls from executor runs as a benchmark; (5) a routing gym on the same physics code;
+  (6) MARL. **Step 1 built:** `FreeRouter` (shortest paths on the empty chip, ignores other
+  droplets and modules, never fails) and `trip_floor` in `run_metrics`; `grid_time.py free=1`.
+  Routing gap per plan = (A* makespan - free makespan) / A* makespan, same placer and order.
+  **Reading (fixed before the full run), 60 x 60, u5, all producers pooled, many targets and
+  s1-s2 apart:** mean gap < 10%: routing conflicts are not where the 2.4-2.7x goes, so the
+  router's claim is physics and per-call quality, not makespan; >= 25%: a better router is a
+  makespan result; between: unclear, read by stage and chip size. Beside it: the free
+  makespan / schedule (travel and placement that no router can remove) and the share of trip
+  ticks spent on detours and waits inside paths.
+- **D-90 (2026-11-15) Step 2, part 1: shape-dependent speed (SPEC 0.49, L-21).** The physics is
+  the published model, not a calibrated one (L-21); its basis: Li et al.'s chip-validated
+  size-to-speed model, and the Ritsumeikan group's rule built on it (time per move = volume /
+  cells on the leading edge), used in ~10 papers. **Decisions:** (1) default `move_rule: extent`:
+  a horizontal move takes the droplet's width in ticks, a vertical one its height; this changes
+  a default physical assumption (M11 had one tick for every shape, kept as `uniform`); (2)
+  diagonal = the longer side (`diagonal_rule: max`, Nakamura 2026 and the group's later papers:
+  newest, closest to the force argument, and lets A* be checked against the Dijkstra router);
+  width + height (`sum`, Shiro 2022) is a sweep; the user had no preference; (3) the step is
+  split in two (user): part 1 = speed only; part 2 = shape change and split/merge as router
+  actions; (4) a droplet holds its anchor until a move lands (spacing checked every tick).
+  Found while building: the split exemption window (a piece may stay close to the droplet it
+  left) counted cells as ticks, so a 3 x 3 droplet (3 ticks a move) stayed blocked by its own
+  remainder and val_s1-004 deadlocked; the window is now those cells at the slowest move
+  (SPEC 0.49). All 44 pipeline tests pass, the slow val sweep included.
+  **Measure:** re-run E-93's routing-gap pilots with the new speed; same reading as D-89.
+- **D-91 (2026-11-16) Headroom of shape actions before building them (D-90 part 2).** E-94: a
+  better path-finder saves little, but travel now depends on shape. Before adding shape change
+  and split/merge to the rules and to A*, measure what they could save at most: `FreeRouter`
+  (no conflicts) may also **turn** (rotate, `morph_ticks` = the longer side, Nakamura 2026; arrive
+  in its own shape) and **split** (into 1 x 1 pieces at the source, one tick a cell, merging at
+  the goal; `ceil(log2 volume)` rounds of `split_ticks` each way). Each trip takes the fastest
+  allowed option; optimistic (no space for pieces). `grid_time.py free=2` records
+  `free_turn_makespan`, `free_split_makespan`. **Reading (fixed before the run), E-94's 12 big
+  problems, 60 x 60 u5, all producers pooled:** headroom = (A* - free_split) / A* per plan, mean.
+  >= 20%: part 2 is worth building and is the router's makespan claim; < 10%: shape actions are
+  not where the time goes either, the weight moves to placement or routing-based mixing (Q-151);
+  between: unclear, read by chip size and speed. Beside it: the share from turning alone and
+  from conflicts alone (E-94's gap).
+- **D-92 (2026-11-16) Step 2, part 2a: turning in the rules and in A* (SPEC 0.50).** Splitting
+  waits for the supervisor talk (Q-153); turning is published, needed under every split option,
+  and what the Dijkstra check (step 3) needs, so it goes first (user). **Decisions:** (1) a turn
+  rotates h x w -> w x h at the same top-left anchor in `morph_ticks` = the longer side
+  (Nakamura 2026: 2 for 2 x 1), only for droplets that are not square (2, 5-6 and 10 units
+  under the default footprints); (2) mid-turn the droplet holds the turn box, the square of its
+  longer side: covers both shapes, conservative by the corner cells, since no paper models the
+  shapes in between; (3) it must arrive in its own shape, so placement, modules and the
+  executor stay as they are (as D-91's headroom assumed); (4) default `turns: true` (changes a
+  default physical assumption; `false` = 0.49). **Built:** `Body.shapes` / `RouteResult.shapes`
+  (footprint per tick, empty if it never turns), A* over (anchor, orientation, tick) with the
+  heuristic opening an anchor if either orientation fits (admissible), placement and the
+  executor's look-ahead read footprints per tick, `validate_run` rule 1 checks turns (keeps
+  the anchor, box for >= `morph_ticks`, lands turned, no move mid-turn, ends in own shape),
+  `trip_floor` allows turns, `grid_time.py turns=0/1`. Found while building: the checker's
+  shortcut that skips still pairs looked at anchors only, so a turn in place would have gone
+  unchecked; it now compares footprints. Tests: 4 new (A* turns on a long sideways trip, 10
+  ticks vs 12; does not turn when it does not pay; passes a one-cell gap only turned; checker
+  rejects fast turns, moves mid-turn, ending turned, a square droplet turning). Smoke run on 9
+  val plans (s1, s3, s5, 3 each, 60 x 60 u5): all validate; makespan same or shorter (up to
+  7%: val_s3-002 834 -> 778), routing 1.3-1.9x slower.
+  **Measure:** E-94's 12 big problems with turning A* (E-98: 5.3% shorter on 60 x 60 u5, 0.7%
+  on 30 x 30 u5).
 
 ## 4. Experiments and results
 
@@ -2102,6 +2175,217 @@ MRCM's intermediates on val_s2: 4 of 28 covered (chain D4), 5 of 28 (premix D3).
   (an exact lower bound on mixes left, or a constructive method's recipes, which is a planner
   again). (3) Built as SPEC 0.28 `hint_source: problem` (depth-4 chain in the recipe columns)
   for a copy-test comparison on stages 1–2 against the planner's hints.
+
+### E-98 (2026-11-16) Turning A* (D-92): ~5% shorter runs on 60 x 60, nothing on a crowded 30 x 30
+Mac, `scripts/grid_time.py free=1 min_targets=8 sets=val_s4_v2,val_s5_v2 sizes=30,60 units=5
+turns=1` on uncommitted work over `8876543` (SPEC 0.50, committed as `89bcfc5`); `outputs/routing_gap/mac_pilot_big_turn.jsonl`
+(25 problems picked up; paired with E-94's `mac_pilot_big_extent.jsonl`, A* without turns, on
+the 12 problems both have). Per plan, gain = 1 - makespan with turns / without:
+
+| Variant | Plans | Gain mean (min, max) | Shorter / same / longer | E-97 free-router turn share |
+|---|---|---|---|---|
+| **60 x 60 u5** | 38 | **5.3%** (-9.5%, +17.7%) | 30 / 0 / 8 | 4.4% |
+| 30 x 30 u5 | 37 | 0.7% (-13.4%, +12.9%) | 23 / 1 / 13 | 2.3% |
+
+One new deadlock on 30 x 30 (val_s5-040, sharing pass: ran in 1,301 ticks without turns; with
+them stuck at tick 735, ready ops waiting for storage and a route); none on 60 x 60.
+- **Reading:** turning is worth about E-97's bound on the roomy chip and nothing net on the
+  crowded one: in line with E-97, turning alone is not the router's claim (splitting is).
+- **Why some runs get longer:** prioritised A* routes each droplet fastest for itself; a turn
+  that saves its own ticks can hold the turn box in someone's way or shift later placements
+  and orders (8 of 38 longer on 60 x 60, 13 of 37 on 30 x 30). A router that sees the other
+  droplets (look-ahead, MARL) has room here.
+- Free-router routing gap is not comparable in this run (`FreeRouter()` does not turn, so A*
+  with turns beats it on many plans).
+
+### E-97 (2026-11-16) Headroom of shape actions (D-91): splitting could cut run time by about a third; turning ~4%, conflicts ~2%
+Mac, `scripts/grid_time.py free=2 min_targets=8` on uncommitted work over `dfa6fed` (SPEC 0.49),
+E-94's 12 big problems (val_s4_v2 / val_s5_v2, 8+ targets, 9 fast producers), 30 x 30 and
+60 x 60 at u1 / u5 / u20; `outputs/routing_gap/mac_pilot_big_shape.jsonl` (37-38 plans per
+variant). Makespan / no-travel schedule with A*, the free router, free + turn, free + turn +
+split; then the share of the A* makespan each step saves (mean), and the headroom
+(A* - free_split) / A* (mean, min-max):
+
+| Variant | A* | free | +turn | +split | conflicts | turn | split | **headroom** |
+|---|---|---|---|---|---|---|---|---|
+| **60 x 60 u5** | 3.39 | 3.33 | 3.17 | 2.18 | 1.8% | 4.4% | 28.4% | **34.6%** (17-55%) |
+| 60 x 60 u1 | 14.33 | 13.20 | 12.50 | 7.43 | 8.2% | 4.6% | 34.4% | 47.2% (31-63%) |
+| 60 x 60 u20 | 1.56 | 1.55 | 1.52 | 1.30 | 0.2% | 2.1% | 13.7% | 16.0% (5-29%) |
+| 30 x 30 u5 | 2.25 | 2.09 | 2.04 | 1.70 | 6.5% | 2.3% | 15.0% | 23.9% (4-41%) |
+| 30 x 30 u1 | 8.18 | 6.79 | 6.54 | 4.60 | 15.3% | 3.7% | 23.4% | 42.4% (25-56%) |
+| 30 x 30 u20 | 1.33 | 1.29 | 1.30 | 1.22 | 2.5% | -0.4% | 6.2% | 8.3% (-5-19%) |
+
+- **Reading (D-91): >= 20% on 60 x 60 u5 (34.6%) → part 2 is worth building and is the router's
+  makespan claim.** Almost all of it is splitting (big droplets crawl at 3-4 ticks a cell, 1 x 1
+  pieces at 1); turning adds ~4%, avoiding conflicts ~2%. It shrinks when mixes are slow (u20:
+  8-16%) and on the small chip (shorter trips).
+- **Caveats:** an optimistic bound: pieces need no space, splits and merges cost only
+  `ceil(log2 volume)` rounds, a split happens at the source (MEDA can do it; whether a reagent
+  dispensed whole may be split at once is a physical assumption, Q-153). The real gain sits
+  between the free router and this bound.
+
+### E-94 (2026-11-16) Shape-dependent speed (D-90): runs ~1.4-1.6x longer, the routing gap barely moves
+Mac, `scripts/grid_time.py free=1 min_targets=8` on uncommitted work over `dfa6fed` (SPEC 0.49,
+`move_rule: extent`, `diagonal_rule: max`), the same 12 big problems as E-93's second pilot
+(val_s4_v2 / val_s5_v2, 8+ targets, 9 fast producers), 30 x 30 and 60 x 60 at u1 / u5 / u20;
+`outputs/routing_gap/mac_pilot_big_extent.jsonl`, paired with `mac_pilot_big.jsonl` (uniform).
+Makespan / no-travel schedule, A* (perfect router), and the routing gap mean (worst plan):
+
+| Variant | uniform (E-93) | extent (now) | gap uniform -> extent |
+|---|---|---|---|
+| 60 x 60 u5 | 2.06 (2.04) | **3.39 (3.33)** | 1.5% (15%) -> **1.8% (14%)** |
+| 30 x 30 u5 | 1.59 (1.52) | 2.25 (2.09) | 4.1% (15%) -> 6.5% (26%) |
+| 30 x 30 u1 | 4.34 (3.66) | 8.18 (6.79) | 14.9% (40%) -> 15.3% (42%) |
+| 60 x 60 u1 | 6.97 (6.50) | 14.33 (13.20) | 6.8% -> 8.2% (32%) |
+| u20 | 1.18-1.28 | 1.29-1.56 | <= 2.5% |
+
+Deadlocks unchanged (1 of 38 plans on 30 x 30 at u1 and u20). Detours inside paths 5% (60) and
+14-15% (30) of trip ticks.
+- **Reading (D-89 bar):** slower big droplets make every run longer (60 x 60 u5: 2.06 -> 3.39x
+  the schedule) but nearly all of it is distance a perfect router also pays; conflicts stay
+  under 10% except the crowded fast case (30 x 30 u1, 15%). So a better *path-finder* is still
+  not a makespan result. **What the new physics opens:** travel time now depends on shape, so
+  the router's own actions can cut it: under this model a 3 x 3 droplet takes 3 ticks a cell and
+  nine 1 x 1 pieces take 1 (splitting), and a 1 x 2 / 2 x 3 droplet can turn to its fast side
+  (shape change). That is D-90 part 2, and its headroom can be measured the same way (a free
+  router allowed to reshape and split).
+
+### E-93 (2026-11-15) Routing gap, Mac pilots (D-89): small on 60 x 60 (0.4-1.5% at u5); only a crowded 30 x 30 chip with fast mixes reaches 15%; the 2.4-2.7x is mostly travel distance and placement
+Mac, `scripts/grid_time.py free=1` on uncommitted work over `dfa6fed` (SPEC 0.48); val_s1_v2 ...
+val_s5_v2, first 3 problems each, the 9 fast producers (no 60 s search), 60 x 60 at u1 / u5 /
+u20; 79 plans, every one ran with both routers. Records `outputs/routing_gap/mac_pilot.jsonl`.
+Routing gap = (A* makespan - `FreeRouter` makespan) / A* makespan, same placer and order.
+- **u5 (default): 0.4% mean** (by stage 0.0 / 1.5 / -0.3 / 1.4 / 0.0%; worst plan 15%, s4).
+  Makespan / no-travel schedule: A* 2.56, perfect router 2.55.
+- u1 (a 3 x 3 mix = 3 cells travelled, so moves weigh most): 5.4% mean
+  (4-10% by stage, worst 24%); A* 8.31 vs perfect 7.86 times the schedule. u20: 0.1%.
+- Detours and waits inside paths: 1.2-1.7% of trip ticks; route waits ~1 tick per plan at u5.
+- 9 of 237 plan-variants run *faster* with A* than with the perfect router (list-scheduling
+  timing anomalies, small).
+- **Reading (D-89): < 10% everywhere → routing conflicts are not where the run time goes.**
+  The 2.4-2.7x stays with a perfect router: it is travel distance (ports and waste on the edges,
+  modules 5+ cells in), placement and port queues. A better multi-droplet router is not a
+  makespan result in this model (1 cell per tick for every shape, module-based). Pilot only
+  (15 problems); Q-150 answered at pilot level.
+- **Flaw found the same day (user's question):** the first 3 problems of val_s5 are all single
+  target with 2 fluids (1-4 droplets stored at once); the pilot hardly tested crowded chips.
+  **Second pilot** (`min_targets=8`, the first 6 problems with 8+ targets of val_s4_v2 and
+  val_s5_v2, 12 problems, 30 x 30 and 60 x 60; `outputs/routing_gap/mac_pilot_big.jsonl`;
+  37-38 plans per variant, 2 deadlocks on 30 x 30), mean gap (worst plan):
+  60 x 60: u1 6.8% (24%), **u5 1.5% (15%)**, u20 0.2% (6%); 30 x 30: **u1 14.9% (40%)**, u5 4.1%
+  (15%), u20 1.3% (9%). Detours and waits inside paths 5-6% of trip ticks on 60 x 60, 12-15% on
+  30 x 30; route waits ~60 ticks per plan at u5. Makespan / schedule on these big plans is lower
+  (60 x 60 u5: A* 2.06, perfect 2.04; 30 x 30 u5: 1.59 / 1.52): more parallel work hides travel,
+  and the smaller chip has shorter trips.
+- **Reading, corrected:** under D-89's bar routing conflicts are not the main cost on 60 x 60 or
+  at u5-u20 (< 10%); on a crowded 30 x 30 chip with fast mixes (u1) the gap is 15% on average,
+  up to 40%, in D-89's *unclear* band. Routing matters when the chip is crowded and travel is
+  slow against the ops; that is where a better router (and shape physics, which slows travel)
+  could count. Distance stays the largest part everywhere.
+
+### E-96 (2026-11-16) Final B2 part (b), method-v3 on e-MRCM's protocol: beats FacDA, MRCM, e-MRCM; DFMM losses 660 -> 429; N4-N5 still far above the paper
+coe9, `scripts/bench.py` at `6161ea9` (SPEC 0.44, method-v3 frozen, D-83), `test_emrcm_v1`
+(2,847 problems, fluid goal). Records `outputs/bench/b2b_v3_all.jsonl` = `b2b_v3.jsonl` +
+`b2b_v3_rest.jsonl`, 2,847 unique. **Run interrupted and resumed:** stopped 2026-11-13 and resumed
+with 18 workers via `skip=` (`66c4c92`; pairs in flight rerun from scratch), paused by SIGSTOP
+for part of 2026-11-14. CPU budgets per problem, so results are unaffected. Summary
+`outputs/bench/b2b_v3_summary.md`.
+- **Reading (D-69, own goal, 900 s; same at 60 s):** beats FacDA (510: 502 / 8 / 0, 0.637),
+  MRCM (653: 504 / 149 / 0, 0.835), e-MRCM (863: 714 / 149 / 0, 0.802), all as E-66. Not graded
+  (fluid not their goal): DFM 0.375 (508 / 2 / 0), Generic 0.520 (388 / 4 / 0), **DFMM 0.662,
+  1,604 / 13 / 429 of 2,046 (level; E-66: 0.708, 660 losses)**. No other method accepts any.
+- **Against our planner, 900 s:** 0.805 [0.796, 0.814], **2,097 / 743 / 7** (E-66 method-v1:
+  0.848, 1,296 / 1,547 / 0). At 60 s: 0.929, 1,007 / 1,674 / 166. No plan: 0 (E-66: 4).
+- Proved optima: 12.7% above (65), as E-66. Ours / bound 3.69 (E-66: 4.0).
+- **Next to e-MRCM's printed Table III (not graded, L-7):** below the paper at N2 (e.g. N2-T5
+  mixes 15.5 vs 24.8, waste 2.6 vs 12.3), above from N3-T2 (N3-T5 mixes 29.6 vs 23.8), and
+  still **far above at N4-N5** (N4-T5 mixes 49.6 vs 23.5, waste 134 vs 29; N5-T5 64.2 vs 22.6,
+  waste 174 vs 33), as E-66. Ours / bound N4 5.3-6.4, N5 5.6-8.7. Weights differ (per kind, not
+  e-MRCM's), so not like for like; the N4-N5 gap is the reported limit (D-83, Q-142).
+- Supersedes E-66 as the paper's B2(b) table. With E-85, E-86, E-91 the final runs (D-83) are
+  complete.
+
+### E-92 (2026-11-15) Sharing on the grid (D-88): no feasibility or chip-size cost anywhere; faster than no sharing on many targets; 5-14% slower than published methods
+coe9, `scripts/grid_time.py` at `821841a` (SPEC 0.47), `method=1` (method-v3 search, 60 s CPU),
+6 workers; records `outputs/grid_time/coe9_full.jsonl`, summary `coe9_summary.json`. 9 variants
+(chip 30/60/100 x `unit_ticks` 1/5/20), every run validated. "Ours" = the search's plans; ratios
+ours / comparator, paired; default variant 60 x 60, u5.
+- **Feasibility (a): no cost against any comparator, on any variant.** At 60 and 100 every plan
+  of every producer runs (no deadlock). Only 30 x 30 fails some: ours 98-99% run, the
+  no-sharing construction 96%. Smallest chip, many targets: vs construction ours needs a smaller
+  chip on 11, bigger on 0, same 394; vs the plain sharing pass bigger 2, smaller 1. s1-s2: same
+  on all.
+- **Many targets (405), time (b):** vs construction *saves time*, 0.918 [0.901, 0.934] (E-89
+  without travel: 0.936); faster on every variant (0.858-0.960), not robust by D-88's letter
+  (at u1 the CI likely reaches 1). Vs the plain pass *no cost*, 0.986, robust. Vs published
+  (10-28 problems each): Generic *saves time* 0.821; DFM 1.062, FacDA 1.024 *unclear* (robust);
+  **DFMM 1.103, MRCM 1.077, e-MRCM 1.053 *costs time*,** above 1 on all 9 variants (not robust
+  by the letter: some variants' CIs reach 1). Without travel (E-89) these three were unclear
+  (1.071, -, 1.027).
+- **s1-s2 (200):** vs construction 1.015 and vs the plain pass 0.996, *no cost*; vs DFM 1.108,
+  FacDA 1.101, DFMM 1.137, MRCM / e-MRCM 1.057 *costs time* (E-89: 6-12%); Generic 0.970 unclear.
+  e-MRCM's numbers equal MRCM's on s1-s2 on every variant.
+- **(c) beside it:** storage cell x ticks ours / construction 1.19 (many targets), 3.01 (s1-s2);
+  vs the plain pass 1.40 / 3.61; vs published 0.89-1.74 (many), 2.1-2.6 (s1-s2). Travel overhead
+  (makespan / no-travel schedule) 2.39-2.71 for ours, similar for all producers.
+- **The pattern across speeds:** vs published the ratio grows with `unit_ticks` (DFM s1-s2 1.040
+  at u1 → 1.133 at u20); vs construction the saving grows too (0.889 → 0.858 at 30 x 30).
+- **Reading:** Q-145's routing half answered: sharing costs no feasibility and no chip size; it
+  stays faster than not sharing. Against published methods our plans run 5-14% longer (both
+  groups), for less fluid (E-89: 11-40% on s1-s2). Whether 8.5 (execution-aware search) is
+  worth it is the user's call.
+
+### E-95 (2026-11-15) Leftover-time pilot (D-87): fails its bar, dropped; method-v3 stays
+coe9, `scripts/bench.py grow=4 max_sims=4096` at `66c4c92`, val s1-s3 (`val_s1_v2`, `val_s2_v2`,
+`val_s3_v2`), fluid, 120 problems. Records `outputs/bench/grow_all.jsonl` = `grow.jsonl` +
+`grow_rest.jsonl` (stopped 2026-11-13, resumed with `skip=` 2026-11-15; 120 unique). Read with
+`scripts/grow_check.py`.
+- **Cheaper than pass 1 (method-v3) on 8 of 120 (6.7%; bar 10%)**: s1 3, s2 4, s3 1. Mean last /
+  pass 1: 0.9937 (s2 0.982, s1 0.999, s3 1.000).
+- **Gap to proved optima 2.88% -> 2.80% (32 problems; bar: a third closed)**; s1 4.19% -> 4.07%
+  (22), s2 and s3 already 0 where proved.
+- vs NFSP (fluid) unchanged: 22 / 5 / 3 before and after.
+- Extra passes ran on 67 of 120; median CPU of pass 1 is 119 s on s1 but 900 s on s2 and s3, so
+  on s2-s3 there was little leftover time to spend.
+- **Reading (D-87): dropped, method-v3 stays as frozen (D-83).** More simulations at the root do
+  not find the plans that close the s1 gap: it is not a search-budget problem. Q-148 closed.
+
+### E-91 (2026-11-15) Final B1, method-v3 on the stage test sets: beats 12 of 16 published methods on their own goal, beats our planner on every set at 900 s
+coe9, `scripts/bench.py` at `6161ea9` (SPEC 0.44, method-v3 frozen, D-83). Records
+`outputs/bench/b1_v3_all.jsonl` = `b1a_v3.jsonl` (s1-s3) + `b1b_v3.jsonl` + `b1b_v3_rest.jsonl`
+(s4, s5, held-out): 605 problems x 3 goals = 1,815 pairs, 1,815 unique. **Run interrupted and
+resumed:** b1b stopped 2026-11-13 and resumed with more workers via `skip=` (`66c4c92`; pairs in
+flight at the stop rerun from scratch), and paused by SIGSTOP for part of 2026-11-14. Budgets are
+CPU time per problem, so neither changes results. Summary `outputs/bench/b1_v3_summary.md`.
+
+**Against our planner (best of the 4 runs), 900 s, w / t / l, mean ours/planner:**
+- s1-s3 (300 problems): never dearer on fluid or steps; fluid 0.868 / 0.880 / 0.926 (s1/s2/s3);
+  only losses anywhere are s3 waste 6.
+- **s4** (100, MTMD scale): fluid 68 / 14 / 18 (0.954), steps 68 / 10 / 22, waste 68 / 10 / 22
+  (0.851).
+- **s5** (105, all mixtures): fluid 58 / 38 / 9 (0.921), steps 51 / 41 / 13, waste 60 / 34 / 11.
+- **Held-out** (100 dilutions): fluid 59 / 15 / 26 (0.975), steps 61 / 12 / 27, waste 66 / 9 / 25.
+- No plan: 0 at 900 s (2 on s4 and 2 on s5 at 60 s).
+- **60 s is not enough on large problems:** held-out fluid 31 / 16 / 53 and s4 fluid 35 / 19 / 44
+  at 60 s, against 59 / 15 / 26 and 68 / 14 / 18 at 900 s. On s1-s3, 60 s ≈ 900 s.
+- Above proved optima (fluid): s1 6.0% (37), s2 2.5% (10), s3 0.4% (14), s5 6.6% (14).
+
+**Against the 16 published methods (D-69, own goal, 900 s, all sets pooled):**
+- **Beats (12):** DFM steps 88 (0.809), Generic steps 90 (0.722), FacDA fluid 88 (0.827), DFMM
+  waste 113 (0.626), MRCM fluid 122 (0.890), e-MRCM fluid 133 (0.876), robust waste 72 (0.563),
+  **MTMD waste 103 (0.475, 90 / 7 / 6)**, **DDMT steps 59 (0.419, 54 / 5 / 0)**, TVODA fluid 78
+  (0.867), WSPM fluid 146 (0.904), Fukui fluid 213 (0.726).
+- **Level (3):** NFSP fluid 80 (1.009 [0.980, 1.044], 50 / 19 / 11), MTWM waste 121 (0.893
+  [0.810, 0.992], median 1.000), SIMOP waste 59 (0.663 [0.523, 0.809], median 0.500).
+- **Too few (1):** Dong 9 (3 / 6 / 0).
+- Per set: on s5, NFSP fluid reads **beats** (15 problems); on s2 and s3, MTMD waste reads level.
+  Held-out: every method accepts under 10 problems (only ours and our planner plan them all).
+- Off own goal: beats under every goal except NFSP waste and SIMOP fluid (level; MTWM fluid
+  level at 60 s, beats at 900 s).
+- **Correction:** the partial B1 reading (1,463 pairs, 2026-11-14 chat) was said as "beats 13 of
+  16"; the right count, then and now, is 12 beats, 3 level, 1 too few.
+
+Supersedes E-64 as the paper's B1 table.
 
 ### E-90 (2026-11-14) M11 built: the grid harness runs every val plan, no violation, no deadlock; real run time 2-3.5x the no-travel schedule
 Mac, SPEC 0.47 (uncommitted at the time), `pipeline/geometry.py`, `router.py`, `placement.py`,
@@ -3793,6 +4077,20 @@ independent reference (oracle, optimum, bound, validator) catches it.**
   "dearer than our own planner" rows no longer hold and its tables are to be re-summarised from
   `outputs/bench/b1.jsonl` on coe9 (and B2's from its records). Effect on the 60 s column: a
   problem whose planners take longer than 60 s has no planner plan by then.
+- **F-19 (2026-11-16) The steps goal counts published methods' n-input mixes as chains of
+  2-input mixes (fairness audit of the final runs, user request).** `paper_graph.emit` turns
+  every n-input node into a chain of 2-input mixes, and `bench.stats` reports the chain length
+  (`totals.mix_ops`), so under `costs/steps_first.yaml` a method whose nodes take 3 or more
+  inputs is charged more mixes than its paper counts (SPEC 10.4 item 6 planned a contracted
+  count; it was never wired into `bench.py`). Measured on 25 problems each of
+  `litbench_paper_v1`, `test_s1_v1`, `test_s3_v1`, `test_s5_v1` (scratch script, Mac): our count /
+  the paper's nm = DFM 1.28, DFMM 1.30, robust 1.25, Fukui 1.24, FacDA 1.21, TVODA 1.18, Generic
+  1.17, MRCM / e-MRCM 1.06; DDMT, MTMD, SIMOP, WSPM, Dong 1.00. **Fluid and waste are
+  unaffected** (engine waste and units drawn equal the paper's nw and drawn on every method).
+  Affected verdicts: the steps-goal headline for DFM and Generic (own goal steps; DDMT's is
+  2-input and stands) and every off-goal steps row. A tiny local run (12 s1 problems, 16 sims)
+  turns DFM steps from "beats" to "level". **Re-read pending** on coe9 from the final records
+  (B1, B2a) with each paper's nm (`steps_recheck.py`, scratch; MTWM skipped, an ILP per problem).
 - **Ops lessons (not for the paper):** Python stdout buffering hid a 10 h background check;
   pytest thrashed at 1,144% CPU without `OMP_NUM_THREADS=1`; parallel checks on the Mac
   overheated it (heavy jobs now run only on the workstation).
@@ -4018,6 +4316,37 @@ independent reference (oracle, optimum, bound, validator) catches it.**
   **Scheduling:** HSM schedules online: a ready operation is placed when it fits, else waits
   for the next event (our executor, 14.9). **Gaps:** no published move-time-per-mix in unit
   cells (spans ~3 to ~60), no MEDA mixer above 8 units, optical detection time varies by assay.
+
+- **L-20 (2026-11-14) Routing literature map** (`notes/routing_literature.md`, plan 8.4). Read 37
+  PDFs in `~/Downloads/routing` plus the classics in `~/Downloads/Logic synthesis`; web search for
+  gaps. **Four lines:** (A) RL routing (Liang ICML 2020/2021, Elfar DATE 2022 / TCAD 2022-23,
+  Jiang TCAD 2023, CaCMARL 2025, routing-based synthesis TCAD 2026): motivated by electrode
+  degradation; on a healthy chip the ICML 2021 MARL router only matches the exact offline router
+  (Keszocze 2017). (B) Exact routing of 1-2 droplets with MEDA physics (SAT: Keszocze 2017,
+  Roy 2020; ILP: the Ritsumeikan group 2022-2026, shape-dependent velocity, split, morph; the
+  Dijkstra paper, VLSID 2026: optimal for a 2 x 1 droplet up to 100 x 100, ~3,200 s and GBs
+  there, two droplets only). (C) Many droplets, heuristic: prioritised A* (Böhringer 2006,
+  Manicka 2023, ours), Cho & Pan 2008, BioRoute 2008, flow-based (FCDR 2025), SwarmRouter TCAD
+  2026 (thousands of droplets on active matrix). (D) Synthesis with routing on MEDA (Li 2016/17,
+  Kundu 2023/25, Mandal 2025, washing-aware routing Shiro 2024/25). **Missing PDFs:** Liang ICML
+  2020, Roy TODAES 2020, Böhringer TCAD 2006, Cho & Pan TCAD 2008, BioRoute TCAD 2008, Lu
+  TODAES/ASP-DAC 2018, TDMC Lab Chip 2026, Micromachines 2023 DRL. **Gaps:** no multi-droplet
+  router is measured on whole assays at our scale; no routing paper looks at shared-intermediate
+  plans; modern multi-agent path finding (CBS, PBS, LNS, LaCAM) is not used in the field.
+
+- **L-21 (2026-11-15) Droplet physics, deep read** (`notes/routing_literature.md` section F,
+  D-89 step 2). Read in full: Li DAC 2016, Keszocze 2017, Roy TODAES 2020 (`3365993.pdf`, new),
+  Elfar TCAD 2022, Shiro 2022 and the Ritsumeikan group's 2023-2026 papers incl. the Biosensors
+  2025 target-guided one, Nakamura VLSID 2026, Eenhakkattu Mana TCAD 2025. **Findings:** (1) only
+  Li's size-to-speed model (fabricated 60 x 30 chip) and Eenhakkattu Mana's stretching limits
+  (CFD + experiments) are calibrated; (2) the shape-and-direction rule (time per move = volume /
+  cells on the leading edge: horizontal = width, vertical = height) is the Ritsumeikan group's
+  stated simplification of Li; (3) the group's papers disagree on the diagonal (w + h in Shiro
+  2022 and the washing papers; 2 for 2 x 1, 1 for 1 x 1 in Nakamura 2026 on) and on the gap
+  after a split (>= 1 or >= 2 cells); (4) every exact paper routes droplets of volume <= 2,
+  ours reach 12; (5) Roy 2020 assumes uniform speed, Keszocze 2017 one speed per droplet;
+  (6) no RL paper uses any of this. Under the generalised rule our big droplets travel 2-4x
+  slower than in M11. Still missing: Li TBioCAS 2017, Lu 2018.
 
 ## 7. Figure and table ideas
 

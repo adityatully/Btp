@@ -37,7 +37,7 @@ chats. Last updated 2026-11-03.*
 | Q-41 | What's the reference ("best known") every grading uses? | 2.1 |
 | Q-42 | Can we prove more optima on the val sets? | 2.2 |
 | Q-49 | How do the agent and planner compare with published heuristics? Could one be a better teacher? | 2.4 (stages 1–2), 6.3 (all) |
-| Q-148 | Do the gaps on small problems (s1 6% above optima, deep 1:1 dilutions, NFSP level) close if the search uses its leftover time? | D-87 pilot (`grow_check.py`, val s1-s3) |
+| Q-148 | Do the gaps on small problems (s1 6% above optima, deep 1:1 dilutions, NFSP level) close if the search uses its leftover time? | **Closed 2026-11-15 (E-95):** no; more sims at the root cheaper on 8 of 120, gap 2.88% → 2.80%; method-v3 stays |
 | Q-101 | Has the agent been fully trained (all stages, regime chosen, 3 seeds)? | 3.5, 3.6, 5.4 |
 | Q-103 | Is the mini benchmark's problem set big enough and unseen? | 2.4 |
 | Q-104 | Should MRCM become part of our planner and teacher for mixtures? | Open, no step yet (E-29) |
@@ -88,10 +88,13 @@ chats. Last updated 2026-11-03.*
 | Q-91 | Do robust-aliquot, Dong 2024 or e-MRCM narrow the claim? | 6.1 |
 | Q-95 | The real platform: M, mixer footprint, reservoirs, cost weights, router as cost oracle | Supervisor |
 | Q-96 | Do the generalisation claims hold (unseen sizes and constraints)? | 5.2, 6.4 |
-| Q-145 | Do the savings from shared intermediates survive execution (time, storage, detector queues), and if not, can execution-aware planning keep them? | time: E-89; routing: 8.4 |
 | Q-146 | What are realistic MEDA durations (dispense, mix, detect hold, detector changeover), mixer count and detector count? | Literature, supervisor; 8.3 sweeps placeholders (SPEC 14.2) |
 | Q-147 | Is list scheduling close enough to the optimal schedule (within 5% on average), or does scheduling need search? | Small and medium plans yes (E-84: s1-s3 all optimal); largest s4-s5 plans no: 1.077 x the ILP's best on 17 graded, up to 1.24, plan order beats critical path 16/0 (E-87); 11 ungraded. Open: search over priorities for them? |
 | Q-149 | How far does a MEDA droplet travel during one mix (move time against op durations), and how big is a mixer module for each mix volume? | Literature, supervisor; 8.4 sweeps 3/15/60 cells per 3 x 3 mix (D-88, L-19) |
+| Q-150 | How much of the grid run time do routing conflicts cost (A* against a perfect router, same placement and order)? | Pilots (E-93): 60 x 60 1.5% at u5; crowded 30 x 30 at u1 15% (up to 40%), D-89's unclear band; mostly travel distance. Full run: user's call |
+| Q-151 | Module-based, routing-based or hybrid synthesis for the claim? | Open; hinges on Q-152 (D-89, doc §15 #1) |
+| Q-152 | Is there a MEDA model of mixing during transport (mix progress per move and shape)? | Literature, supervisor (doc §15 #2; only Paik's DMFB table known) |
+| Q-153 | Under MEDA physics, may a droplet split into many small pieces on the way and merge at the goal, and what does it cost (rounds, spacing of the pieces)? | User to discuss with the supervisor (2026-11-16). Options: A halves, repeatable; B only 2 -> 1 + 1 (as published); C any sizes at once. Affects router, space, volume accuracy, washing |
 
 ---
 
@@ -935,14 +938,39 @@ can the router serve as a cost oracle?** · **Open → supervisor** (§8 of the 
 **Q-96 Do the generalisation claims hold on unseen sizes and constraints?** · **Open → plan
 5.2, 6.4**
 
-**Q-145 Do the savings from shared intermediates survive execution?** · **Open → plan 8.3, then
-8.5** (D-84, 2026-11-12) Our method wins by making intermediates no heuristic makes and sharing
+**Q-145 Do the savings from shared intermediates survive execution?** · **Closed (experiment) → E-89, E-92** (D-84, 2026-11-12) Our method wins by making intermediates no heuristic makes and sharing
 them (E-78, E-80). Shared droplets wait longer on the chip (storage, obstacles) and feed
 detector queues. The M10 scheduler measures makespan and storage x duration for our plans
 against the planner's and the published methods'. If sharing costs time, 8.5 makes the search
 see it. *Schedule half answered 2026-11-14 (E-89): no time cost on many targets (0.936 x no
 sharing; level with published methods); 6-12% slower than published methods on s1-s2. Storage
-x time 1.3-3.9x: the routing half stays open → plan 8.4.*
+x time 1.3-3.9x: the routing half stays open → plan 8.4.* *Routing half answered 2026-11-15
+(E-92): on the grid sharing costs no feasibility or chip size and stays faster than not sharing
+(0.918); against published methods our plans run 5-14% longer for less fluid. 8.5 is the
+user's call.*
+
+**Q-150 How much of the grid run time do routing conflicts cost?** · **Open → plan 8.6 step 1**
+(D-89, 2026-11-15) Real runs take 2.4-2.7x the no-travel schedule (E-92). The same plan run with
+`FreeRouter` (shortest paths, no conflicts, same placer and order) separates what a better
+router could save from travel and placement no router removes. Reading in D-89 (< 10%: not a
+makespan result; >= 25%: it is). *Pilots 2026-11-15 (E-93): small plans 0.4% at u5; big plans (8+ targets) 1.5% on 60 x 60
+at u5, 15% (up to 40%) on 30 x 30 at u1; distance is the largest part everywhere.* *With shape speeds (E-94, D-90): runs 1.4-1.6x
+longer, gap 1.8% on 60 x 60 u5, 6.5% on 30 x 30 u5, 15% on 30 x 30 u1.*
+
+**Q-151 Module-based, routing-based or hybrid synthesis?** · **Open → Q-152** (D-89,
+2026-11-15) The user finds routing-based more interesting (no blocked areas); the doc's default
+is a module-based harness first, hybrid end state. The router work (D-89 steps 2-6) is needed
+for every choice.
+
+**Q-153 May a droplet split into many pieces on the way, and at what cost?** · **Open → part 2
+design** (E-97, 2026-11-16) Splitting is most of the headroom of shape actions (28% of run time
+on 60 x 60 u5, an optimistic bound). The exact papers only split a size-2 droplet into two 1 x 1
+(1 unit, pieces >= 1-2 cells apart); splitting a 9-unit droplet into nine pieces, and the
+pieces' spacing, are not in the literature (L-21).
+
+**Q-152 Is there a MEDA model of mixing during transport?** · **Open → literature,
+supervisor** (D-89, 2026-11-15) Routing-based synthesis needs mix progress per move; only Paik's
+DMFB table is known (doc §5). Without it, mixing stays in modules.
 
 **Q-149 How far does a droplet travel during one mix, and how big is a mixer?** · **Open →
 literature, supervisor; 8.4 sweeps it** (D-88, 2026-11-14) On the grid, run time is travel plus
