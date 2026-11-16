@@ -23,7 +23,10 @@ on (at unit_ticks 5), paired: ours needs a bigger / the same / a smaller chip.
 Arguments are key=value: `sets` (comma list, default the six test sets), `limit` per set,
 `methods`, `method` (0/1), `seconds`, `sims` (as `sharing_time.py`), `sizes` (comma list, default
 30,60,100), `units` (comma list, default 1,5,20), `check` (1: validate every run, default),
-`workers`, `out`.
+`free` (1: also play each plan with `FreeRouter` and record `free_makespan`, the routing gap
+of D-89; 2: also `free_turn_makespan` and `free_split_makespan`, D-91; default 0),
+`min_targets` (only problems with at least that many targets), `move_rule` and
+`diagonal_rule` (override the platform's speed model, L-21), `workers`, `out`.
 """
 
 from __future__ import annotations
@@ -41,6 +44,7 @@ from meda.core.rules import replay
 from meda.generators.benchmark_io import BenchmarkSet
 from meda.pipeline.executor import ExecutionDeadlock, GridExecutor, grid_opgraph
 from meda.pipeline.geometry import GridPlatform, layout
+from meda.pipeline.router import FreeRouter
 from meda.pipeline.run_check import run_metrics, validate_run
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -55,6 +59,8 @@ KEEP = (
     "makespan",
     "schedule_makespan",
     "travel_cells",
+    "transit_ticks",
+    "trip_floor",
     "storage_ticks",
     "storage_peak",
     "storage_cell_ticks",
@@ -71,16 +77,22 @@ def variant(size: int, units: int) -> str:
     return f"{size}x{size}_u{units}"
 
 
-def platforms(sizes: tuple[int, ...], units: tuple[int, ...]) -> dict[str, GridPlatform]:
+def platforms(
+    sizes: tuple[int, ...], units: tuple[int, ...], moves: dict[str, str] | None = None
+) -> dict[str, GridPlatform]:
+    base = replace(_BASE, **(moves or {}))
     return {
-        variant(n, u): replace(_BASE, name=variant(n, u), grid=(n, n), unit_ticks=u)
+        variant(n, u): replace(base, name=variant(n, u), grid=(n, n), unit_ticks=u)
         for n in sizes
         for u in units
     }
 
 
-def play(inst: Instance, dag: MixingDAG, gp: GridPlatform, check: bool) -> dict[str, Any]:
-    """One plan on one grid variant: its metrics, or why it did not run."""
+def play(
+    inst: Instance, dag: MixingDAG, gp: GridPlatform, check: bool, free: int = 0
+) -> dict[str, Any]:
+    """One plan on one grid variant: its metrics, or why it did not run. With `free`, also the
+    makespan of the same plan with `FreeRouter` (the routing gap, D-89)."""
     try:
         g = grid_opgraph(dag, inst, gp)
         chip = layout(inst, gp)
@@ -93,7 +105,49 @@ def play(inst: Instance, dag: MixingDAG, gp: GridPlatform, check: bool) -> dict[
     if check:
         validate_run(run, g, chip, gp)
     m = run_metrics(run, g, chip, gp).as_dict()
-    return {k: m[k] for k in KEEP}
+    out: dict[str, Any] = {k: m[k] for k in KEEP}
+    routers = {"free_makespan": FreeRouter()} if free else {}
+    if free >= 2:  # D-91: the headroom of shape actions
+        routers["free_turn_makespan"] = FreeRouter(turn=True)
+        routers["free_split_makespan"] = FreeRouter(turn=True, split=True)
+    for key, router in routers.items():
+        try:
+            out[key] = GridExecutor(gp, router=router).run(g, chip).makespan
+        except ExecutionDeadlock:
+            out[key] = None
+    return out
+
+
+def routing_gap(recs: list[dict[str, Any]], v: str) -> dict[str, Any]:
+    """D-89 on one variant, every producer's plans pooled, over plans that run with both
+    routers: means of makespan / schedule (A*), free makespan / schedule, the share of the A*
+    makespan a perfect router could save (A* - free) / A*, and the share of trip ticks spent
+    on detours and waits inside paths (transit - floor) / transit."""
+    rows = [
+        p[v]
+        for r in recs
+        for p in r["producers"].values()
+        if v in p and p[v].get("free_makespan") is not None and "makespan" in p[v]
+    ]
+    if not rows:
+        return {"n": 0}
+
+    def mean(xs: list[float]) -> float:
+        return round(sum(xs) / len(xs), 4)
+
+    return {
+        "n": len(rows),
+        "astar_over_schedule": mean([x["makespan"] / x["schedule_makespan"] for x in rows]),
+        "free_over_schedule": mean([x["free_makespan"] / x["schedule_makespan"] for x in rows]),
+        "routing_share": mean([(x["makespan"] - x["free_makespan"]) / x["makespan"] for x in rows]),
+        "routing_share_max": round(
+            max((x["makespan"] - x["free_makespan"]) / x["makespan"] for x in rows), 4
+        ),
+        "detour_share": mean(
+            [(x["transit_ticks"] - x["trip_floor"]) / max(x["transit_ticks"], 1) for x in rows]
+        ),
+        "route_wait_per_plan": mean([x["route_wait"] for x in rows]),
+    }
 
 
 def run(task: dict[str, Any], opts: dict[str, Any]) -> dict[str, Any]:
@@ -106,7 +160,7 @@ def run(task: dict[str, Any], opts: dict[str, Any]) -> dict[str, Any]:
         "F": len(inst.fluids),
         "producers": {},
     }
-    gps = platforms(opts["sizes"], opts["units"])
+    gps = platforms(opts["sizes"], opts["units"], opts.get("moves"))
     for name, plan in st.plans(task, opts).items():
         if isinstance(plan, str):
             rec["producers"][name] = {"none": plan}
@@ -115,7 +169,7 @@ def run(task: dict[str, Any], opts: dict[str, Any]) -> dict[str, Any]:
         dag = MixingDAG.from_deltas(inst, deltas, totals, name)
         out: dict[str, Any] = {"cost": float(w.scalar(totals, inst.fluids))}
         for vname, gp in gps.items():
-            out[vname] = play(inst, dag, gp, opts["check"])
+            out[vname] = play(inst, dag, gp, opts["check"], opts.get("free", 0))
         rec["producers"][name] = out
     return rec
 
@@ -233,6 +287,15 @@ def summarise(recs: list[dict[str, Any]]) -> dict[str, Any]:
             "robust": all(x.get("verdict") == d["verdict"] for x in firm) and bool(firm),
         }
     out["reading"] = reading
+    if any(
+        "free_makespan" in p.get(v, {})
+        for r in recs
+        for p in r["producers"].values()
+        for v in variants
+    ):
+        out["routing_gap"] = {
+            g: {v: routing_gap(rs, v) for v in variants} for g, rs in groups.items()
+        }
     return out
 
 
@@ -255,6 +318,8 @@ def main(argv: list[str]) -> None:
         "sizes": tuple(int(x) for x in args.get("sizes", "30,60,100").split(",")),
         "units": tuple(int(x) for x in args.get("units", "1,5,20").split(",")),
         "check": args.get("check", "1") == "1",
+        "free": int(args.get("free", "0")),
+        "moves": {k: args[k] for k in ("move_rule", "diagonal_rule") if k in args},
     }
     out = Path(args.get("out", "outputs/grid_time/records.jsonl"))
     out.parent.mkdir(parents=True, exist_ok=True)
@@ -265,7 +330,11 @@ def main(argv: list[str]) -> None:
             "instance": i.to_json(),
         }
         for s in sets
-        for i in BenchmarkSet.read(s).instances[:limit]
+        for i in [
+            x
+            for x in BenchmarkSet.read(s).instances
+            if len(x.targets) >= int(args.get("min_targets", 0))
+        ][:limit]
     ]
     recs = []
     with open(out, "w") as fh, Pool(int(args.get("workers", 1))) as pool:

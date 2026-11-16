@@ -18,7 +18,10 @@ dispense_units: 3          # Li 2017: dispense 3 s vs mix 2 s
 detect_units: 4            # placeholder; optical detection time depends on the assay
 changeover_units: 2        # detector change between different compositions (placeholder)
 split_ticks: 1             # a take from a stored droplet (Nakamura 2026: split = 1 unit)
-route_horizon: null        # null = 4 (H + W) ticks after a request's release
+route_horizon: null        # null = 4 (H + W) x the droplet's slowest move, ticks after release
+move_rule: extent          # ticks per move by shape (L-21): horizontal = width, vertical = height;
+                           # uniform = 1 tick for every shape (M11, E-90-E-93)
+diagonal_rule: max         # diagonal = longer side (Nakamura 2026); sum = width + height (Shiro 2022)
 # droplet footprint [rows, cols] by volume (up to and including max_volume), near-square
 footprints:
   - {max_volume: 1, shape: [1, 1]}

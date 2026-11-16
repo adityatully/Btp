@@ -3,7 +3,9 @@
 `validate_run(run, graph, chip, gp)` replays a run tick by tick, independently of how the
 executor and router made it, and raises `RunError` naming the instance and every broken rule:
 
-1. CONTINUITY: a droplet moves at most one cell (8 neighbours) per tick, stays on the chip.
+1. CONTINUITY: a droplet moves to one of its 8 neighbours, no faster than
+   `GridPlatform.move_ticks` for its shape and direction (it holds its anchor until it lands),
+   and stays on the chip.
 2. SPACING: droplets keep `spacing` empty cells between them, in space and time (each one's
    footprint at t against the other's at u = t - 1, t, t + 1, exemptions judged at min(t, u)),
    keep out of active regions grown by
@@ -29,9 +31,9 @@ from itertools import combinations, pairwise
 import numpy as np
 
 from meda.pipeline.executor import Run
-from meda.pipeline.geometry import Chip, GridPlatform, at
+from meda.pipeline.geometry import Cell, Chip, GridPlatform, Shape, at
 from meda.pipeline.opgraph import OpGraph, OpKind
-from meda.pipeline.router import INF, Body, exempt
+from meda.pipeline.router import INF, Body, exempt, free_distances
 from meda.pipeline.schedule import peak, stored_intervals
 
 
@@ -98,9 +100,20 @@ def check_run(run: Run, graph: OpGraph, chip: Chip, gp: GridPlatform) -> list[Ru
     rec = run.records
     # ---- 1. continuity and bounds
     for b in bodies:
-        for p, q in pairwise(b.path):
-            if max(abs(p[0] - q[0]), abs(p[1] - q[1])) > 1:
+        held = 0  # index where the droplet reached its current anchor
+        for i, (p, q) in enumerate(pairwise(b.path), start=1):
+            if p == q:
+                continue
+            dr, dc = q[0] - p[0], q[1] - p[1]
+            if max(abs(dr), abs(dc)) > 1:
                 bad(RunRule.CONTINUITY, f"body {b.id} jumps from {p} to {q}")
+            elif i - held < gp.move_ticks(b.shape, dr, dc):
+                bad(
+                    RunRule.CONTINUITY,
+                    f"body {b.id} moves {p} -> {q} in {i - held} ticks, "
+                    f"needs {gp.move_ticks(b.shape, dr, dc)} for a {b.shape} droplet",
+                )
+            held = i
         for p in set(b.path):
             rect = at(p, b.shape)
             if not chip.inside(rect):
@@ -128,7 +141,7 @@ def check_run(run: Run, graph: OpGraph, chip: Chip, gp: GridPlatform) -> list[Ru
             if not moving and t not in (lo + 1, hi - 1):
                 continue
             for u in (t - 1, t, t + 1):
-                if exempt(a, b, min(t, u), sp):
+                if exempt(a, b, min(t, u), gp):
                     continue
                 rb = b.rect(u)
                 if rb is not None and ra.gap(rb) < sp:
@@ -260,7 +273,9 @@ def validate_run(run: Run, graph: OpGraph, chip: Chip, gp: GridPlatform) -> None
 @dataclass(frozen=True, slots=True)
 class RunMetrics:
     """14.10, exact integers. `travel_cells`: cells moved by all droplets; `transit_ticks`:
-    ticks droplets spent between release and arrival (moves and waits); `storage_ticks` and
+    ticks droplets spent between release and arrival (moves and waits); `trip_floor`: the same
+    trips' shortest lengths on the empty chip (`free_distances`), so `transit_ticks -
+    trip_floor` is the detours and waits routing added inside paths (D-89); `storage_ticks` and
     `storage_peak`: stored droplets (14.4's rule) summed over ticks and at most;
     `storage_cell_ticks`: cells of stored droplets with their spacing ring, summed over ticks;
     `peak_cells`: cells covered by droplets and active regions at once."""
@@ -269,6 +284,7 @@ class RunMetrics:
     schedule_makespan: int
     travel_cells: int
     transit_ticks: int
+    trip_floor: int
     storage_ticks: int
     storage_peak: int
     storage_cell_ticks: int
@@ -287,11 +303,16 @@ class RunMetrics:
 
 def run_metrics(run: Run, graph: OpGraph, chip: Chip, gp: GridPlatform) -> RunMetrics:
     sp = gp.spacing
-    travel = transit = cell_ticks = 0
+    travel = transit = floor = cell_ticks = 0
+    dists: dict[tuple[Shape, Cell], np.ndarray] = {}
     for b in run.bodies:
         if b.role in ("move", "mix", "detect") and len(b.path) > 1:
             travel += sum(p != q for p, q in pairwise(b.path))
             transit += len(b.path) - 1
+            key = (b.shape, b.path[-1])
+            if key not in dists:
+                dists[key] = free_distances(chip, gp, b.shape, b.path[-1])
+            floor += int(dists[key][b.path[0]])
         if b.role == "stored" and b.end != INF:
             g = at(b.path[0], b.shape).inflate(sp)
             r0, c0 = max(g.r, 0), max(g.c, 0)
@@ -317,6 +338,7 @@ def run_metrics(run: Run, graph: OpGraph, chip: Chip, gp: GridPlatform) -> RunMe
         run.schedule_makespan,
         travel,
         transit,
+        floor,
         storage_ticks,
         peak(iv),
         cell_ticks,

@@ -104,6 +104,8 @@ class GridPlatform:
     changeover_units: int
     split_ticks: int
     route_horizon: int | None
+    move_rule: str
+    diagonal_rule: str
     footprints: tuple[SizeRule, ...]
     mixer_library: tuple[SizeRule, ...]
 
@@ -133,6 +135,10 @@ class GridPlatform:
             v = getattr(self, name)
             if v is not None and (not isinstance(v, int) or v < 1):
                 bad(f"{name} must be null or an int >= 1")
+        if self.move_rule not in ("uniform", "extent"):
+            bad("move_rule must be 'uniform' or 'extent'")
+        if self.diagonal_rule not in ("max", "sum"):
+            bad("diagonal_rule must be 'max' or 'sum'")
         for table in ("footprints", "mixer_library"):
             rules = getattr(self, table)
             if not rules or any(a.max_volume >= b.max_volume for a, b in pairwise(rules)):
@@ -181,9 +187,32 @@ class GridPlatform:
     def changeover_ticks(self) -> int:
         return self.changeover_units * self.unit_ticks
 
-    @property
-    def horizon(self) -> int:
-        return self.route_horizon or 4 * (self.grid[0] + self.grid[1])
+    def move_ticks(self, shape: Shape, dr: int, dc: int) -> int:
+        """Ticks for a droplet of `shape` (rows, cols) to move by (dr, dc), one of the 8
+        neighbours; a wait (0, 0) is one tick. `uniform`: one tick for every shape (M11).
+        `extent` (14.8, L-21): time = volume / cells on the leading edge, so a horizontal move
+        takes the droplet's width, a vertical one its height; a diagonal takes the longer side
+        (`diagonal_rule: max`, Nakamura et al. 2026) or width + height (`sum`, Shiro et al.
+        2022)."""
+        if (dr, dc) == (0, 0) or self.move_rule == "uniform":
+            return 1
+        h, w = shape
+        if dr and dc:
+            return max(h, w) if self.diagonal_rule == "max" else h + w
+        return w if dc else h
+
+    def morph_ticks(self, shape: Shape) -> int:
+        """Ticks to turn a droplet of `shape` into its rotation (h x w -> w x h): its longer side
+        (Nakamura et al. 2026: 2 for 2 x 1 <-> 1 x 2); 1 under `move_rule: uniform`."""
+        return 1 if self.move_rule == "uniform" else max(shape)
+
+    def horizon_for(self, shape: Shape) -> int:
+        """Search horizon in ticks for a droplet of `shape`: `route_horizon`, or by default
+        4 (H + W) times its slowest move."""
+        if self.route_horizon:
+            return self.route_horizon
+        slowest = max(self.move_ticks(shape, dr, dc) for dr in (-1, 0, 1) for dc in (-1, 0, 1))
+        return 4 * (self.grid[0] + self.grid[1]) * slowest
 
     def platform(self, mixers: int) -> Platform:
         """The M10 platform with the same durations (ticks), for the priority schedule (14.9).

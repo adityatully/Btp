@@ -14,7 +14,16 @@ from meda.generators.benchmark_io import BENCHMARKS_DIR, BenchmarkSet
 from meda.pipeline.executor import ExecutionDeadlock, GridExecutor, Run, grid_opgraph
 from meda.pipeline.geometry import Chip, GridPlatform, Rect, SizeRule, layout, window_any
 from meda.pipeline.opgraph import OpKind
-from meda.pipeline.router import INF, AStarRouter, Body, ChipState, RouteRequest
+from meda.pipeline.router import (
+    INF,
+    AStarRouter,
+    Body,
+    ChipState,
+    FreeRouter,
+    RouteRequest,
+    free_distances,
+    turn_distances,
+)
 from meda.pipeline.run_check import RunError, RunRule, check_run, run_metrics, validate_run
 from meda.pipeline.schedule import critical_path
 from meda.solvers.baselines.share import ShareSolver
@@ -123,6 +132,116 @@ def test_impossible_request_fails_and_reserves_nothing() -> None:
     ]
     res = AStarRouter().route(reqs, st)
     assert not res.ok and res.failed == 1 and set(st.bodies) == {9}
+
+
+# ---------------------------------------------------------------- routing gap (D-89)
+
+
+def test_free_router_ignores_droplets_and_never_fails() -> None:
+    """The detour case above: the free router goes straight through, 4 moves not 6; and the
+    impossible case succeeds."""
+    st = _bare(10, 10)
+    st.put(Body(9, (1, 1), 1, 0, ((2, 2),), INF, "stored"))
+    res = FreeRouter().route([RouteRequest(1, (1, 1), 1, (2, 0), (2, 4), 0, to_waste=True)], st)
+    assert res.ok and len(res.paths[0]) - 1 == 4 and st.bodies[1].end == 5
+    st = _bare(7, 7)
+    st.put(Body(9, (1, 1), 1, 0, ((5, 5),), INF, "stored"))
+    reqs = [
+        RouteRequest(1, (1, 1), 1, (0, 0), (0, 3), 0, to_waste=True),
+        RouteRequest(2, (1, 1), 1, (0, 6), (6, 6), 0),
+    ]
+    res = FreeRouter().route(reqs, st)
+    assert res.ok and [len(p) - 1 for p in res.paths] == [3, 6] and st.bodies[2].end == INF
+
+
+def test_free_distances_go_round_dead_cells() -> None:
+    """Dead cells at col 2, rows 0-3, on a 5 x 5 chip: a 1 x 1 droplet from (0, 0) to (0, 4)
+    must pass (4, 2): 4 moves there, 4 back up = 8."""
+    c = Chip("hand", 5, 5, {}, (), (), frozenset((r, 2) for r in range(4)), Rect(0, 0, 5, 5))
+    assert int(free_distances(c, GP, (1, 1), (0, 4))[0, 0]) == 8
+    assert int(free_distances(c, GP, (1, 1), (0, 1))[0, 0]) == 1
+
+
+def test_trip_floor_bounds_transit_and_free_runs_have_no_gap() -> None:
+    dag = _dag(SHARED, SHARED_PLAN)
+    g = grid_opgraph(dag, SHARED, GP)
+    c = layout(SHARED, GP)
+    run = GridExecutor(GP).run(g, c)
+    m = run_metrics(run, g, c, GP)
+    assert 0 < m.trip_floor <= m.transit_ticks
+    free = GridExecutor(GP, router=FreeRouter()).run(g, c)
+    fm = run_metrics(free, g, c, GP)
+    assert fm.trip_floor == fm.transit_ticks == fm.travel_cells and fm.route_wait == 0
+
+
+# ---------------------------------------------------------------- shape-dependent speed (L-21)
+
+
+def test_move_ticks_follow_width_height_and_the_diagonal_rule() -> None:
+    """Nakamura et al. 2026: 1 x 1 one unit any way; a 2 x 1 (two rows) one unit sideways, two
+    up or down or diagonally. Shiro et al. 2022: diagonal = width + height."""
+    assert {GP.move_ticks((1, 1), dr, dc) for dr in (-1, 0, 1) for dc in (-1, 0, 1)} == {1}
+    assert (GP.move_ticks((2, 1), 0, 1), GP.move_ticks((2, 1), 1, 0)) == (1, 2)
+    assert GP.move_ticks((2, 1), 1, 1) == 2 and GP.move_ticks((3, 4), 0, -1) == 4
+    assert replace(GP, diagonal_rule="sum").move_ticks((2, 1), -1, 1) == 3
+    assert replace(GP, move_rule="uniform").move_ticks((3, 4), 1, 0) == 1
+    with pytest.raises(ValueError, match="move_rule"):
+        replace(GP, move_rule="fast")
+
+
+def test_wide_droplet_is_slow_sideways_and_fast_up_and_down() -> None:
+    """A 1 x 2 droplet (one row, two columns): 3 cells sideways = 6 ticks, 3 cells down = 3;
+    the path holds each anchor for the move's ticks."""
+    st = _bare(10, 10)
+    res = AStarRouter().route([RouteRequest(1, (1, 2), 2, (0, 0), (0, 3), 0, to_waste=True)], st)
+    assert res.ok and len(res.paths[0]) - 1 == 6
+    assert res.paths[0] == ((0, 0), (0, 0), (0, 1), (0, 1), (0, 2), (0, 2), (0, 3))
+    st = _bare(10, 10)
+    res = AStarRouter().route([RouteRequest(1, (1, 2), 2, (0, 0), (3, 0), 0, to_waste=True)], st)
+    assert res.ok and len(res.paths[0]) - 1 == 3
+
+
+def test_free_distances_weigh_moves_by_shape() -> None:
+    """A 1 x 2 droplet on an empty 6 x 6 chip from (0, 0) to (3, 2): two diagonals (2 ticks
+    each) and one vertical move (1) = 5, against 3 moves."""
+    c = Chip("hand", 6, 6, {}, (), (), frozenset(), Rect(0, 0, 6, 6))
+    assert int(free_distances(c, GP, (1, 2), (3, 2))[0, 0]) == 5
+    free = FreeRouter().route(
+        [RouteRequest(1, (1, 2), 2, (0, 0), (3, 2), 0, to_waste=True)], _bare(6, 6)
+    )
+    assert len(free.paths[0]) - 1 == 5
+
+
+def test_turning_pays_off_on_long_trips_along_the_slow_side() -> None:
+    """A 1 x 2 droplet 6 cells to the right: 12 ticks as it is; turned to 2 x 1 (2 ticks),
+    6 moves at 1, turned back (2) = 10. Over 4 cells both take 8."""
+    c = Chip("hand", 8, 12, {}, (), (), frozenset(), Rect(0, 0, 8, 12))
+    assert int(free_distances(c, GP, (1, 2), (3, 6))[3, 0]) == 12
+    assert int(turn_distances(c, GP, (1, 2), (3, 6))[3, 0]) == 10
+    assert int(turn_distances(c, GP, (1, 2), (3, 4))[3, 0]) == 8
+
+
+def test_free_router_options_take_the_fastest_trip() -> None:
+    """A 3 x 3 droplet (volume 9) 10 cells to the right: 30 ticks as it is; split into 1 x 1
+    pieces: 4 rounds of splits and 4 of merges (ceil(log2 9)) + 10 moves = 18."""
+    req = RouteRequest(1, (3, 3), 9, (2, 0), (2, 10), 0, to_waste=True)
+    plain = FreeRouter().route([req], _bare(8, 16))
+    split = FreeRouter(turn=True, split=True).route([req], _bare(8, 16))
+    assert len(plain.paths[0]) - 1 == 30 and len(split.paths[0]) - 1 == 18
+    assert split.paths[0][0] == (2, 0) and split.paths[0][-1] == (2, 10)
+
+
+def test_checker_rejects_a_droplet_moving_too_fast() -> None:
+    """Every moving droplet of this run is 1 x 1; claim one is 2 x 2 (2 ticks per move)
+    and its one-tick moves break continuity."""
+    run, g, c = _a_run()
+    assert not any(i.rule is RunRule.CONTINUITY for i in check_run(run, g, c, GP))  # type: ignore[arg-type]
+    moved = next(b for b in run.bodies if b.role == "move" and len(set(b.path)) > 1)
+    bad = _tampered(run, moved.id, shape=(2, 2))
+    assert any(
+        i.rule is RunRule.CONTINUITY and "needs 2" in i.message
+        for i in check_run(bad, g, c, GP)  # type: ignore[arg-type]
+    )
 
 
 # ---------------------------------------------------------------- area is the resource (accept b)

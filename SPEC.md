@@ -1,6 +1,20 @@
 # MEDA Design Automation — Codebase Specification
 
-Version 0.47 · 2026-11-14
+Version 0.49 · 2026-11-15
+
+Changes in 0.49 (shape-dependent speed, paper log D-90, L-21): **default physical assumption
+changed.** A move now takes `GridPlatform.move_ticks(shape, direction)` ticks (14.8): horizontal
+= the droplet's width, vertical = its height, diagonal = the longer side (`move_rule: extent`,
+`diagonal_rule: max`; `sum` = width + height). `move_rule: uniform` gives back M11's one tick
+per move for every shape (E-90-E-93 ran with it). The router holds a droplet's anchor until a
+move lands; the search horizon and the split exemption window scale with the slowest move; `free_distances` and
+`FreeRouter` weigh moves the same way; the run validator checks the speed (14.10 rule 1).
+No shape change or split yet (doc §8 constraints 2-3; D-90 part 2).
+
+Changes in 0.48 (routing gap, paper log D-89): `FreeRouter` in 14.8, a measuring stick that
+gives every droplet a shortest path on the empty chip and ignores every other droplet and
+module; `run_metrics` gains `trip_floor` (14.10). No change to the router contract or to any
+default.
 
 Changes in 0.47 (M11 design, paper log D-88, L-19): section 14 gains the grid harness design:
 chip geometry and layout, any chip size, unit-cell convention (14.6), the published MEDA mixer
@@ -2460,18 +2474,29 @@ the supervisor's Dijkstra router can replace the classical one.
   ticks t - 1, t and t + 1, so two paths planned in either order keep it. Exempt: droplets
   bound for the same op (they merge there), and pieces of one droplet (a stored droplet, its
   remainder, its parts, a droplet leaving a detector) during the first
-  `max(shape) + spacing + 1` ticks of the later one, judged at the earlier of the two ticks
-  compared.
+  `max(shape) + spacing + 1` moves of the later one at its slowest move (ticks: times the
+  slowest `move_ticks`, 0.49), judged at the earlier of the two ticks compared.
 - **Out:** `RouteResult`: per droplet a path (one anchor per tick from `release` to arrival,
   then held at the goal until its op starts), or a failure naming the first droplet without a
   path; the ticks taken and the cells covered (for residue in M12).
 - **Classical router** (doc §14 step 6): prioritised space-time A* (cooperative A*): the
   requests in the given order, each path found with every earlier one reserved. Moves: the 8
-  neighbours or wait, one cell per tick for every shape (shape-dependent velocity is a later
-  table, doc §8 constraint 1). Heuristic: the shortest distance past dead cells and droplets
-  parked for good (admissible; an unreachable goal fails at once). Spacing (14.6) is a mask, never a penalty. Search horizon
-  `route_horizon` ticks after `release` (default 4 (H + W)); beyond it the request fails.
+  neighbours or wait; a move takes `move_ticks(shape, direction)` ticks *(0.49, L-21)*, the
+  droplet holding its anchor until it lands: `extent` (default) = width for a horizontal move,
+  height for a vertical one (time = volume / cells on the leading edge, the Ritsumeikan
+  group's model after Li et al. 2017), diagonal = the longer side (`diagonal_rule: max`,
+  Nakamura et al. 2026) or width + height (`sum`, Shiro et al. 2022); `uniform` = one tick for
+  every shape (M11). The model is assumed, not calibrated (L-21), so it is config and swept. Heuristic: the shortest distance past dead cells and droplets
+  parked for good, in moves times the cheapest move (admissible; an unreachable goal fails at
+  once). Spacing (14.6) is a mask, never a penalty. Search horizon
+  `route_horizon` ticks after `release` (default 4 (H + W) times the droplet's slowest move);
+  beyond it the request fails.
 - **All or nothing:** a call either reserves every requested path or none.
+- **Measuring stick** *(0.48, D-89)*: `FreeRouter` gives each request a shortest path on the
+  empty chip (dead cells only: `free_distances`), ignoring every other droplet, module and the
+  spacing rule; it never fails. The executor run with it is what a perfect router could reach
+  with the same placement and order; its paths overlap, so it never passes `validate_run` and
+  is used only to measure (`grid_time.py free=1`).
 
 ### 14.9 Executor (`pipeline/executor.py`)
 *0.47, design (D-88).* The doc's clock loop (§7) as **list scheduling on the grid**: the M10
@@ -2513,7 +2538,8 @@ space and routes. A failed route or a full chip makes an op wait and retry at th
 ### 14.10 Run validator and metrics (`pipeline/run_check.py`)
 `validate_run(run, graph, chip, platform)` replays the run tick by tick and raises `RunError`
 naming the instance and every broken rule:
-1. **Continuity:** a droplet moves at most one cell (8 neighbours) per tick and stays on the chip.
+1. **Continuity:** a droplet moves to one of its 8 neighbours, no sooner than `move_ticks` for
+   its shape and direction after it reached its current anchor, and stays on the chip.
 2. **Spacing and obstacles:** 14.6's spacing in space and time between droplets, and against
    other modules and their rings, dead cells; only the stated exceptions.
 3. **Operations:** each op's inputs are in its module (or on its detector) at its start; its
@@ -2525,15 +2551,17 @@ naming the instance and every broken rule:
 5. **Completeness:** every op runs once; every output is detected (or delivered).
 
 `run_metrics(run, graph)` (exact integers): `makespan`; `schedule_makespan` (the M10 makespan,
-no travel); `travel_ticks` (droplet moves summed); `storage_ticks` (as 14.4) and
+no travel); `travel_ticks` (droplet moves summed); `transit_ticks` (ticks from release to
+arrival, summed over trips) and `trip_floor` (the same trips' shortest lengths on the empty
+chip, 0.48), so `transit_ticks - trip_floor` is the detours and waits inside paths; `storage_ticks` (as 14.4) and
 `storage_cell_ticks` (cells of stored droplets with their rings, summed over ticks: the area
 version, doc §6); `peak_cells` (cells covered by droplets, rings and modules at once);
 `space_wait` and `route_wait` (ticks ready ops waited for a module or a route); `route_calls`,
 `route_failures`; `detector_wait`.
 
-**Not in M11** (later, each behind config): contamination and washing (M12), shape-dependent
-velocity and morphing, mixer size by volume, a storage region, heaters and incubation,
-electrode wear, split error, mixing during transport (15).
+**Not in M11** (later, each behind config): contamination and washing (M12), shape change
+(morphing) and splitting on the way (D-90 part 2), mixer size by volume, a storage region,
+heaters and incubation, electrode wear, split error, mixing during transport (15).
 
 **Time base.** 1 tick = one move of a 1 x 1 droplet by one cell in any of 8 directions (the unit
 time of Nakamura et al. 2026). Operation times are in library **units**, and `unit_ticks`
@@ -2547,7 +2575,8 @@ every measurement sweeps `unit_ticks` in {1, 5, 20}: a 3 x 3 mix = 3, 15 or 60 c
 **Grid platform defaults** (`configs/platform/meda_grid.yaml`, all placeholders, Q-146, Q-149):
 `grid` 60 x 60, the SAR `mixer_library` above, `spacing` 1, `edge_margin` 4, `waste_ports` 2,
 `ports_per_fluid` 1, `detectors` 2 (3 x 3 cells each, fixed on the east edge), `mixers` cap
-null, `unit_ticks` 5, `split_ticks` 1, `route_horizon` 4 (H + W).
+null, `unit_ticks` 5, `split_ticks` 1, `route_horizon` 4 (H + W) x the slowest move, `move_rule` extent,
+`diagonal_rule` max (0.49).
 
 ---
 
