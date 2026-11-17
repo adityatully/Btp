@@ -568,9 +568,20 @@ def _value(target: Target, instance: Instance, weights: CostWeights) -> Rational
     )
 
 
+ORDER_RULES = ("given", "dear", "cheap", "near")
+_Named = list[tuple[tuple[str, ...], list[int]]]
+
+
 def orders(instance: Instance, weights: CostWeights) -> list[list[int]]:
     """Target orders the pass tries: given, dearest first, cheapest first, nearest neighbour
     from the dearest."""
+    return [order for _, order in named_orders(instance, weights)]
+
+
+def named_orders(
+    instance: Instance, weights: CostWeights
+) -> list[tuple[tuple[str, ...], list[int]]]:
+    """`orders` with the rules (`ORDER_RULES`) that give each distinct order (D-96)."""
     ids = list(range(len(instance.targets)))
     value = {i: _value(instance.targets[i], instance, weights) for i in ids}
     dear = sorted(ids, key=lambda i: (-value[i], i))
@@ -582,10 +593,14 @@ def orders(instance: Instance, weights: CostWeights) -> list[list[int]]:
         nxt = min(rest, key=lambda i: (linf_distance(last, instance.targets[i].composition), i))
         chain.append(nxt)
         rest.discard(nxt)
-    out: list[list[int]] = []
-    for order in (ids, dear, cheap, chain):
-        if order not in out:
-            out.append(order)
+    out: _Named = []
+    for rule, order in zip(ORDER_RULES, (ids, dear, cheap, chain), strict=True):
+        for i, (rules, seen) in enumerate(out):
+            if seen == order:
+                out[i] = ((*rules, rule), seen)
+                break
+        else:
+            out.append(((rule,), order))
     return out
 
 

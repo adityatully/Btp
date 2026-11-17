@@ -36,6 +36,7 @@ chats. Last updated 2026-11-03.*
 | Q-40 | Is the sharing pass near-optimal on many-target mixtures? | 2.3 |
 | Q-41 | What's the reference ("best known") every grading uses? | 2.1 |
 | Q-42 | Can we prove more optima on the val sets? | 2.2 |
+| Q-156 | Does the sharing pass need all 4 target orders, or do 1-2 give the same plans faster? | 6.7 (D-96) |
 | Q-49 | How do the agent and planner compare with published heuristics? Could one be a better teacher? | 2.4 (stages 1–2), 6.3 (all) |
 | Q-148 | Do the gaps on small problems (s1 6% above optima, deep 1:1 dilutions, NFSP level) close if the search uses its leftover time? | **Closed 2026-11-15 (E-95):** no; more sims at the root cheaper on 8 of 120, gap 2.88% → 2.80%; method-v3 stays |
 | Q-101 | Has the agent been fully trained (all stages, regime chosen, 3 seeds)? | 3.5, 3.6, 5.4 |
@@ -961,6 +962,13 @@ longer, gap 1.8% on 60 x 60 u5, 6.5% on 30 x 30 u5, 15% on 30 x 30 u1.*
 2026-11-15) The user finds routing-based more interesting (no blocked areas); the doc's default
 is a module-based harness first, hybrid end state. The router work (D-89 steps 2-6) is needed
 for every choice.
+
+**Q-156 Does the sharing pass need all 4 target orders?** · **Open → plan 6.7** (D-96,
+2026-11-17) The pass runs once per distinct target order and the search calls it at every
+leaf; if 1-2 orders almost always give the cheapest finish, the finisher is up to ~3x faster on
+multi-target problems (s1-s3 have one order already), so the search reaches more leaves where
+it is short of time. Also: `finish_from` reruns orders that become equal mid-plan. Check:
+`scripts/order_check.py` on val s4, s5, `val_emrcm_v1`; bar in D-96.
 
 **Q-153 May a droplet split into many pieces on the way, and at what cost?** · **Open → part 2
 design** (E-97, 2026-11-16) Splitting is most of the headroom of shape actions (28% of run time

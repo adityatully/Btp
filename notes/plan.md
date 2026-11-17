@@ -242,6 +242,11 @@ depth 2 is 10-18× faster but 7-10% dearer, parked (D-44). *Round 3 done 2026-10
 - **6.4 Tier 4:** generalisation probes (with 5.2).
 - **6.5 Tier 5:** frontier set `frontier_v1`.
 - **6.6 Tier 6:** assay ratios from real protocols.
+- **6.7 Order check (D-96, Q-156):** does the sharing pass need all 4 target orders, and how
+  much time do repeated orders cost mid-plan? `scripts/order_check.py` on val s4, s5,
+  `val_emrcm_v1` (plain on the Mac is too long: coe9, plain and MRCM). Pass (bar in D-96) → a
+  search pilot with fewer orders (a possible method-v4, finals rerun); fail → every order
+  stays. *Built 2026-11-17, Mac trial done; coe9 run next.*
 
 ### Phase 7. Paper
 

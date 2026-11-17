@@ -1396,6 +1396,32 @@ Format: date · decision · alternatives considered · why · evidence.
   7%: val_s3-002 834 -> 778), routing 1.3-1.9x slower.
   **Measure:** E-94's 12 big problems with turning A* (E-98: 5.3% shorter on 60 x 60 u5, 0.7%
   on 30 x 30 u5).
+- **D-96 (2026-11-17) Order check: does the sharing pass need all its target orders? (Q-156;
+  user: "Yes, build it").** The pass runs once per distinct target order (given, dearest first,
+  cheapest first, nearest neighbour; `share.orders`) and keeps the cheapest, and the search's
+  finisher calls it at every leaf. Never measured which order wins (E-28 only added 32 random
+  orders). Distinct orders per val problem (counted, no planning): s1-s3 always 1 (one
+  target); s4 2 on 21, 3 on 8, 4 on 11 of 40; s5 1 on 24, 2-4 on 18 of 42; `val_emrcm_v1` 1 on
+  80, 2-4 on 40 of 120. So fewer orders can speed up only multi-target problems, at most
+  about 3x, which is where the search runs short of time (E-81). Also found in the code:
+  `finish_from` drops finished targets from each order but does not drop orders that become
+  equal, so mid-plan it can rerun the same order (same answer, wasted time). **Check**
+  (`scripts/order_check.py`, `share.named_orders`; val only, the test sets stay untouched): on
+  every val s4, s5 and `val_emrcm_v1` problem with >= 2 orders, a 60 s flat-prior search
+  (plain pass at its leaves, 32 sims) records the states it finishes from; the root, up to 19
+  more leaves (evenly spaced) and 10 cuts along its best plan (deep states a 900 s search
+  reaches) are finished once per order, plain pass and (coe9) greedy MRCM with its cache
+  filled by the root. **Part 1:** share of finish time spent on repeated orders. **Part 2,
+  reading fixed in advance:** fewer orders are worth a search pilot if a set of at most 2
+  rules is cheapest-or-tied on >= 95% of the finishes with a choice (>= 2 distinct open
+  orders) and its mean excess over the cheapest is < 0.5%, on root, leaf and cut finishes,
+  plain and MRCM; otherwise every order earns its place. The best set is picked on the same
+  data it is judged on (10 sets of 1-2 rules; small bias, said so). Method-v3 is frozen and
+  the final runs are done (D-83): a pass leads to a pilot (a possible method-v4, which would
+  need the finals rerun), not to a change of method-v3.
+  *Mac trial (2 problems per set, 20 s search, 8 states, 6 cuts; not a result):* repeats
+  1.3% of finish time; no single order wins (cheapest-or-tied on leaves: given 17, dear 11,
+  cheap 24, near 11 of 34); best 2 rules (dear + cheap) 88-100% depending on the scope.
 
 ## 4. Experiments and results
 
