@@ -76,3 +76,26 @@ def test_run_task_end_to_end(tmp_path: Path) -> None:
 
     out.write_text(json.dumps(rec) + "\n")
     assert "Order check" in OC.summarise(out)
+
+
+def test_failure_is_recorded_and_run_resumes(tmp_path: Path, monkeypatch: Any) -> None:
+    import json
+
+    task = OC.tasks(("val_s4_v2",), 1)[0]
+
+    def boom(*_: Any) -> Any:
+        raise RuntimeError("boom")
+
+    monkeypatch.setattr(OC, "run_task", boom)
+    rec = OC._star((task, {}))
+    assert "boom" in rec["error"] and rec["set"] == "val_s4_v2"
+    out = tmp_path / "o.jsonl"
+    out.write_text(json.dumps(rec) + "\n")
+    assert "1 problems failed" in OC.summarise(out)
+    # a failed problem is run again; a recorded one is skipped
+    ok = {"set": "val_s4_v2", "id": rec["id"], "kinds": [], "finishes": {}}
+    out.write_text(json.dumps(ok) + "\n")
+    seen: list[Any] = []
+    monkeypatch.setattr(OC, "run_task", lambda t, o: seen.append(t) or ok)
+    OC.main(["sets=val_s4_v2", "limit=1", f"out={out}"])
+    assert seen == []

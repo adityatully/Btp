@@ -35,6 +35,7 @@ from __future__ import annotations
 import itertools
 import json
 import sys
+import traceback
 from dataclasses import replace
 from multiprocessing import Pool
 from pathlib import Path
@@ -157,7 +158,13 @@ def run_task(task: dict[str, Any], opts: dict[str, Any]) -> dict[str, Any]:
 
 
 def _star(args: tuple[dict[str, Any], dict[str, Any]]) -> dict[str, Any]:
-    return run_task(*args)
+    """`run_task`, with a failure recorded as an `error` record instead of ending the run."""
+    task, _ = args
+    try:
+        return run_task(*args)
+    except Exception:
+        name = Instance.from_json(task["instance"]).instance_id
+        return {"set": task["set"], "id": name, "error": traceback.format_exc()}
 
 
 def tasks(sets: tuple[str, ...], limit: int | None) -> list[dict[str, Any]]:
@@ -229,7 +236,11 @@ def reading(finishes: list[dict[str, float]]) -> dict[str, Any]:
 
 def summarise(path: Path) -> str:
     recs = [json.loads(x) for x in path.read_text().splitlines() if x.strip()]
+    errors = [r for r in recs if "error" in r]
+    recs = [r for r in recs if "error" not in r]
     lines = [f"# Order check (D-96): {len(recs)} problems, {path}", ""]
+    if errors:
+        lines += [f"**{len(errors)} problems failed:** {', '.join(r['id'] for r in errors)}", ""]
     finishers = sorted({f for r in recs for f in r["finishes"]})
     verdict_ok = True
     for fin in finishers:
@@ -295,14 +306,29 @@ def main(argv: list[str]) -> None:
     }
     out = Path(args.get("out", "outputs/order_check.jsonl"))
     out.parent.mkdir(parents=True, exist_ok=True)
-    todo = [(t, opts) for t in tasks(sets, limit)]
+    done = set()
+    if out.exists():  # resume: skip problems already recorded without an error
+        for line in out.read_text().splitlines():
+            if line.strip():
+                r = json.loads(line)
+                if "error" not in r:
+                    done.add((r["set"], r["id"]))
+    todo = [
+        (t, opts)
+        for t in tasks(sets, limit)
+        if (t["set"], Instance.from_json(t["instance"]).instance_id) not in done
+    ]
+    print(f"{len(todo)} problems to run, {len(done)} already done", flush=True)
     workers = int(args.get("workers", 1))
     results = map(_star, todo) if workers == 1 else Pool(workers).imap_unordered(_star, todo)
     with out.open("a") as fh:
         for rec in results:
             fh.write(json.dumps(rec) + "\n")
             fh.flush()
-            print(rec["set"], rec["id"], rec["leaves"], "leaves", flush=True)
+            if "error" in rec:
+                print(rec["set"], rec["id"], "FAILED\n" + rec["error"], flush=True)
+            else:
+                print(rec["set"], rec["id"], rec["leaves"], "leaves", flush=True)
     print(summarise(out))
 
 
