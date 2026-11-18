@@ -2309,6 +2309,17 @@ MRCM's intermediates on val_s2: 4 of 28 covered (chain D4), 5 of 28 (premix D3).
   again). (3) Built as SPEC 0.28 `hint_source: problem` (depth-4 chain in the recipe columns)
   for a copy-test comparison on stages 1–2 against the planner's hints.
 
+### E-105 (2026-11-18) J1 kept; each later run is read against its own method-v3 run
+J1 was started on coe9 before E-104 (commit `e3927e8` / `05f8bde`), so its memo caches stay warm
+from one run to the next in a worker, while every later run starts cold. Restarting J1 would
+lose hours for no gain: J1's job is the noise band (how much identical runs differ), which warm
+caches do not spoil (if anything, cache warmth varying with task order adds noise, so the band
+is on the safe side). So the reading of D-98 is made exact (user, 2026-11-18: J1 keeps
+running): every later group (J2, J3, J4, J5, J7) holds its own method-v3 run (`v3` repeat 0) in
+its own file and is compared with it, like with like; J1 supplies only the noise band
+(`ablation.py summary=<run> noise=<j1>`). J8 is read against `j8_base`, as before. The
+summary refuses two files holding the same run, so a J1 reference can never be mixed in.
+
 ### E-104 (2026-11-18) Justification sweeps complete in code: J4, J7, J8; memo caches cleared per run
 Commit after `aa672d5`, Mac trials only (not results). Built: J4 in `scripts/ablation.py`, a
 beam search over the same moves, finisher and time (width 1 = the rollout algorithm, 4, 16);

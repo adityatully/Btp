@@ -96,3 +96,39 @@ def test_beam_and_j8_runs() -> None:
     assert rec["step_limit"] == 2 * inst.step_limit
     assert set(rec["baselines"]) == {"share", "share_look3", "share_orders", "share_mrcm_look3"}
     assert A._BASE["costs"] == A.sc.COSTS
+
+
+def _rows(config: str, repeat: int, factor: float) -> list[str]:
+    entries = json.loads(A.SUBSET.read_text())[:20]
+    return [
+        json.dumps(
+            {
+                "config": config,
+                "repeat": repeat,
+                "id": e["id"],
+                "cost": 100.0 * factor,
+                "depth": 0,
+                "leaves": 1,
+                "capped": True,
+            }
+        )
+        for e in entries
+    ]
+
+
+def test_summary_reads_own_reference_and_j1_noise(tmp_path: Any) -> None:
+    j1 = tmp_path / "j1.jsonl"
+    j1.write_text("\n".join(_rows("v3", 0, 1.0) + _rows("v3", 1, 1.02)) + "\n")
+    j2 = tmp_path / "j2.jsonl"
+    # J2's own method-v3 run is dearer than J1's (other caches); a config 1% below it is
+    # inside J1's 2% band: level, read against J2's own v3, not J1's
+    j2.write_text("\n".join(_rows("v3", 0, 1.10) + _rows("sims64_c1.5", 0, 1.089)) + "\n")
+    text = A.summarise([j2], noise=j1)
+    row = next(x for x in text.splitlines() if x.startswith("| sims64_c1.5 | 0 | all |"))
+    assert "| 0.9900 [" in row and "| level |" in row
+    try:
+        A.summarise([j1, j1])
+    except ValueError as e:
+        assert "twice" in str(e)
+    else:
+        raise AssertionError("two files with the same run must be refused")

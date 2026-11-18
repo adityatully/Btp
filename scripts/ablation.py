@@ -38,6 +38,12 @@ Method-v3's value is justified when its neighbours on each side are level or wor
     OMP_NUM_THREADS=1 uv run python scripts/ablation.py runs=J1 workers=16 \\
         out=outputs/ablation/j1.jsonl
     uv run python scripts/ablation.py summary=outputs/ablation/j1.jsonl
+    uv run python scripts/ablation.py summary=outputs/ablation/j2.jsonl \\
+        noise=outputs/ablation/j1.jsonl
+
+Each later run (J2, J3, J4, J5, J7) holds its own method-v3 run and is read against it, with
+J1's noise band (`noise=`). J1 itself ran on `e3927e8` / `05f8bde`, before the memo caches were
+cleared per run (E-104), so its method-v3 runs are not the reference for later ones (E-105).
 """
 
 from __future__ import annotations
@@ -561,16 +567,29 @@ def verdict(c: dict[str, Any], band: float | None) -> str:
     return "worse" if c["mean"] > 1 else "better"
 
 
-def summarise(paths: list[Path]) -> str:
+def _load(paths: list[Path]) -> dict[tuple[str, int], dict[str, dict]]:
     entries = {e["id"]: e for e in json.loads(SUBSET.read_text())}
     by: dict[tuple[str, int], dict[str, dict]] = defaultdict(dict)
     for path in paths:
         for line in path.read_text().splitlines():
             r = json.loads(line)
             r["group"] = stage(entries[r["id"]])
-            by[(r["config"], r["repeat"])][r["id"]] = r
+            key = (r["config"], r["repeat"])
+            if r["id"] in by[key]:
+                raise ValueError(f"{path}: {key} {r['id']} twice; read one run's file at a time")
+            by[key][r["id"]] = r
+    return by
+
+
+def summarise(paths: list[Path], noise: Path | None = None) -> str:
+    """One run's records against its own method-v3 run (v3 repeat 0, in the same files),
+    read with the noise band of J1's records (`noise`; default: the records themselves).
+    Each run file holds its own method-v3 run, so a run whose code or caches differ from J1's
+    is still compared like with like (D-98, E-105)."""
+    by = _load(paths)
     groups = ("s1-s2", "s3", "s4-s5", "emrcm", "all")
-    bands = {g: noise_band(by, g) for g in groups[:-1]}
+    ref = _load([noise]) if noise else by
+    bands = {g: noise_band(ref, g) for g in groups[:-1]}
     lines = [
         "| config | rep | group | n | mean ratio to v3 [95% CI] | worse / better | verdict |"
         " depth (median) | leaves (median) | capped |",
@@ -633,7 +652,8 @@ def main(argv: list[str]) -> None:
         print(f"{len(picked)} problems -> {SUBSET}")
         return
     if "summary" in args:
-        print(summarise([Path(p) for p in args["summary"].split(",")]))
+        noise = Path(args["noise"]) if "noise" in args else None
+        print(summarise([Path(p) for p in args["summary"].split(",")], noise))
         return
     entries = json.loads(SUBSET.read_text())
     if "sets" in args:  # light tests: only these sets

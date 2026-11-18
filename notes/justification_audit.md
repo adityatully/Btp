@@ -180,10 +180,12 @@ caches, so times compare.
 | J3 | J2's chosen point (if not 256 / 1.5, join it with '+') | J1 | coe9 | ~250 CPU-h |
 | J7 | J6 and D-96 (which planner settings and orders to try inside the search) | J1 | coe9 | ~190 CPU-h |
 
+Each later run holds its own method-v3 run and is read against it, with J1's noise band
+(E-105; J1 itself ran before the cache fix and is kept).
+
 So: J0, J9, J8's published plans and J1 now; J6 beside them. J2, J4, J5 and the J8 runs once
 the machine is free (all read against J1). J3 after J2 is read, J7 after J6 and D-96. Every
-search run must use the same commit as J1 or later (the memo caches are cleared per run from
-E-104 on; a J1 started earlier is rerun).
+later search run uses E-104's commit or later (memo caches cleared per run).
 
 **What the paper gets from each:** a sensitivity table per layer (search, finisher, planner,
 problem), one figure for J2 (cost and depth over sims × C_PUCT), one figure for J0 (cost vs
