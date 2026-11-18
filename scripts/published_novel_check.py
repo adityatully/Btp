@@ -1,4 +1,4 @@
-"""D-93: are the search's novel intermediates (D-76, E-78) made by any published method?
+"""D-94: are the search's novel intermediates (D-76, E-78) made by any published method?
 
 E-78 and E-80 called an intermediate of the search's plan **novel** when none of our own 4
 planner runs, the search's root finish, nor any one target's own plan (our sharing pass, plain
@@ -17,7 +17,7 @@ A novel intermediate **stays novel** if no published method makes it, whole or p
 Published plans do not depend on the goal, so each problem is run once and every goal's record
 of it is read against the same plans.
 
-Reading (D-93, fixed before the run): on the records where the search is cheaper than the best
+Reading (D-94, fixed before the run): on the records where the search is cheaper than the best
 of the 4 planner runs and holds a novel intermediate (E-78's wins), the claim "no published
 method makes them" holds if at least 90% of those novel intermediates stay novel and at least
 90% of those problems keep at least one. Otherwise the doc says which methods make them and how
@@ -59,7 +59,7 @@ import bench  # noqa: E402
 import novel_check as nc  # noqa: E402
 import search_check as sc  # noqa: E402
 
-READ_SHARE = 0.90  # D-93, fixed before the run
+READ_SHARE = 0.90  # D-94, fixed before the run
 
 
 def mixed(inst: Instance, plan: tuple[Action, ...]) -> set[str]:
@@ -188,7 +188,7 @@ def summarise(results: list[dict[str, Any]], recs: list[dict[str, Any]]) -> list
         if key == ("all", "all"):
             holds = stay / total >= READ_SHARE and keep / len(rs) >= READ_SHARE
             verdict = (
-                f"Reading (D-93): {stay} of {total} novel intermediates ({stay / total:.0%}) stay "
+                f"Reading (D-94): {stay} of {total} novel intermediates ({stay / total:.0%}) stay "
                 f"novel; {keep} of {len(rs)} wins ({keep / len(rs):.0%}) keep one: "
                 + (
                     "no published method makes them"
