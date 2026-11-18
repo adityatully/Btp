@@ -1,6 +1,10 @@
 # MEDA Design Automation — Codebase Specification
 
-Version 0.54 · 2026-11-18
+Version 0.55 · 2026-11-18
+
+Changes in 0.55 (routing benchmark, plan 8.6 step 4): `pipeline/route_bench.py` saves the
+router calls of executor runs (`RecordingRouter`, `RouteCall`; 14.8), so a learned router can
+be scored on the same calls as A*. No contract change; no default physical assumption changes.
 
 Changes in 0.54 (MTDA coverage, paper log D-99): `test_mtda_v2` replaces `test_mtda_v1` (never
 run): it adds Fig. 15's N = 2, z = 8 cells, Fig. 16(a)'s tolerant cells (10 real CFs at epsilon
@@ -2555,6 +2559,13 @@ the supervisor's Dijkstra router can replace the classical one.
   spacing rule; it never fails. The executor run with it is what a perfect router could reach
   with the same placement and order; its paths overlap, so it never passes `validate_run` and
   is used only to measure (`grid_time.py free=1`).
+- **Saved calls** *(0.55, plan 8.6 step 4)*: `RecordingRouter` (`pipeline/route_bench.py`)
+  wraps a router and saves each call as a `RouteCall`: the requests, the state before the call
+  pruned to what can matter (bodies still on the chip at the earliest release, their and the
+  requests' `parent` ancestors, regions not over by then), and the wrapped router's result and
+  time. `RouteCall.state(chip, gp)` rebuilds the state; A* on it gives the run's answer again
+  (tested). `scripts/route_bench.py` saves every call of every producer's plan as JSON lines
+  (one per run, with instance and platform) and summarises them.
 
 ### 14.9 Executor (`pipeline/executor.py`)
 *0.47, design (D-88).* The doc's clock loop (§7) as **list scheduling on the grid**: the M10
