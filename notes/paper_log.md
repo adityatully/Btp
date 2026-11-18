@@ -2281,6 +2281,25 @@ MRCM's intermediates on val_s2: 4 of 28 covered (chain D4), 5 of 28 (premix D3).
   again). (3) Built as SPEC 0.28 `hint_source: problem` (depth-4 chain in the recipe columns)
   for a copy-test comparison on stages 1–2 against the planner's hints.
 
+### E-103 (2026-11-18) Justification sweeps built (D-98); the finisher's cost is the engine's (F8)
+Commit after `29ba75c`, Mac. Built: `scripts/justify_offline.py` (J0 time budget, J9
+statistics, from the final bench records), `scripts/justify_planner.py` (J6: 27 settings of the
+sharing pass on the planner alone, bases plain and greedy MRCM, CPU cap per run; counts the
+split tree's and MRCM's search budgets running out), and in `scripts/ablation.py` J3 (9 search
+mechanics) and J5 (7 finisher-switch settings, only on val s5 and `val_emrcm_v1` N 4-5), plus
+counters on every search run (finishes over the step limit, repeated leaf states, budget
+runs). Tests: `tests/analysis/test_justify.py`, `test_ablation.py`.
+- **F8 checked: consistent.** On the dev subset's s1-s3 and `val_emrcm_v1` problems, the
+  plain finish from the start and after 2 or 4 random legal moves (210 finishes): its reported
+  cost equals the engine's cost of the same moves on every one (0 of 210 differ). The "final
+  leftovers not charged" in `finish_from`'s docstring matches the engine. Regression test
+  `test_finish_cost_is_the_engines`.
+- **Trials (not results):** every J3, J5 and J6 setting runs end to end (4 s searches, 1
+  problem per set; J6 on 2 problems per set). Early sign for P16: on `val_emrcm` N = 3 (2
+  problems) MRCM's search budget runs out in every greedy-MRCM planner run (about 25 s each)
+  and in method-v3's root finish, and the plan equals the plain pass's; J6's budget x4 setting
+  and its budget counts measure how often this happens.
+
 ### E-102 (2026-11-18) Where the final benchmark runs spent their time: the search's cap (74%), most of it after the final plan
 coe9, commit `8cfad70` (`scripts/time_budget.py`), records `outputs/bench/b1_v3_all.jsonl`,
 `b2a_v3.jsonl`, `b2b_v3_all.jsonl`, `b3_v3.jsonl` (E-91, E-96, method-v3), output

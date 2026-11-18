@@ -67,7 +67,7 @@ MRCM is slow); the answer is the cheapest whole plan seen.
 | F5 | MRCM's share of time after the switch | `TIER_SHARE = 0.5` | Fixed before the run, never varied. | ❌ | J5 |
 | F6 | Root's finish left out of the average | D-75 | Argued: the root's finish fills MRCM's cache and is always slow. | ✅ argument | – |
 | F7 | Finisher runs on a relaxed step limit | `RELAXED_STEP_LIMIT = 100,000` | It answers "what would finishing cost". Linked to S14. | 🟡 | J0 |
-| F8 | Finished plan's cost leaves out the final leftovers ("as for a finished plan") | `finish_from` docstring | The engine charges leftovers as waste at success (SPEC 5.8). Check that the two agree; if not, the leaf value is slightly optimistic. | ❌ check | J0 |
+| F8 | Finished plan's cost leaves out the final leftovers ("as for a finished plan") | `finish_from` docstring | E-103: the reported cost equals the engine's on 210 of 210 finishes (from the start and after random moves); regression test. | ✅ check | – |
 
 ### 3. The planner (sharing pass, `share.py`): the finisher and every planner baseline
 
@@ -156,6 +156,11 @@ chain depth 4 and large k on s4-s5 (likely hours).
 | **J7** | **The planner settings that matter inside the search** (from J6 and D-96): chain depth 2 vs 3 at the leaves under 900 s; orders {best 1-2, 4}; blend partners if J6 shows a speed-cost trade. | P1, P5, P6 | 3-5 | ~4 h wall | J1, J6, D-96 |
 | **J8** | **Problem-side sensitivity**, method-v3 and the strongest baselines on the subset: fluid weights {16/4/1, 64/8/1, 256/16/1}; mix weight {0, 1, 4}; waste weight {0, 1, 4}; step-limit floor {1.5, 2, 4}× the witness. Question: does the ranking of ours against the best baseline hold? | E2, E3 | ~9 | ~8 h wall | J1 |
 | **J9** | **Offline statistics from the final records:** power of 40 and 100 problems for the effect sizes we report; the verdicts re-read with the loss threshold at 5% and 20%. | V1, V2 | – | none | nothing |
+
+**Built (E-103):** J1, J2, J3, J5 in `scripts/ablation.py` (S14, S21, P15, P16 are counted on
+every search run); J6 in `scripts/justify_planner.py` (P15, P16 also counted there); J0 and J9 in
+`scripts/justify_offline.py`. Not built yet: J4 (beam search, NRPA), J7 (needs J6 and D-96),
+J8 (weights and step limit).
 
 **Order.** J0 and J9 now (offline, no clash with the running session). J6 can start on the Mac
 for s1-s3 now. Then J1 on coe9, since every other search run is read against its noise band.

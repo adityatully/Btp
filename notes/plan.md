@@ -255,7 +255,7 @@ depth 2 is 10-18× faster but 7-10% dearer, parked (D-44). *Round 3 done 2026-10
   ablation, a sweep, a proof or a citation (`notes/justification_audit.md`). Dev subset of 110
   val problems, runner `scripts/ablation.py`, reading in D-98. Order: J0 and J9 offline; J1
   (noise floor) on coe9; then J2 (sims x C_PUCT) on the whole machine; then J3, J5, J7, J8; J4
-  last (new code); J6 (planner alone) alongside. *Built 2026-11-18; J1 on coe9 next.*
+  last (new code); J6 (planner alone) alongside. *Built 2026-11-18 (E-103): J0, J1, J2, J3, J5, J6, J9; J4, J7, J8 not yet. F8 checked (consistent). J1 on coe9 next.*
 
 ### Phase 7. Paper
 

@@ -14,10 +14,18 @@ N = 5 10). Fluid goal (`costs/geometric`), as the finals.
   under two seeds (`seed1`, `seed2`).
 - `J2`, simulations x exploration: sims {16, 64, 256, 1024} x C_PUCT {0.5, 1.5, 4}; `v3` repeat 0
   is the (256, 1.5) cell.
+- `J3`, search mechanics one at a time: best-leaf backup, first-play value {0, -1}, value
+  scale from the first plan, no floor, dead-end value {-2, -0.5}, play the move with the
+  cheapest plan, never pick a Discard. Join with J2's chosen point by '+'
+  (`backup_max+sims64_c0.5`).
+- `J5`, the finisher switch, only on problems where it fires (val s5, `val_emrcm_v1` N 4-5):
+  switch mean {5, 10, 40} s, leaves before switching {1, 10}, MRCM's time share {0.25, 0.75}.
 
 Each record: config, repeat, problem, final cost, trace (CPU s, cost), leaves, moves the tree
-committed (`depth`, E-81) and plan length, capped, finisher mode and switch, seconds. Resumes:
-a (config, repeat, problem) already in `out` is skipped.
+committed (`depth`, E-81) and plan length, capped, finisher mode and switch, seconds; and,
+measured without changing anything, leaf finishes longer than the step limit (S14), leaves
+that repeat an earlier leaf's state (S21), and how often the split tree's and MRCM's search
+budgets ran out (P15, P16). Resumes: a (config, repeat, problem) already in `out` is skipped.
 
 **Reading, fixed in advance (D-98):** per config, the paired cost ratio to `v3` repeat 0 per
 problem, its mean and 95% bootstrap CI, losses and wins. The **noise band** is the largest
@@ -35,6 +43,7 @@ Method-v3's value is justified when its neighbours on each side are level or wor
 from __future__ import annotations
 
 import json
+import math
 import subprocess
 import sys
 from collections import defaultdict
@@ -46,7 +55,9 @@ import numpy as np
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "scripts"))
+import justify_planner as jp  # noqa: E402  (counts the tree's and MRCM's budget runs)
 import search_check as sc  # noqa: E402
+from meda.core.actions import Discard  # noqa: E402
 from meda.generators.benchmark_io import BenchmarkSet  # noqa: E402
 
 SUBSET = ROOT / "notes/ablation/subset_v1.json"
@@ -64,20 +75,62 @@ SECONDS, SIMS = 900.0, 256  # method-v3 (bench.METHOD)
 SIMS_GRID, CPUCT_GRID = (16, 64, 256, 1024), (0.5, 1.5, 4.0)
 
 
+J3 = {  # search mechanics, one at a time (S6-S10, S12, S20)
+    "backup_max": {"backup": "max"},  # a move's value = its best leaf, not the mean
+    "fpu0": {"fpu": 0.0},  # an unvisited move's value (method-v3: the parent's)
+    "fpu_m1": {"fpu": -1.0},
+    "scale_first": {"scale": "first"},  # c0 = the first plan's cost, not the root's finish
+    "nofloor": {"floor": None},  # no floor at -1 on a leaf's value
+    "dead_m2": {"dead": -2.0},  # a dead end's value (method-v3: -1)
+    "dead_m05": {"dead": -0.5},
+    "move_cheapest": {"move": "cheapest"},  # play the move with the cheapest plan through it
+    "no_discard": {"discard": False},  # the search never picks a Discard
+}
+J5 = {  # the finisher switch (F3-F5), only where it fires
+    "switch5": {"switch_mean": 5.0, "only": "switch"},
+    "switch10": {"switch_mean": 10.0, "only": "switch"},
+    "switch40": {"switch_mean": 40.0, "only": "switch"},
+    "leaves1": {"switch_min_leaves": 1, "only": "switch"},
+    "leaves10": {"switch_min_leaves": 10, "only": "switch"},
+    "tier25": {"tier_share": 0.25, "only": "switch"},
+    "tier75": {"tier_share": 0.75, "only": "switch"},
+}
+
+
 def configs() -> dict[str, dict[str, Any]]:
-    """Every named config: changes against method-v3 (none = method-v3 itself)."""
+    """Every named config: changes against method-v3 (none = method-v3 itself). A run may join
+    configs with '+' (e.g. `backup_max+sims64_c0.5`, J3 at J2's chosen point)."""
     out: dict[str, dict[str, Any]] = {"v3": {}, "seed1": {"seed": 1}, "seed2": {"seed": 2}}
     for s in SIMS_GRID:
         for c in CPUCT_GRID:
             if (s, c) != (SIMS, sc.C_PUCT):
                 out[f"sims{s}_c{c:g}"] = {"sims": s, "cpuct": c}
-    return out
+    return out | J3 | J5
+
+
+def config(name: str) -> dict[str, Any]:
+    known = configs()
+    merged: dict[str, Any] = {}
+    for part in name.split("+"):
+        if part not in known:
+            raise ValueError(f"unknown config '{part}' (groups {sorted(GROUPS)}, {sorted(known)})")
+        merged |= known[part]
+    return merged
 
 
 GROUPS: dict[str, list[tuple[str, int]]] = {
     "J1": [("v3", 0), ("v3", 1), ("v3", 2), ("seed1", 0), ("seed2", 0)],
     "J2": [("v3", 0)] + [(name, 0) for name in configs() if name.startswith("sims")],
+    "J3": [("v3", 0)] + [(name, 0) for name in J3],
+    "J5": [("v3", 0)] + [(name, 0) for name in J5],
 }
+
+
+def switch_problem(entry: dict[str, Any]) -> bool:
+    """Where the finisher switch fires (E-69, E-73): 4-5 fluid mixtures and stage 5."""
+    return entry["set"] == "val_s5_v2" or (
+        entry["set"] == "val_emrcm_v1" and entry["cell"].startswith(("N4", "N5"))
+    )
 
 
 # --------------------------------------------------------------------------- subset
@@ -121,14 +174,130 @@ _LAST: list[Any] = []  # the last search built in this worker
 
 
 class AblationSearch(sc.Search):
-    """`search_check.Search` with the config's settings: a tie-break seed. Keeps a handle on
-    itself so the record can read the moves it committed."""
+    """`search_check.Search` with the config's settings. With no setting every method is
+    `search_check`'s own, so method-v3 runs unchanged; each J3 variant changes one line of a
+    copied method. Keeps a handle on itself so the record can read the moves it committed, and
+    counts (always, without changing anything): leaf finishes longer than the step limit
+    (S14) and leaves that repeat an earlier leaf's state (S21)."""
 
     def __init__(self, *args: Any, **kwargs: Any) -> None:
+        self._c0 = 1.0
         super().__init__(*args, **kwargs)
         if _SETTINGS.get("seed") is not None:
             self.rng = np.random.default_rng(int(_SETTINGS["seed"]))
+        self.over_limit = 0
+        self.finishes = 0
+        self.seen: set[Any] = set()
+        self.repeats = 0
+        inner = self.finish
+
+        def counted(state: Any) -> Any:
+            found = inner(state)
+            self.finishes += 1
+            if found is not None and state.step + len(found[0]) > self.inst.step_limit:
+                self.over_limit += 1
+            return found
+
+        self.finish = counted
         _LAST[:] = [self]
+
+    # S6: the value's scale
+    @property
+    def c0(self) -> float:
+        if _SETTINGS.get("scale") == "first" and self.trace:
+            return max(self.trace[0][1], 1.0)  # the plain pass's plan, offered before the root
+        return self._c0
+
+    @c0.setter
+    def c0(self, value: float) -> None:
+        self._c0 = value
+
+    def score(self, cost: float) -> float:
+        if "floor" in _SETTINGS and _SETTINGS["floor"] is None:  # S7
+            return (self.c0 - cost) / self.c0
+        return super().score(cost)
+
+    def leaf(self, obs: dict[str, Any], actions: tuple[Any, ...], info: dict | None) -> Any:
+        node = super().leaf(obs, actions, info)
+        state = self.env.state
+        if state in self.seen:
+            self.repeats += 1
+        else:
+            self.seen.add(state)
+        if "dead" in _SETTINGS and node.value == -1.0 and not np.isfinite(node.best):  # S8
+            node.value = float(_SETTINGS["dead"])
+        if _SETTINGS.get("discard") is False and not node.terminal:  # S20
+            node.discard = np.array([isinstance(a, Discard) for a in self.env.legal], dtype=bool)
+        return node
+
+    def simulate(self, root: Any) -> None:
+        """`search_check.Search.simulate` (no planner jumps, as in method-v3), with S9's
+        backup, S10's first-play value and S20's Discard mask as options."""
+        if not ({"backup", "fpu", "discard"} & set(_SETTINGS)):
+            return super().simulate(root)
+        best_backup = _SETTINGS.get("backup") == "max"
+        path: list[tuple[Any, int]] = []
+        node = root
+        while True:
+            if node.jumps is None:
+                self.add_jumps(node)
+            n = node.visits.sum()
+            if best_backup:
+                if not hasattr(node, "top"):
+                    node.top = np.full(len(node.prior), -np.inf)
+                seen = node.top
+            else:
+                seen = node.total / np.maximum(node.visits, 1)
+            unvisited = float(_SETTINGS.get("fpu", node.value))
+            q = np.where(node.visits > 0, seen, unvisited)
+            u = sc.C_PUCT * node.prior * math.sqrt(n + 1) / (1 + node.visits)
+            score = q + u
+            mask = getattr(node, "discard", None)
+            if mask is not None and len(mask) == len(score) and not mask.all():
+                score = np.where(mask, -np.inf, score)
+            if self.rng is not None:
+                score = score + 1e-9 * self.rng.random(len(score))
+            i = int(np.argmax(score))
+            path.append((node, i))
+            if i not in node.children:
+                node.children[i] = self.child(node, i)
+                end = node.children[i]
+                break
+            node = node.children[i]
+            if node.terminal:
+                end = node
+                break
+        for nd, i in path:
+            nd.visits[i] += 1
+            nd.total[i] += end.value
+            if best_backup:
+                if not hasattr(nd, "top"):
+                    nd.top = np.full(len(nd.prior), -np.inf)
+                nd.top[i] = max(nd.top[i], end.value)
+            nd.best = min(nd.best, end.best)
+
+    def _descend(self, root: Any, sims: int) -> dict[str, Any]:
+        """`search_check.Search._descend` (no jumps, no sample collection, as in method-v3),
+        with S12's move choice: the move with the cheapest whole plan seen through it."""
+        if _SETTINGS.get("move") != "cheapest":
+            return super()._descend(root, sims)
+        capped = False
+        while not root.terminal:
+            for _ in range(sims):
+                if sc.CLOCK() > self.deadline:
+                    capped = True
+                    break
+                self.simulate(root)
+            if capped or root.visits.sum() == 0:
+                break
+            visited = [j for j in root.children if root.visits[j] > 0]
+            i = min(visited, key=lambda j: (root.children[j].best, -root.visits[j], j))
+            root = root.children[i]
+        self.path = root.actions
+        out = {"capped": capped, "played_to_end": root.terminal}
+        if self.best is None:
+            return {"plan": None, "tail": 0, **out}
+        return {"plan": self.best[1], "tail": self.best[2], **out}
 
 
 sc.Search = AblationSearch  # type: ignore[misc]  # run_task builds the search by this name
@@ -136,7 +305,7 @@ sc.Search = AblationSearch  # type: ignore[misc]  # run_task builds the search b
 
 def run_one(task: dict[str, Any]) -> dict[str, Any]:
     """One (config, repeat, problem): method-v3 with the config's changes."""
-    cfg = configs()[task["config"]]
+    cfg = config(task["config"])
     _SETTINGS.clear()
     _SETTINGS.update(cfg)
     sc.C_PUCT = float(cfg.get("cpuct", 1.5))
@@ -156,12 +325,13 @@ def run_one(task: dict[str, Any]) -> dict[str, Any]:
         "seconds": float(task.get("seconds", SECONDS)),
         "hints": "planner",
         "reward_scale": 0.01,
-        "tier_share": sc.TIER_SHARE,
-        "switch_mean": sc.SWITCH_MEAN,
-        "switch_min_leaves": sc.SWITCH_MIN_LEAVES,
+        "tier_share": float(cfg.get("tier_share", sc.TIER_SHARE)),
+        "switch_mean": float(cfg.get("switch_mean", sc.SWITCH_MEAN)),
+        "switch_min_leaves": int(cfg.get("switch_min_leaves", sc.SWITCH_MIN_LEAVES)),
         "first_plan": True,
     }
     sims = int(cfg.get("sims", SIMS))
+    jp.COUNTS.update(tree_budget=0, mrcm_budget=0)
     rec = sc.run_task(search_task, "uniform", sims, opts, "switch")
     search = _LAST[0]
     return {
@@ -185,6 +355,11 @@ def run_one(task: dict[str, Any]) -> dict[str, Any]:
         "switched_at": rec["switched_at"],
         "seconds": rec.get("search_seconds"),
         "plain_pass": rec["planner"],
+        "finishes": search.finishes,
+        "over_limit": search.over_limit,  # S14: leaf finishes longer than the step limit
+        "repeats": search.repeats,  # S21: leaves whose state an earlier leaf had
+        "tree_budget": jp.COUNTS["tree_budget"],  # P15
+        "mrcm_budget": jp.COUNTS["mrcm_budget"],  # P16
     }
 
 
@@ -297,7 +472,7 @@ def expand(runs: str) -> list[tuple[str, int]]:
     for item in runs.split(","):
         if item in GROUPS:
             out += GROUPS[item]
-        elif item in names:
+        elif all(part in names for part in item.split("+")):
             out.append((item, 0))
         else:
             raise ValueError(
@@ -349,6 +524,7 @@ def main(argv: list[str]) -> None:
         for c, rep in expand(args["runs"])
         for e in entries
         if (c, rep, e["id"]) not in done
+        and (config(c).get("only") != "switch" or switch_problem(e))
     ]
     # the slow problems first, so the last workers are not left with an s5 at the end
     order = {"s4-s5": 0, "emrcm": 1, "s3": 2, "s1-s2": 3}
