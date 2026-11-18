@@ -287,6 +287,13 @@ tree._Search.find = _count_tree_budget  # type: ignore[method-assign]
 mrcm._Search.tick = _count_mrcm_budget  # type: ignore[method-assign]
 
 
+def cold() -> None:
+    """Empty the pass's memo caches (pure functions, so only time changes): every run starts
+    cold, whatever ran before it in the same worker; otherwise later runs look faster."""
+    for fn in (share._dilute_steps, share._unmix, tree._reachable_denominators):
+        fn.cache_clear()
+
+
 def apply(cfg: dict[str, Any]) -> None:
     """Put every patched name back, then set this config's changes."""
     for (owner, name), value in _ORIGINAL.items():
@@ -318,6 +325,7 @@ def _alarm(signum: int, frame: Any) -> None:
 def run_one(task: dict[str, Any]) -> dict[str, Any]:
     cfg = configs()[task["config"]]
     apply(cfg)
+    cold()
     COUNTS.update(tree_budget=0, mrcm_budget=0)
     inst: Instance = BenchmarkSet.read(task["set"]).by_id(task["id"])
     signal.signal(signal.SIGPROF, _alarm)

@@ -157,16 +157,33 @@ chain depth 4 and large k on s4-s5 (likely hours).
 | **J8** | **Problem-side sensitivity**, method-v3 and the strongest baselines on the subset: fluid weights {16/4/1, 64/8/1, 256/16/1}; mix weight {0, 1, 4}; waste weight {0, 1, 4}; step-limit floor {1.5, 2, 4}× the witness. Question: does the ranking of ours against the best baseline hold? | E2, E3 | ~9 | ~8 h wall | J1 |
 | **J9** | **Offline statistics from the final records:** power of 40 and 100 problems for the effect sizes we report; the verdicts re-read with the loss threshold at 5% and 20%. | V1, V2 | – | none | nothing |
 
-**Built (E-103):** J1, J2, J3, J5 in `scripts/ablation.py` (S14, S21, P15, P16 are counted on
-every search run); J6 in `scripts/justify_planner.py` (P15, P16 also counted there); J0 and J9 in
-`scripts/justify_offline.py`. Not built yet: J4 (beam search, NRPA), J7 (needs J6 and D-96),
-J8 (weights and step limit).
+**Built (E-103, E-104):** everything. Search runs (J1, J2, J3, J4, J5, J7, J8) in
+`scripts/ablation.py`, which also counts S14, S21, P15 and P16 on every run; J6 in
+`scripts/justify_planner.py`; J0 and J9 in `scripts/justify_offline.py`; J8's published-method
+plans and its reading in `scripts/justify_problem.py`. J4 is beam search (width 1, the rollout
+algorithm; 4; 16); nested rollouts (NRPA) are left out, since they need thousands of cheap
+playouts and ours are planner finishes of seconds each. Every run starts with empty memo
+caches, so times compare.
 
-**Order.** J0 and J9 now (offline, no clash with the running session). J6 can start on the Mac
-for s1-s3 now. Then J1 on coe9, since every other search run is read against its noise band.
-Then J2, which may change what J3, J5 and J7 should vary around. Then J3, J5, J7, J8 in any
-order, and J4 last (needs new code). Total search compute is about 40 configurations, about
-35 h wall on 36 workers, plus J6.
+**Run order and what each run waits for:**
+
+| Run | Needs before it can run | Needs before it can be read | Machine | About |
+|---|---|---|---|---|
+| J0, J9 | nothing (final records on coe9) | nothing | coe9, 1 core | minutes |
+| J8 published plans (`justify_problem.py published=build`) | nothing | – | coe9, few cores | ~1-3 h (NFSP) |
+| J6 | nothing | nothing (deterministic) | coe9 | ~150-200 CPU-h |
+| **J1** | nothing | nothing | coe9 | 145 CPU-h |
+| J2 | nothing | J1 (noise band) | coe9, whole machine | ~350 CPU-h |
+| J4 | nothing | J1 | coe9 | ~110 CPU-h |
+| J5 | nothing | J1 | coe9 | ~75 CPU-h (s5 and N 4-5 only) |
+| J8 runs | nothing | J1, J8 published plans | coe9 | ~300 CPU-h (search + 4 planner runs, capped) |
+| J3 | J2's chosen point (if not 256 / 1.5, join it with '+') | J1 | coe9 | ~250 CPU-h |
+| J7 | J6 and D-96 (which planner settings and orders to try inside the search) | J1 | coe9 | ~190 CPU-h |
+
+So: J0, J9, J8's published plans and J1 now; J6 beside them. J2, J4, J5 and the J8 runs once
+the machine is free (all read against J1). J3 after J2 is read, J7 after J6 and D-96. Every
+search run must use the same commit as J1 or later (the memo caches are cleared per run from
+E-104 on; a J1 started earlier is rerun).
 
 **What the paper gets from each:** a sensitivity table per layer (search, finisher, planner,
 problem), one figure for J2 (cost and depth over sims × C_PUCT), one figure for J0 (cost vs

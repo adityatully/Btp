@@ -1,0 +1,9 @@
+# J8 sensitivity profile (paper log D-98): method-v3's weights (costs/geometric.yaml: sample 64,
+# reagent 8, buffer 1, mix 1, waste 1) with one term changed. Not a goal of the paper; used only
+# to check that the verdicts of the final runs do not hinge on that term.
+w_fluid:
+  SAMPLE: 256
+  REAGENT: 16
+  BUFFER: 1
+w_mix: 1
+w_waste: 1

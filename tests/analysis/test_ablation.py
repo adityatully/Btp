@@ -9,6 +9,8 @@ import sys
 from pathlib import Path
 from typing import Any
 
+from meda.core.composition import Rational
+
 ROOT = Path(__file__).resolve().parents[2]
 
 
@@ -63,3 +65,34 @@ def test_one_short_run_records_depth() -> None:
     rec = A.run_one({**entry, "config": "sims16_c0.5", "repeat": 0, "commit": "t", "seconds": 2})
     assert rec["cost"] is not None and rec["cpuct"] == 0.5 and rec["sims"] == 16
     assert rec["depth"] >= 0 and rec["leaves"] >= 1 and rec["trace"]
+
+
+def test_new_groups_and_switch_filter() -> None:
+    assert len(A.expand("J3")) == 10 and len(A.expand("J5")) == 8
+    assert len(A.expand("J4")) == 4 and len(A.expand("J7")) == 8 and len(A.expand("J8")) == 9
+    assert A.config("backup_max+sims64_c0.5") == {"backup": "max", "sims": 64, "cpuct": 0.5}
+    entries = json.loads(A.SUBSET.read_text())
+    picked = [e for e in entries if A.switch_problem(e)]
+    assert {e["set"] for e in picked} == {"val_s5_v2", "val_emrcm_v1"}
+    assert all(e["cell"][:2] in ("N4", "N5") for e in picked if e["set"] == "val_emrcm_v1")
+
+
+def test_problem_settings_are_put_back() -> None:
+    base = (A.sc.WEIGHTS, A.sc.COSTS, A.share.named_orders, A.share.CHAIN_DEPTH)
+    w = A._set_problem(
+        {"costs": "costs/sensitivity/mix4.yaml", "planner": "chain2", "orders": ("dear",)}
+    )
+    assert w.w_mix == Rational.of(4) and A.sc.hs.WEIGHTS is w and A.share.CHAIN_DEPTH == 2
+    A._set_problem({})
+    assert (A.sc.WEIGHTS, A.sc.COSTS, A.share.named_orders, A.share.CHAIN_DEPTH) == base
+
+
+def test_beam_and_j8_runs() -> None:
+    entry = json.loads(A.SUBSET.read_text())[0]
+    rec = A.run_one({**entry, "config": "beam1", "repeat": 0, "commit": "t", "seconds": 2})
+    assert rec["cost"] is not None and rec["baselines"] is None
+    rec = A.run_one({**entry, "config": "j8_step_x2", "repeat": 0, "commit": "t", "seconds": 2})
+    inst = A.BenchmarkSet.read(entry["set"]).by_id(entry["id"])
+    assert rec["step_limit"] == 2 * inst.step_limit
+    assert set(rec["baselines"]) == {"share", "share_look3", "share_orders", "share_mrcm_look3"}
+    assert A._BASE["costs"] == A.sc.COSTS

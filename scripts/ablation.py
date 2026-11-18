@@ -44,21 +44,27 @@ from __future__ import annotations
 
 import json
 import math
+import signal
 import subprocess
 import sys
 from collections import defaultdict
+from dataclasses import replace
 from multiprocessing import Pool
 from pathlib import Path
 from typing import Any
 
 import numpy as np
+import yaml
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "scripts"))
 import justify_planner as jp  # noqa: E402  (counts the tree's and MRCM's budget runs)
 import search_check as sc  # noqa: E402
 from meda.core.actions import Discard  # noqa: E402
+from meda.core.costs import CostWeights  # noqa: E402
+from meda.core.rules import replay  # noqa: E402
 from meda.generators.benchmark_io import BenchmarkSet  # noqa: E402
+from meda.solvers.baselines import share  # noqa: E402
 
 SUBSET = ROOT / "notes/ablation/subset_v1.json"
 SUBSET_SEED = 20261118
@@ -95,6 +101,30 @@ J5 = {  # the finisher switch (F3-F5), only where it fires
     "tier25": {"tier_share": 0.25, "only": "switch"},
     "tier75": {"tier_share": 0.75, "only": "switch"},
 }
+J4 = {  # other ways to spend the same time over the same finisher (S1)
+    "beam1": {"beam": 1},  # the rollout algorithm: play the move whose finish is cheapest
+    "beam4": {"beam": 4},
+    "beam16": {"beam": 16},
+}
+J7 = {  # planner settings inside the search's finisher (P1, P5, P6); J6's patches
+    "leaf_chain2": {"planner": "chain2"},
+    "leaf_chain4": {"planner": "chain4"},
+    "leaf_blend2": {"planner": "blend2"},
+    "leaf_blend8": {"planner": "blend8"},
+    "orders_given": {"orders": ("given",)},
+    "orders_dear": {"orders": ("dear",)},
+    "orders_dear_cheap": {"orders": ("dear", "cheap")},
+}
+# J8: the problem's own numbers (E2, E3). Weight profiles in configs/costs/sensitivity; each
+# J8 run also runs the 4 planner runs under the same weights and limit (`baselines`)
+J8_PROFILES = ("fluid16", "fluid256", "mix0", "mix4", "waste0", "waste4")
+J8 = {
+    "j8_base": {"baselines": True},
+    **{f"j8_{p}": {"costs": f"costs/sensitivity/{p}.yaml", "baselines": True} for p in J8_PROFILES},
+    "j8_step_x075": {"step_scale": 0.75, "baselines": True},
+    "j8_step_x2": {"step_scale": 2.0, "baselines": True},
+}
+PLANNER_CAP = 1800.0  # CPU s per planner run in J8 (share_mrcm_look3 ran up to 7.8 h, E-102)
 
 
 def configs() -> dict[str, dict[str, Any]]:
@@ -105,7 +135,7 @@ def configs() -> dict[str, dict[str, Any]]:
         for c in CPUCT_GRID:
             if (s, c) != (SIMS, sc.C_PUCT):
                 out[f"sims{s}_c{c:g}"] = {"sims": s, "cpuct": c}
-    return out | J3 | J5
+    return out | J3 | J5 | J4 | J7 | J8
 
 
 def config(name: str) -> dict[str, Any]:
@@ -123,6 +153,9 @@ GROUPS: dict[str, list[tuple[str, int]]] = {
     "J2": [("v3", 0)] + [(name, 0) for name in configs() if name.startswith("sims")],
     "J3": [("v3", 0)] + [(name, 0) for name in J3],
     "J5": [("v3", 0)] + [(name, 0) for name in J5],
+    "J4": [("v3", 0)] + [(name, 0) for name in J4],
+    "J7": [("v3", 0)] + [(name, 0) for name in J7],
+    "J8": [(name, 0) for name in J8],
 }
 
 
@@ -220,6 +253,7 @@ class AblationSearch(sc.Search):
     def leaf(self, obs: dict[str, Any], actions: tuple[Any, ...], info: dict | None) -> Any:
         node = super().leaf(obs, actions, info)
         state = self.env.state
+        node.key = state
         if state in self.seen:
             self.repeats += 1
         else:
@@ -276,6 +310,47 @@ class AblationSearch(sc.Search):
                 nd.top[i] = max(nd.top[i], end.value)
             nd.best = min(nd.best, end.best)
 
+    def _pass(self, sims: int, root_only: bool = False) -> dict[str, Any]:
+        """J4 (S1): with `beam` = W, a beam search over the same moves, finisher and time
+        instead of PUCT. Every child of every beam state gets a finish (its value is the
+        cheapest whole plan through it); the W cheapest distinct states form the next beam.
+        W = 1 is the rollout algorithm (one-step lookahead with the planner as base policy)."""
+        if "beam" not in _SETTINGS:
+            return super()._pass(sims, root_only)
+        width = int(_SETTINGS["beam"])
+        obs, _ = self.env.reset(options={"instance": self.inst})
+        first = sc.finish_from(sc.PrepState.initial(self.inst), self.inst, sc.WEIGHTS)
+        if first is not None and len(first[0]) <= self.inst.step_limit:
+            self._offer(float(first[1]), first[0], len(first[0]))
+        root = self.leaf(obs, (), None)
+        beam, capped, depth = [root], False, root
+        while beam and not capped:
+            children = []
+            for node in beam:
+                self.env.restore(node.snap)
+                for i in range(len(self.env.legal)):
+                    if sc.CLOCK() > self.deadline:
+                        capped = True
+                        break
+                    children.append(self.child(node, i))
+                if capped:
+                    break
+            keep: dict[Any, Any] = {}
+            for ch in sorted(children, key=lambda c: (c.best, len(c.actions))):
+                if ch.terminal or not np.isfinite(ch.best) or ch.key in keep:
+                    continue
+                keep[ch.key] = ch
+                if len(keep) == width:
+                    break
+            beam = list(keep.values())
+            if beam and not capped:
+                depth = beam[0]
+        self.path = depth.actions
+        out = {"capped": capped, "played_to_end": not beam and not capped}
+        if self.best is None:
+            return {"plan": None, "tail": 0, **out}
+        return {"plan": self.best[1], "tail": self.best[2], **out}
+
     def _descend(self, root: Any, sims: int) -> dict[str, Any]:
         """`search_check.Search._descend` (no jumps, no sample collection, as in method-v3),
         with S12's move choice: the move with the cheapest whole plan seen through it."""
@@ -303,13 +378,71 @@ class AblationSearch(sc.Search):
 sc.Search = AblationSearch  # type: ignore[misc]  # run_task builds the search by this name
 
 
+_BASE = {"weights": sc.WEIGHTS, "costs": sc.COSTS, "orders": share.named_orders}
+
+
+def _set_problem(cfg: dict[str, Any]) -> CostWeights:
+    """Put back method-v3's weights, planner and orders, then set the config's (J7, J8)."""
+    w = _BASE["weights"]
+    sc.COSTS = _BASE["costs"]
+    if "costs" in cfg:  # J8: every module's weights and the env's costs, as goal_check does
+        w = CostWeights.from_dict(yaml.safe_load((ROOT / "configs" / cfg["costs"]).read_text()))
+        sc.COSTS = cfg["costs"]
+    sc.WEIGHTS = sc.hs.WEIGHTS = w
+    jp.apply(jp.configs()[cfg["planner"]] if "planner" in cfg else {})
+    share.named_orders = _BASE["orders"]
+    if "orders" in cfg:  # J7: only the target orders these rules give (D-96)
+        allowed = set(cfg["orders"])
+
+        def limited(instance: Any, weights: Any) -> Any:
+            every = _BASE["orders"](instance, weights)
+            return [o for o in every if allowed & set(o[0])] or every[:1]
+
+        share.named_orders = limited
+    return w
+
+
+def baselines(inst: Any, w: CostWeights) -> dict[str, dict[str, Any]]:
+    """J8: the 4 planner runs (bench's baselines) under the run's weights and limit, each
+    capped at `PLANNER_CAP` CPU s."""
+    runs = {
+        "share": lambda: share.share_plan(inst, w),
+        "share_look3": lambda: share.share_plan(inst, w, lookahead=3),
+        "share_orders": lambda: sc.hs.share_orders(inst, 32),
+        "share_mrcm_look3": lambda: share.share_plan(inst, w, lookahead=3, mrcm=True),
+    }
+    out = {}
+    for name, make in runs.items():
+        signal.signal(signal.SIGPROF, jp._alarm)
+        signal.setitimer(signal.ITIMER_PROF, PLANNER_CAP)
+        t0, plan, capped = sc.CLOCK(), None, False
+        try:
+            plan = make()
+        except jp._Cap:
+            capped = True
+        finally:
+            signal.setitimer(signal.ITIMER_PROF, 0)
+        cost = None
+        if plan is not None:
+            _, total, _ = replay(inst, plan)
+            cost = float(w.scalar(total, inst.fluids))
+        out[name] = {"cost": cost, "seconds": round(sc.CLOCK() - t0, 3), "capped": capped}
+    return out
+
+
 def run_one(task: dict[str, Any]) -> dict[str, Any]:
     """One (config, repeat, problem): method-v3 with the config's changes."""
     cfg = config(task["config"])
     _SETTINGS.clear()
     _SETTINGS.update(cfg)
     sc.C_PUCT = float(cfg.get("cpuct", 1.5))
+    w = _set_problem(cfg)
+    jp.cold()  # every run starts with empty memo caches (D-98)
     inst = BenchmarkSet.read(task["set"]).by_id(task["id"])
+    if "step_scale" in cfg:  # J8: the step limit scaled, never below the witness plan
+        witness = int(inst.metadata.get("witness_actions", 1))
+        limit = max(witness, math.ceil(float(cfg["step_scale"]) * inst.step_limit))
+        inst = replace(inst, step_limit=limit)
     search_task = {
         "set": "J",
         "id": task["id"],
@@ -332,8 +465,14 @@ def run_one(task: dict[str, Any]) -> dict[str, Any]:
     }
     sims = int(cfg.get("sims", SIMS))
     jp.COUNTS.update(tree_budget=0, mrcm_budget=0)
-    rec = sc.run_task(search_task, "uniform", sims, opts, "switch")
-    search = _LAST[0]
+    try:
+        rec = sc.run_task(search_task, "uniform", sims, opts, "switch")
+        search = _LAST[0]
+        jp.apply({})
+        share.named_orders = _BASE["orders"]
+        base = baselines(inst, w) if cfg.get("baselines") else None
+    finally:
+        _set_problem({})
     return {
         "config": task["config"],
         "repeat": task["repeat"],
@@ -360,6 +499,8 @@ def run_one(task: dict[str, Any]) -> dict[str, Any]:
         "repeats": search.repeats,  # S21: leaves whose state an earlier leaf had
         "tree_budget": jp.COUNTS["tree_budget"],  # P15
         "mrcm_budget": jp.COUNTS["mrcm_budget"],  # P16
+        "step_limit": inst.step_limit,
+        "baselines": base,
     }
 
 
@@ -495,6 +636,8 @@ def main(argv: list[str]) -> None:
         print(summarise([Path(p) for p in args["summary"].split(",")]))
         return
     entries = json.loads(SUBSET.read_text())
+    if "sets" in args:  # light tests: only these sets
+        entries = [e for e in entries if e["set"] in args["sets"].split(",")]
     if "limit" in args:  # light tests: the first n problems of each set
         per: dict[str, int] = defaultdict(int)
         kept = []
