@@ -1503,6 +1503,17 @@ Format: date · decision · alternatives considered · why · evidence.
   cheaper than MTDA on all 6 tried (paper-fig3 0.89, fig5 0.50, fig7 0.67, table5a 0.41,
   tol1000 0.42, N2-z8-T20 0.76 of MTDA's steps-goal cost); on Fig. 3 MTDA's own N-segment count
   is lower (6 against our 8 two-droplet mixes). Same reading as D-97.
+- **D-100 (2026-11-18) NFSP's, MTWM's and SIMOP's own experiments are not built (Q-161; user:
+  build them only on "strong intuition that we could get some positive result").** The three
+  methods only level with us on B1 are exact solvers on their own models, and the data we have
+  says their own experiments are their ground, not ours: on B3 (1:1, the home ground of NFSP and
+  SIMOP) method-v3 never beats NFSP and is dearer on 58 of 441 (1.027); against SIMOP 7 / 411 /
+  73 and MTWM 27 / 396 / 68 (E-86: not optimal on deep 1:1 dilutions); NFSP's many-target 1:1 table would add more
+  of the same, and SIMOP's single dyadic targets are B3's problems under its waste goal. MTWM's
+  experiments are many-reagent mixtures at M = 5, where our search is weakest (E-96: N = 4-5
+  still far above e-MRCM's paper; B1 waste median 1.000). Expected outcome of each: level or
+  losses, so no positive result; the cost is runs and SMT/ILP time. Not hidden: written as a
+  threat to validity (section 8) so the paper states where these methods hold their own.
 - **D-97 (2026-11-18) MTDA joins the benchmark, how it is measured (user: "we now would be
   required to benchmark against this MTDA method also").** MTDA (Kamal et al., TODAES 2020,
   L-22, built L-23) is a dilution method, many targets, its goal mixes then waste: `OWN_GOAL`
@@ -2297,6 +2308,29 @@ MRCM's intermediates on val_s2: 4 of 28 covered (chain D4), 5 of 28 (premix D3).
   (an exact lower bound on mixes left, or a constructive method's recipes, which is a planner
   again). (3) Built as SPEC 0.28 `hint_source: problem` (depth-4 chain in the recipe columns)
   for a copy-test comparison on stages 1–2 against the planner's hints.
+
+### E-104 (2026-11-18) Justification sweeps complete in code: J4, J7, J8; memo caches cleared per run
+Commit after `aa672d5`, Mac trials only (not results). Built: J4 in `scripts/ablation.py`, a
+beam search over the same moves, finisher and time (width 1 = the rollout algorithm, 4, 16);
+NRPA left out (it needs thousands of cheap playouts, ours are planner finishes of seconds). J7:
+J6's planner patches inside the search's finisher (chain depth 2 and 4, blend partners 2 and 8)
+and target-order subsets (given; dear; dear + cheap). J8: six weight profiles
+(`configs/costs/sensitivity/`: fluid 16/4/1 and 256/16/1, mix 0 and 4, waste 0 and 4) and the
+step limit x0.75 and x2 (never below the witness), each with the 4 planner runs under the same
+weights and limit (1,800 CPU s cap each); `scripts/justify_problem.py` caches the published
+methods' plan totals once per problem and reads J8 against the base profile (D-69's verdicts).
+Run order and dependencies: `notes/justification_audit.md` Part 2.
+- **Bug found and fixed before any run:** the sharing pass's memo caches (`_dilute_steps`,
+  `_unmix`, `_reachable_denominators`; pure functions) survived from one run to the next in a
+  worker, so later runs looked about 2x faster (J6 trial: settings that cannot change speed,
+  blend 0 and eviction by age, at 0.47 of the base's time). Every run now starts cold
+  (`justify_planner.cold`); after the fix the same two read 0.60 (blend 0 drops branches) and
+  0.92. Plans were never affected. The final bench runs had warm caches too (times only).
+- **Trial signs (2-8 problems, not results):** aiming tolerant targets at the finest
+  composition instead of the coarsest is dearer (1.29x, 3 of 8); chain depth 2 is dearer on the
+  plain pass (1.09-1.15x) and depth 4 is not always cheaper than 3 (one problem 1.08x dearer:
+  the greedy is not monotone in depth); with MRCM's budget x4 one of two N = 3 mixtures gets
+  cheaper (0.76x), so the budget binds where it runs out (P16).
 
 ### E-103 (2026-11-18) Justification sweeps built (D-98); the finisher's cost is the engine's (F8)
 Commit after `29ba75c`, Mac. Built: `scripts/justify_offline.py` (J0 time budget, J9
@@ -4652,6 +4686,10 @@ independent reference (oracle, optimum, bound, validator) catches it.**
 ## 8. Threats to validity and open items
 
 - Two unread papers could narrow the claim (L-4).
+- **Home ground of the exact methods (D-100):** on 1:1 deep dilutions (B3) NFSP, SIMOP and MTWM
+  are cheaper than method-v3 on 58-73 problems (dearer on 0, 7 and 27); NFSP's many-target 1:1 tables,
+  SIMOP's waste-first single targets and MTWM's many-reagent mixtures at M = 5 are not run, and
+  would be expected level or worse for us. The claim is MEDA k:l problems, not their ground.
 - Frontier "best known" is still our own construction, which never shares; a sharing search
   baseline would make the gaps more convincing (D-18 options). *Partly addressed by E-17: the sharing pass tightens
   best known on many-target problems (not yet written into the answer keys).*

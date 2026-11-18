@@ -38,6 +38,7 @@ chats. Last updated 2026-11-03.*
 | Q-42 | Can we prove more optima on the val sets? | 2.2 |
 | Q-156 | Does the sharing pass need all 4 target orders, or do 1-2 give the same plans faster? | 6.7 (D-96) |
 | Q-157 | Does our method beat MTDA (flow-based multi-target dilution) on the final sets and on its own protocol? | 6.8 (D-97) |
+| Q-161 | Do the three methods we only draw level with (NFSP, MTWM, SIMOP) hold level, or beat us, on their own papers' experiments, which no set covers yet? | **Decided 2026-11-18 (D-100): not built**; expected level or worse (their exact solvers' home ground, B3 evidence); stated as a threat to validity |
 | Q-158 | Is every choice in method-v3 backed by an ablation, a sweep, a proof or a citation? | 6.9 (D-98) |
 | Q-159 | Is the s4-s5 depth limit (E-81) a property of the method, or of 256 simulations per move? | 6.9, J2 (D-98) |
 | Q-160 | How much do method-v3's results vary between identical runs (CPU deadline, tie order)? | 6.9, J1 (D-98) |
@@ -982,6 +983,17 @@ the same 900 s. J2 sweeps sims x C_PUCT and records depth.
 **Q-158 Is every choice in method-v3 justified?** · **Open → plan 6.9** (D-98, 2026-11-18)
 `notes/justification_audit.md` lists 62 decisions; 17 have never been measured and 18 only
 partly. Runs J0-J9 close them.
+
+**Q-161 Do NFSP, MTWM and SIMOP hold up on their own experiments?** · **Decided: not built
+(D-100)** (2026-11-18, coverage check after D-99) On B1 these three are level with us under their
+own goal (E-91: NFSP fluid 1.009, MTWM waste 0.893 with median 1.000, SIMOP waste 0.663 with
+median 0.500), and all three are exact solvers on their own models. None of their own papers'
+experiments is a set: NFSP's many-target 1:1 dilutions (its Table II; D-71 left it out as the
+protocol is incomplete, B3 has single targets only, fluid goal), MTWM's random mixtures (2-5
+targets, 3-7 reagents, M = 5, Figs. 12-14) and Table 2 (M = 7), SIMOP's single dyadic targets
+under its waste-first goal (B3 ran fluid only). The other 13 published methods are beaten
+clearly on B1-B2 (ratios 0.42-0.90), DFM, FacDA, Generic and e-MRCM on their own protocols too;
+Dong only ties (one mix per droplet) and cannot be cheaper; MTDA is covered (D-99).
 
 **Q-157 Does our method beat MTDA?** · **Open → plan 6.8** (D-97, 2026-11-18) MTDA (Kamal
 et al., TODAES 2020) is a flow-based multi-target dilution method from Sudip Roy's group, built
