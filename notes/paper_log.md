@@ -1455,6 +1455,25 @@ Format: date · decision · alternatives considered · why · evidence.
   *Mac trial (2 problems per set, 20 s search, 8 states, 6 cuts; not a result):* repeats
   1.3% of finish time; no single order wins (cheapest-or-tied on leaves: given 17, dear 11,
   cheap 24, near 11 of 34); best 2 rules (dear + cheap) 88-100% depending on the scope.
+- **D-98 (2026-11-18) Justification sweeps: every choice of method-v3 gets a reason (Q-158 to
+  Q-160; user: "we need to justify everything we did", "lets start running these ablations").**
+  `notes/justification_audit.md` lists 62 decisions (search, finisher, planner, engine,
+  evaluation) with their evidence: 25 justified, 18 partly, 17 never measured, plus one check
+  and one argument still to write. Missing evidence is grouped into runs J0-J9 (Part 2 there). Rules: dev sets only (the
+  test sets stay untouched); method-v3 stays frozen (D-83), so a better setting is reported as
+  sensitivity and a change of method is the user's call. **Subset, fixed before any run:**
+  `notes/ablation/subset_v1.json`, 110 problems (val s1 10, s2 10, s3 20, s4 20, s5 20, `_v2`;
+  `val_emrcm_v1` 30), seed 20261118, spread evenly over each set's cells, fluid goal.
+  **Runner:** `scripts/ablation.py` (imports `search_check`; variants are a subclass of its
+  `Search` or a module setting, so the method's code is unchanged); records the moves the tree
+  committed (`depth`, E-81). **J1, the noise floor:** method-v3 three times and with random
+  tie-breaking under seeds 1 and 2. **J2:** sims per move {16, 64, 256, 1024} x C_PUCT {0.5,
+  1.5, 4}. **Reading, fixed in advance:** per config, paired cost ratio to method-v3 (repeat
+  0), mean and 95% bootstrap CI; the noise band is the largest |mean ratio - 1| of J1's other
+  runs per group (s1-s2, s3, s4-s5, emrcm); level = CI contains 1 or mean inside the band,
+  else better / worse; a value is justified when its neighbours on each side are level or
+  worse. *Mac trial (1 problem per set, 5 s, 3 configs; not a result):* runs end to end;
+  seed 1 is cheaper on 2 of 6 (0.15-0.3%), so tie order alone moves results a little.
 
 ## 4. Experiments and results
 

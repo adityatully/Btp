@@ -247,6 +247,11 @@ depth 2 is 10-18× faster but 7-10% dearer, parked (D-44). *Round 3 done 2026-10
   `val_emrcm_v1` (plain on the Mac is too long: coe9, plain and MRCM). Pass (bar in D-96) → a
   search pilot with fewer orders (a possible method-v4, finals rerun); fail → every order
   stays. *Built 2026-11-17, Mac trial done; coe9 run next.*
+- **6.9 Justification sweeps (D-98, Q-158 to Q-160):** every choice of method-v3 gets an
+  ablation, a sweep, a proof or a citation (`notes/justification_audit.md`). Dev subset of 110
+  val problems, runner `scripts/ablation.py`, reading in D-98. Order: J0 and J9 offline; J1
+  (noise floor) on coe9; then J2 (sims x C_PUCT) on the whole machine; then J3, J5, J7, J8; J4
+  last (new code); J6 (planner alone) alongside. *Built 2026-11-18; J1 on coe9 next.*
 
 ### Phase 7. Paper
 

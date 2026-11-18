@@ -2,8 +2,9 @@
 
 The paper must give a reason for every choice in the method, down to the smallest. This file
 lists each one (Part 1), with the evidence we have, and groups the missing evidence into a
-small number of runs (Part 2). Draft for the user. None of this is in `notes/questions.md` or
-`notes/plan.md` yet. Nothing here has been run.
+small number of runs (Part 2). Registered 2026-11-18 as D-98 (paper log), plan step 6.9 and
+Q-158 to Q-160. Runner for the search sweeps: `scripts/ablation.py`; subset
+`notes/ablation/subset_v1.json`.
 
 **What counts as a justification.** One of four kinds, named in the tables:
 - **Proof / construction:** true by how the code is built (say where).

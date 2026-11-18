@@ -37,6 +37,9 @@ chats. Last updated 2026-11-03.*
 | Q-41 | What's the reference ("best known") every grading uses? | 2.1 |
 | Q-42 | Can we prove more optima on the val sets? | 2.2 |
 | Q-156 | Does the sharing pass need all 4 target orders, or do 1-2 give the same plans faster? | 6.7 (D-96) |
+| Q-158 | Is every choice in method-v3 backed by an ablation, a sweep, a proof or a citation? | 6.9 (D-98) |
+| Q-159 | Is the s4-s5 depth limit (E-81) a property of the method, or of 256 simulations per move? | 6.9, J2 (D-98) |
+| Q-160 | How much do method-v3's results vary between identical runs (CPU deadline, tie order)? | 6.9, J1 (D-98) |
 | Q-49 | How do the agent and planner compare with published heuristics? Could one be a better teacher? | 2.4 (stages 1–2), 6.3 (all) |
 | Q-148 | Do the gaps on small problems (s1 6% above optima, deep 1:1 dilutions, NFSP level) close if the search uses its leftover time? | **Closed 2026-11-15 (E-95):** no; more sims at the root cheaper on 8 of 120, gap 2.88% → 2.80%; method-v3 stays |
 | Q-101 | Has the agent been fully trained (all stages, regime chosen, 3 seeds)? | 3.5, 3.6, 5.4 |
@@ -964,6 +967,20 @@ longer, gap 1.8% on 60 x 60 u5, 6.5% on 30 x 30 u5, 15% on 30 x 30 u1.*
 2026-11-15) The user finds routing-based more interesting (no blocked areas); the doc's default
 is a module-based harness first, hybrid end state. The router work (D-89 steps 2-6) is needed
 for every choice.
+
+**Q-160 How much do method-v3's results vary between identical runs?** · **Open → plan 6.9,
+J1** (D-98, 2026-11-18) The search has no random seed, but its deadline is CPU time, and ties
+go in candidate order. Three repeats and two tie-break seeds on the dev subset give the noise
+band every other sweep is read against.
+
+**Q-159 Is the s4-s5 depth limit a property of the method or of 256 sims?** · **Open → plan
+6.9, J2** (D-98, 2026-11-18) E-81: on s4-s5 the tree commits only 0-2 moves, since each leaf
+needs a long finish and every move takes 256 simulations. Fewer sims per move may go deeper in
+the same 900 s. J2 sweeps sims x C_PUCT and records depth.
+
+**Q-158 Is every choice in method-v3 justified?** · **Open → plan 6.9** (D-98, 2026-11-18)
+`notes/justification_audit.md` lists 62 decisions; 17 have never been measured and 18 only
+partly. Runs J0-J9 close them.
 
 **Q-156 Does the sharing pass need all 4 target orders?** · **Open → plan 6.7** (D-96,
 2026-11-17) The pass runs once per distinct target order and the search calls it at every
