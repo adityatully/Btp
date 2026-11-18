@@ -306,8 +306,10 @@ only where search is too slow (the router is the likely place). No RL scheduler 
   splitting → part 2 is worth building*;
   part 2: shape change, split/merge; *2a, turning, built 2026-11-16 (SPEC 0.50, D-92; E-98: 5.3% shorter on 60 x 60 u5, ~0 on 30 x 30); 2b,
   split/merge, waits on the supervisor talk (Q-153)*); (3) A* on that physics, checked against the
-  supervisor's Dijkstra on 1-2 droplets; (4) router calls from executor runs saved as a
-  benchmark; (5) a routing gym on the same physics; (6) MARL (MAPPO, shared network). Module vs
+  supervisor's Dijkstra on 1-2 droplets (*done 2026-11-17, E-99: A* optimal; after D-93, SPEC
+  0.51, it matches the paper's model on its 5 chips and 200 random ones; the paper's 2 -> 1 + 1
+  split is 20-50% faster there*); (4) router calls from executor runs saved as a
+  benchmark; (5) a routing gym on the same physics, *with electrode degradation as an option (D-95, 2026-11-17; model Q-155; baseline: A* replanning after failed moves)*; (6) MARL (MAPPO, shared network). Module vs
   routing-based synthesis stays open (Q-151, Q-152).
 
 ## 5. Waiting on the user (only when the step is reached)

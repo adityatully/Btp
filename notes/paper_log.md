@@ -1396,6 +1396,39 @@ Format: date · decision · alternatives considered · why · evidence.
   7%: val_s3-002 834 -> 778), routing 1.3-1.9x slower.
   **Measure:** E-94's 12 big problems with turning A* (E-98: 5.3% shorter on 60 x 60 u5, 0.7%
   on 30 x 30 u5).
+- **D-93 (2026-11-17) Turns and diagonals follow the Dijkstra paper (SPEC 0.51, E-99).** The
+  check (plan 8.6 step 3) showed our A* optimal under our rules but three rules stricter than
+  Nakamura et al. 2026 (E-99). The user chose to align with the paper (the supervisor's
+  group's model): (1) a turn pivots about any of the droplet's four corners (was: the top-left
+  only); (2) mid-turn it holds its old footprint and lands, like a move (was: the 2 x 2 turn
+  box, which the paper does not have and which blocked Exp. 3); (3) no diagonal move from
+  where a dead cell lies next to the droplet in a cardinal direction (the paper's condition 9;
+  was: only a dead cell in the move's way). No options kept for the old rules: they were ours,
+  not published. Splitting stays out (Q-153). Tests: `tests/pipeline/nakamura_reference.py`
+  (the paper's graph, written from the paper, with optional 2 -> 1 + 1 split) and three tests
+  in `test_grid.py` (five paper chips, 40 random chips, the checker's pivot and diagonal rules).
+
+- **D-94 (2026-11-17) Check the novel intermediates against the 16 published methods
+  (`scripts/published_novel_check.py`, commit `d5bfc8e`, E-100).** E-78/E-80 called an
+  intermediate novel against our own planner runs and single-target recipes only; for the doc
+  to Tom the claim needs "no published method makes them". Every published method runs on each
+  problem with a novel intermediate, whole and on each target alone (demand 1); a composition
+  counts as made if any `Mix` in the method's plan produces it. Bar fixed before the run (not
+  approved by the user): >= 90% of the wins' novel intermediates stay novel and >= 90% of the
+  wins keep one. (Written as "D-93" in the script and its first run log; renamed because D-93
+  was taken the same day.)
+- **D-95 (2026-11-17) Electrode degradation joins the MARL scope (Q-155).** User's call: model
+  degradation in the routing gym. It is the setting where the published RL routers beat the
+  offline router (L-20 A); on a healthy chip our routing gap is small (E-93: 1.5% on 60 x 60
+  u5). Model candidate: Elfar et al., TCAD 41(8) 2022 ("Formal synthesis of adaptive droplet
+  routing for MEDA"), fitted on fabricated PCB prototypes (R^2adj > 0.94): relative EWOD force
+  of a microelectrode after n actuations F = tau^(2n/c), degradation D = tau^(n/c), sensed health
+  H = 2^b * D (b-bit sensor); a move in direction d succeeds with probability mean F over its
+  frontier set (the cells pulling that way), else the droplet stays; c ~ U(200, 500), tau ~
+  U(0.5, 0.9), optional faulty cells (uniform or 2 x 2 clusters). Liang et al. ICML 2021 use a
+  cruder tau^floor(n/50), tau in [0.6, 1). Plan: healthy chip stays the default (configs/chip);
+  degradation is an option of the gym (8.6 step 5); the fair baseline is A* that replans after a
+  failed move. Which paper the user means is still to confirm.
 - **D-96 (2026-11-17) Order check: does the sharing pass need all its target orders? (Q-156;
   user: "Yes, build it").** The pass runs once per distinct target order (given, dearest first,
   cheapest first, nearest neighbour; `share.orders`) and keeps the cheapest, and the search's
@@ -2201,6 +2234,105 @@ MRCM's intermediates on val_s2: 4 of 28 covered (chain D4), 5 of 28 (premix D3).
   (an exact lower bound on mixes left, or a constructive method's recipes, which is a planner
   again). (3) Built as SPEC 0.28 `hint_source: problem` (depth-4 chain in the recipe columns)
   for a copy-test comparison on stages 1–2 against the planner's hints.
+
+### E-102 (2026-11-18) Where the final benchmark runs spent their time: the search's cap (74%), most of it after the final plan
+coe9, commit `8cfad70` (`scripts/time_budget.py`), records `outputs/bench/b1_v3_all.jsonl`,
+`b2a_v3.jsonl`, `b2b_v3_all.jsonl`, `b3_v3.jsonl` (E-91, E-96, method-v3), output
+`outputs/bench/time_budget.md`. CPU seconds as the records hold them (D-78). Not timed: root
+bound, replay and validation, novelty check.
+- **Total 1,320.6 CPU-h** (B1 508.3, B2a 19.5, B2b 772.7, B3 20.1).
+- **By part, all files:** our search 983.9 CPU-h (74.5%); `share_mrcm_look3` 171.1 (13.0%);
+  exact search for the answer key 81.8 (6.2%); e-MRCM + MRCM in B2b 28.2 (2.1%); NFSP 23.3
+  (1.8%; 62.8% of B3); `share_look3` 16.5, `share_orders` 13.0, `share` 1.4; the other published
+  methods under 0.5 together.
+- **Our search after its final plan:** 758.6 CPU-h, **57.4% of all time** (B1 231.0, B2b 509.9).
+  The cap was hit on 1,079 of 1,815 B1 runs and 1,632 of 2,847 B2b runs; the final plan came by
+  60 s on 1,062 B1 and 1,212 B2b runs. Per B1 set, share of the set's time after the final
+  plan: s1 73.6%, s2 79.9%, s3 75.1%, s4 25.8%, s5 35.6%, held-out 44.1%.
+- **`share_mrcm_look3` is a tail:** median 1.6 s on B1 but max 27,933 s (7.8 h, s5) and 17,296 s
+  (s4); 62.0 and 48.5 CPU-h on s4 and s5, about 41% of each set. One such run holds a worker for
+  hours, so it also sets wall time.
+- **Our search overshoots the cap:** max 2,442 s (s5), 1,679 s (B2b), 1,524 s (s4) against
+  900 s. The deadline is checked between leaf finishes, not inside one (**unverified** reading).
+- **Reading.** A rerun is cut by (1) a smaller search budget: up to 57% of all time is spent after
+  the final plan, but how much a smaller cap costs in plan quality is not read here, and E-101
+  shows s4 and held-out need the long budget (final plan median 367 and 313 s); (2) capping or
+  dropping `share_mrcm_look3` (13%, and the wall-time tail). The sharing pass's repeated orders
+  (D-96) are inside our search's fixed cap, so removing them buys more leaves, not time.
+
+### E-101 (2026-11-17) Time a win needs: median 9 s to beat our planner, 71 s to its final plan; 900 s is a cap
+coe9, records `outputs/bench/b1_v3_all.jsonl` (E-91, method-v3), read from each record's
+`ours.trace` (CPU seconds, cost each time the cheapest plan improves); one-off script (not in
+the repo) run on the user's request for the doc to Tom. All 3 goals pooled; a win = cheaper than
+the best of the 4 planner runs. Median / mean / 90th percentile, seconds:
+- **All B1 (1,082 wins):** first beats the planner 9 / 77 / 226; final plan 71 / 209 / 677;
+  time used 900 / 665 / 904 (the search runs to the cap, or stops early only when done).
+- Per stage, first beats / final plan: s1 1/6/18 and 1/16/55 (160); s2 6/28/113 and 12/82/230
+  (157); s3 3/53/127 and 29/124/422 (205); s4 32/131/432 and 367/403/804 (205); s5 9/81/249 and
+  65/206/722 (169); held-out 46/141/505 and 313/364/757 (186).
+- Wins with a novel intermediate (1,012): first beat 9 / 76 / 221, the same as all wins.
+- Reading: the 900 s budget matters for the final plan on many-target problems (s4, held-out),
+  not for beating the planner. Matches E-91's 60 s vs 900 s gap on s4 and held-out.
+- **Against the baselines' own time (same day, second one-off script):** wins = our plan cheaper
+  than every baseline that planned the problem (published methods and our planner), 1,042 of
+  1,815. Mean (median) seconds, ours to the final plan / published methods per run / our 4
+  planner runs together: s1 17.6 (1.6) / 1.5 (0.0) / 0.7 (0.1); s2 84.8 (13.3) / 0.9 (0.0) / 7.7
+  (1.2); s3 127.8 (30.2) / 9.5 (0.0) / 12.8 (1.0); s4 403.3 (366.9) / 4.7 (0.0) / 176.7 (32.1); s5
+  209.5 (70.4) / 6.9 (0.0) / 96.6 (3.0); held-out 364.0 (312.6) / 12.0 (0.0) / 157.2 (33.6); all
+  216.2 (79.7) / 3.6 (0.0) / 81.6 (4.6). Published means are raised by NFSP's ILP. The search is
+  slower than every baseline; it trades CPU minutes for cost.
+
+### E-100 (2026-11-17) Novel intermediates against the published methods (D-94): 80% stay novel, 89% of wins keep one; misses the 90% bar
+Run on coe9, commit `d5bfc8e`, records `outputs/bench/b1_v3_all.jsonl` (E-91, method-v3, B1
+test sets), `workers=30 nfsp_seconds=60`, output `outputs/novel/published.jsonl` and `.log`.
+- **All goals:** 1012 wins over the best planner run with a novel intermediate; 4352 novel
+  intermediates; **3493 (80%) stay novel** against every published method, whole and per
+  target; **904 of 1012 wins (89%) keep at least one.** Fluid 80% / 89% (342 wins), steps 79% /
+  87% (301), waste 81% / 91% (369). Both numbers fall short of the 90% bar.
+- **Who makes them** (count of novel intermediates a method makes; one intermediate can count
+  for several): almost all per target, i.e. inside one target's own recipe: MTWM/t 277, FacDA/t
+  238, Generic/t 236, DFMM/t 227, Fukui/t 227, DFM/t 178, e-MRCM/t 168, MRCM/t 168, TVODA/t 157,
+  WSPM/t 141, MTMD/t 140, NFSP/t 129, SIMOP/t 104, Robust/t 88, DDMT/t 81, Dong/t 5. On the whole
+  problem: MTWM 91, Fukui 82, FacDA 68, MTMD 68, WSPM 57, NFSP 50, Robust 47, TVODA 46, DFMM 42,
+  SIMOP 38, Generic 37, DDMT 29, DFM 27, e-MRCM 23, MRCM 17.
+- **Reading:** the claim "no published method makes them" does not hold as stated. What holds:
+  4 in 5 novel intermediates appear in no published plan, and 9 in 10 wins keep one. The
+  matches come mostly from running a method on one target alone; the check counts composition
+  only, not whether the published plan reuses that droplet across targets as the search does
+  (E-78: 123 of 192 shared by 2+ mixes). Mac trial before the run (val_s4_v2, 3 problems, 20 s
+  searches): 3 of 6 stay novel, 2 of 2 wins keep one.
+- **Not yet known:** the share that stays novel counting whole-problem runs only (the
+  multi-target methods' own plans), and whether the wins keeping a novel intermediate carry
+  the gain (E-80's one-move test on that subset).
+
+### E-99 (2026-11-17) The Dijkstra check: our A* is optimal; after D-93 it matches the paper's model exactly; splitting cuts 20-50%
+Nakamura, Yamashita, Tomiyama, Gupta, VLSID 2026 (`~/Downloads/routing/2026_A_Polynomial_Time_
+Routing_Algorithm_for_Meda_Biochips_Based_on_Dijkstras_Algorithm.pdf`). The paper reports CPU
+times only, no route lengths, so the check is against an independent implementation of its
+graph (`tests/pipeline/nakamura_reference.py`, written from the paper's text and Fig. 2/6; the
+five chips read off Figs. 8-12). One 1 x 2 droplet from the bottom-left to the top-right corner;
+route time in units (1 = a 1 x 1 move):
+
+| Chip | A* moves only | A* + turns, 0.50 | reference, 0.50 rules | **A* + turns, 0.51** | **paper's model** | paper's model + split |
+|---|---|---|---|---|---|---|
+| Exp. 1 (5 x 5) | 10 | 10 | 10 | **10** | **10** | 8 |
+| Exp. 2 (5 x 5) | none | 14 | 14 | **11** | **11** | 7 |
+| Exp. 3 (5 x 5) | none | none | none | **14** | **14** | 9 |
+| Exp. 4 (7 x 7) | 16 | 16 | 16 | **16** | **16** | 10 |
+| Exp. 5 (10 x 10) | none | 29 | 29 | **24** | **24** | 15 |
+
+- **Our A* is correct:** with the reference set to our 0.50 rules (top-left pivot, turn box,
+  our diagonal rule) it gives exactly A*'s numbers, so A* finds the single-droplet optimum.
+- **Rule differences (0.50 vs the paper), one at a time:** pivot about any corner: Exp. 2 13 ->
+  10, Exp. 3 16 -> 14, Exp. 5 29 -> 24; the turn box blocked Exp. 3 and cost Exp. 2 one unit;
+  the paper's diagonal rule is stricter (Exp. 2 10 -> 11).
+- **After D-93 (SPEC 0.51):** A* equals the paper's model on all five chips and on 200 random
+  chips (5 x 5 to 10 x 10, 5-30% dead, seed 0; 183 routable, 17 not, all agree); 40 of them are
+  a test (seed 99).
+- **Splitting (paper's 2 -> 1 + 1 only):** 20-50% faster on these chips (8, 7, 9, 10, 15 vs 10,
+  11, 14, 16, 24), mostly by passing one-cell gaps. Evidence for Q-153; not in our router.
+- **Not checked:** the paper's two-droplet case beyond one split droplet, and its chips above
+  10 x 10 (its generator is not given).
 
 ### E-98 (2026-11-16) Turning A* (D-92): ~5% shorter runs on 60 x 60, nothing on a crowded 30 x 30
 Mac, `scripts/grid_time.py free=1 min_targets=8 sets=val_s4_v2,val_s5_v2 sizes=30,60 units=5
@@ -4117,6 +4249,21 @@ independent reference (oracle, optimum, bound, validator) catches it.**
   2-input and stands) and every off-goal steps row. A tiny local run (12 s1 problems, 16 sims)
   turns DFM steps from "beats" to "level". **Re-read pending** on coe9 from the final records
   (B1, B2a) with each paper's nm (`steps_recheck.py`, scratch; MTWM skipped, an ILP per problem).
+- **F-20 (2026-11-18) A second take from a stored droplet cut short a part's spacing
+  exemption (SPEC 0.52).** Found when the 0.51 turning pilot hung on val_s5-040
+  (share_mrcm_look3, 30 x 30 u5): the validator rejected the run ("bodies 405 and 410 too close
+  at tick 512"), and the pool hung because `RunError` could not be unpickled in the parent
+  (fixed: `__reduce__`, test). Cause, not turning (both bodies 1 x 1): at tick 508 a 2 x 2
+  droplet gives part 405 and a 1 x 2 remainder (pair exempt to 516); at 509 the remainder gives
+  another part and becomes a 1 x 1 body 410 whose window restarted at 509 with the smaller
+  footprint (to 512). 405, routed under the longer window, was still diagonal to it at 512.
+  Fix: a remainder left in place keeps its parent's exemptions (`exempt_until(..., bodies)` in
+  the router and validator), as SPEC 14.10 already describes the remainder (the parent shrunk).
+  The saved run validates; new test `test_remainder_keeps_its_parents_exemption`. Earlier grid
+  runs could hit the same rejection only on plans with two takes in a row from one droplet
+  while the first part lingers; such a run raised an error, so no logged number is wrong. The
+  router now also sees the longer windows, so a few routes near such remainders may differ from
+  E-94 / E-98 (slightly more freedom, never less).
 - **Ops lessons (not for the paper):** Python stdout buffering hid a 10 h background check;
   pytest thrashed at 1,144% CPU without `OMP_NUM_THREADS=1`; parallel checks on the Mac
   overheated it (heavy jobs now run only on the workstation).

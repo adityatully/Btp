@@ -96,6 +96,8 @@ chats. Last updated 2026-11-03.*
 | Q-151 | Module-based, routing-based or hybrid synthesis for the claim? | Open; hinges on Q-152 (D-89, doc §15 #1) |
 | Q-152 | Is there a MEDA model of mixing during transport (mix progress per move and shape)? | Literature, supervisor (doc §15 #2; only Paik's DMFB table known) |
 | Q-153 | Under MEDA physics, may a droplet split into many small pieces on the way and merge at the goal, and what does it cost (rounds, spacing of the pieces)? | User to discuss with the supervisor (2026-11-16). Options: A halves, repeatable; B only 2 -> 1 + 1 (as published); C any sizes at once. Affects router, space, volume accuracy, washing |
+| Q-154 | Do the 16 published methods make the search's novel intermediates? | Closed → E-100: 80% of 4352 stay novel, 89% of 1012 wins keep one (bar 90%, missed); matches come mostly from single-target runs |
+| Q-155 | Which electrode degradation model does the routing gym use, and what is the fair baseline under it? | Open → plan 8.6 step 5 (D-95). Candidate: Elfar et al. TCAD 2022 (fitted on prototypes); user to confirm the paper |
 
 ---
 
@@ -970,11 +972,27 @@ multi-target problems (s1-s3 have one order already), so the search reaches more
 it is short of time. Also: `finish_from` reruns orders that become equal mid-plan. Check:
 `scripts/order_check.py` on val s4, s5, `val_emrcm_v1`; bar in D-96.
 
+**Q-155 Which degradation model does the routing gym use?** · **Open → plan 8.6 step 5**
+(D-95, 2026-11-17) Degradation is where RL routers beat the offline router in the literature
+(L-20 A). Candidate: Elfar et al., TCAD 41(8) 2022, fitted on fabricated PCB prototypes (force
+tau^(2n/c) per actuation count n, move success = mean force over the frontier set, b-bit health
+sensing). Alternative: Liang et al. ICML 2021, tau^floor(n/50). The user named a paper that
+"models degradation correctly"; which one is to confirm. Baseline: A* that replans after a
+failed move.
+
+**Q-154 Do the published methods make the search's novel intermediates?** · **Closed →
+E-100** (D-94, 2026-11-17) Asked for the doc to Tom: E-78 checked novelty against our own
+planners only. 3493 of 4352 novel intermediates in the B1 wins (80%) appear in no published
+plan, whole or per target; 904 of 1012 wins (89%) keep one. Short of the 90% bar; the matches
+are mostly single-target methods run on one target alone.
+
 **Q-153 May a droplet split into many pieces on the way, and at what cost?** · **Open → part 2
 design** (E-97, 2026-11-16) Splitting is most of the headroom of shape actions (28% of run time
 on 60 x 60 u5, an optimistic bound). The exact papers only split a size-2 droplet into two 1 x 1
 (1 unit, pieces >= 1-2 cells apart); splitting a 9-unit droplet into nine pieces, and the
-pieces' spacing, are not in the literature (L-21).
+pieces' spacing, are not in the literature (L-21). *E-99 (2026-11-17): on the Dijkstra paper's
+five chips, even the published 2 -> 1 + 1 split makes routes 20-50% faster (8, 7, 9, 10, 15
+units vs 10, 11, 14, 16, 24 without).*
 
 **Q-152 Is there a MEDA model of mixing during transport?** · **Open → literature,
 supervisor** (D-89, 2026-11-15) Routing-based synthesis needs mix progress per move; only Paik's
