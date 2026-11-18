@@ -32,12 +32,13 @@ from __future__ import annotations
 
 import heapq
 import math
+from collections.abc import Mapping
 from dataclasses import dataclass, field, replace
 from itertools import pairwise
 
 import numpy as np
 
-from meda.pipeline.geometry import Cell, Chip, GridPlatform, Rect, Shape, at, window_any
+from meda.pipeline.geometry import Cell, Chip, GridPlatform, Rect, Shape, at, near_dead, window_any
 
 INF = math.inf
 MOVES = [(dr, dc) for dr in (-1, 0, 1) for dc in (-1, 0, 1)]
@@ -51,8 +52,8 @@ class Body:
     the body that ended where this one starts (a take, a continuation). `droplet`: the
     opgraph droplet it carries (index), if any. `role`: "move", "stored", "detect" or "mix"
     (inputs merged in a module). `shapes[i]`: its footprint at tick `start + i` if it turns on
-    the way (0.50: `shape`, its turn, or the turn box mid-turn); empty: `shape` throughout. It
-    always ends in `shape`."""
+    the way (0.51: `shape` or its turn; a turn pivots about a corner and, like a move, holds the
+    old footprint until it lands); empty: `shape` throughout. It always ends in `shape`."""
 
     id: int
     shape: Shape
@@ -97,11 +98,35 @@ def split_window(shape: Shape, gp: GridPlatform) -> int:
     return (max(shape) + gp.spacing + 1) * slowest
 
 
-def exempt_until(a: Body, b: Body, gp: GridPlatform) -> float:
+def exempt_until(
+    a: Body, b: Body, gp: GridPlatform, bodies: Mapping[int, Body] | None = None
+) -> float:
     """The pair is exempt from spacing at ticks before this (14.6): for ever if bound for the
     same op (they merge there); for two pieces of one droplet (a stored droplet, its remainder,
     its parts, a droplet leaving a detector) during the first `split_window` ticks of the later
-    one, while they separate; else never."""
+    one, while they separate; else never. With `bodies`, a remainder left in place by a take
+    is its parent shrunk (14.10), so it keeps every exemption its parent had: a later take
+    must not cut short the window of a part already on its way."""
+    out = _pair_until(a, b, gp)
+    if bodies is None:
+        return out
+    for x, y in ((a, b), (b, a)):
+        while (p := _shrunk_from(y, bodies)) is not None:
+            if p.id != x.id:
+                out = max(out, _pair_until(x, p, gp))
+            y = p
+    return out
+
+
+def _shrunk_from(b: Body, bodies: Mapping[int, Body]) -> Body | None:
+    """The stored droplet `b` is the remainder of, if `b` was left in its place by a take."""
+    p = bodies.get(b.parent) if b.parent is not None else None
+    if p is None or b.role != "stored" or p.role != "stored":
+        return None
+    return p if b.path[0] == p.path[-1] and b.start == p.end else None
+
+
+def _pair_until(a: Body, b: Body, gp: GridPlatform) -> float:
     if a.dest is not None and a.dest == b.dest:
         return INF
     same = (
@@ -113,9 +138,11 @@ def exempt_until(a: Body, b: Body, gp: GridPlatform) -> float:
     return max(a.start, b.start) + window
 
 
-def exempt(a: Body, b: Body, t: int, gp: GridPlatform) -> bool:
+def exempt(
+    a: Body, b: Body, t: int, gp: GridPlatform, bodies: Mapping[int, Body] | None = None
+) -> bool:
     """Whether the pair is exempt from spacing at tick `t` (see `exempt_until`)."""
-    return t < exempt_until(a, b, gp)
+    return t < exempt_until(a, b, gp, bodies)
 
 
 @dataclass(frozen=True, slots=True)
@@ -243,14 +270,14 @@ class AStarRouter:
             req.parent,
             req.droplet,
         )
-        # orientations: 0 = its own shape, 1 = turned; 2 = mid-turn (the turn box)
+        # orientations: 0 = its own shape, 1 = turned
         turns = gp.can_turn(req.shape)
         forms: list[Shape] = [req.shape]
         if turns:
-            forms += [gp.turned(req.shape), gp.turn_box(req.shape)]
+            forms.append(gp.turned(req.shape))
         # droplets still on the chip from the tick before the release, with their exemptions
         others = [b for b in state.bodies.values() if b.id != req.body_id and b.end >= req.release]
-        until = {b.id: exempt_until(probe, b, gp) for b in others}
+        until = {b.id: exempt_until(probe, b, gp, state.bodies) for b in others}
         regions = [g for g in state.regions if g.owner != req.dest]
         static = state.static_grid()
         big_h, big_w = static.shape
@@ -278,6 +305,8 @@ class AStarRouter:
             return None, "no path past parked droplets"
         cache: dict[tuple[int, int], np.ndarray] = {}
         fixed = [full(window_any(static, f, 0)) for f in forms]
+        # no diagonal move from where a cell of the droplet has a dead cell beside it
+        no_diag = [full(near_dead(static, f)) for f in forms]
 
         def region_bad(t: int, o: int) -> np.ndarray:
             g = np.zeros_like(static)
@@ -307,7 +336,7 @@ class AStarRouter:
             return None, "source blocked at release"
         horizon = gp.horizon_for(req.shape)
         limit = t0 + horizon
-        cost = [{m: gp.move_ticks(f, *m) for m in MOVES} for f in forms[:2]]
+        cost = [{m: gp.move_ticks(f, *m) for m in MOVES} for f in forms]
         # admissible: moves x the cheapest move of either orientation
         step = min(k for cst in cost for m, k in cst.items() if m != (0, 0))
         morph = gp.morph_ticks(req.shape)
@@ -328,19 +357,19 @@ class AStarRouter:
                 nr, nc = r + dr, c + dc
                 if not (0 <= nr < big_h and 0 <= nc < big_w):
                     continue
-                if dr and dc and (fixed[o][r + dr, c] or fixed[o][r, c + dc]):
-                    continue  # no diagonal past a dead cell
+                if dr and dc and no_diag[o][r, c]:
+                    continue  # no diagonal next to a dead cell
                 steps.append((nr, nc, o, cost[o][(dr, dc)]))
-            if turns:
-                steps.append((r, c, 1 - o, morph))
+            if turns:  # pivot about a corner
+                for nr, nc in gp.turn_anchors((r, c), forms[o]):
+                    if 0 <= nr < big_h and 0 <= nc < big_w:
+                        steps.append((nr, nc, 1 - o, morph))
             for nr, nc, no, k in steps:
                 key = (nr, nc, no, t + k)
                 if key in came or dist[nr, nc] < 0 or bad(t + k, no)[nr, nc]:
                     continue
-                # a k-tick move holds the droplet where it is until it lands; a turn holds the
-                # turn box at its anchor
-                hold = 2 if no != o else o
-                if any(bad(u, hold)[r, c] for u in range(t + 1, t + k)):
+                # a k-tick move or turn holds the droplet as it is until it lands
+                if any(bad(u, o)[r, c] for u in range(t + 1, t + k)):
                     continue
                 came[key] = (r, c, o, t)
                 hv = int(dist[nr, nc])
@@ -353,9 +382,9 @@ def _unroll(
     came: dict[tuple[int, int, int, int], tuple[int, int, int, int] | None],
     forms: list[Shape],
 ) -> tuple[tuple[Cell, ...], tuple[Shape, ...]]:
-    """Anchors and footprints per tick from the search tree: a k-tick move holds the old
-    anchor k - 1 ticks, then lands; a k-tick turn holds the turn box k - 1 ticks, then lands
-    turned. Footprints are empty if the droplet never turns."""
+    """Anchors and footprints per tick from the search tree: a k-tick move or turn holds the
+    old anchor and shape k - 1 ticks, then lands. Footprints are empty if the droplet never
+    turns."""
     nodes: list[tuple[int, int, int, int]] = []
     cur: tuple[int, int, int, int] | None = node
     while cur is not None:
@@ -366,9 +395,8 @@ def _unroll(
     shapes: list[Shape] = [forms[nodes[0][2]]]
     for a, b in pairwise(nodes):
         k = b[3] - a[3]
-        hold = forms[2] if a[2] != b[2] else forms[a[2]]
         path += [(a[0], a[1])] * (k - 1) + [(b[0], b[1])]
-        shapes += [hold] * (k - 1) + [forms[b[2]]]
+        shapes += [forms[a[2]]] * (k - 1) + [forms[b[2]]]
     turned = any(n[2] for n in nodes)
     return tuple(path), tuple(shapes) if turned else ()
 
@@ -550,9 +578,9 @@ def _straight(source: Cell, goal: Cell, ticks: int) -> tuple[Cell, ...]:
 
 def turn_distances(chip: Chip, gp: GridPlatform, shape: Shape, goal: Cell) -> np.ndarray:
     """Ticks from every anchor of a `shape` droplet to `goal` on the empty chip when it may
-    rotate on the way (`morph_ticks`, keeping its anchor) and must arrive as `shape`: Dijkstra
-    over (anchor, orientation); -1 if unreachable. Shape of the result: the anchors of
-    `shape`."""
+    rotate on the way (`morph_ticks`, pivoting about a corner, 0.51) and must arrive as
+    `shape`: Dijkstra over (anchor, orientation); -1 if unreachable. Shape of the result: the
+    anchors of `shape`."""
     h, w = shape
     shapes = (shape, (w, h))
     static = np.zeros((chip.height, chip.width), dtype=bool)
@@ -574,7 +602,7 @@ def turn_distances(chip: Chip, gp: GridPlatform, shape: Shape, goal: Cell) -> np
         if dist[o, r, c] >= 0:
             continue
         dist[o, r, c] = d
-        nexts = [(1 - o, r, c, morph)] if not blocked[1 - o][r, c] else []
+        nexts = [(1 - o, nr, nc, morph) for nr, nc in gp.turn_anchors((r, c), shapes[o])]
         nexts += [(o, r + dr, c + dc, k) for (dr, dc), k in cost[o].items()]
         for o2, nr, nc, k in nexts:
             if (

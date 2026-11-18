@@ -1,6 +1,23 @@
 # MEDA Design Automation — Codebase Specification
 
-Version 0.50 · 2026-11-16
+Version 0.52 · 2026-11-18
+
+Changes in 0.52 (bug fix, found on val_s5-040 in the 0.51 pilot): a remainder left in place by
+a take is its parent shrunk (14.10), so it keeps every spacing exemption its parent had
+(`exempt_until(..., bodies)` in the router and the run validator). Before, the remainder was a
+new body whose window restarted at the take and could end sooner (a smaller footprint), so a
+second take cut short the window of a part already on its way; the validator then rejected a
+run the router had planned. No default physical assumption changes.
+
+Changes in 0.51 (the Dijkstra check, paper log D-93, E-99): turns and diagonals follow
+Nakamura et al. 2026. **Default physical assumptions changed:** (1) a turn pivots about one of
+the droplet's four corners (`GridPlatform.turn_anchors`; 1 x 2: one half stays, the other goes
+above or below it), and, like a move, holds the old footprint for `morph_ticks` - 1 ticks, then
+lands (the 0.50 turn box and top-left pivot are gone); (2) a droplet may not move diagonally
+from where a dead cell lies next to one of its cells in a cardinal direction (`near_dead`; was:
+only a dead cell orthogonally in the move's way). The run validator checks both (14.10 rule 1).
+With these, our A* finds the optimum of the paper's graph on its five chips and on 40 random
+ones (`tests/pipeline/nakamura_reference.py`).
 
 Changes in 0.50 (turning, paper log D-92, plan 8.6 step 2 part 2a): **default physical
 assumption changed.** The router may turn a droplet that is not square (h x w -> w x h) at a
@@ -2437,7 +2454,8 @@ M11 replaces the mixer count with the grid.
   between their footprints (default 1), in space and in time: a droplet may not enter a cell
   next to where another droplet was one tick before. Exceptions, and only these: inputs
   merging inside their own module (14.7), and a part leaving its parent after a take (14.9).
-  A diagonal move is not allowed past a dead cell orthogonally next to it.
+  A droplet may not move diagonally from where a dead cell lies next to one of its cells in a
+  cardinal direction (0.51, Nakamura et al. 2026, condition 9).
 - **Layout** (`layout(instance, platform) -> Chip`, deterministic). `ports_per_fluid` ports per
   fluid of the instance, half spread evenly along the west edge and the rest along the north
   edge;
@@ -2497,13 +2515,16 @@ the supervisor's Dijkstra router can replace the classical one.
   group's model after Li et al. 2017), diagonal = the longer side (`diagonal_rule: max`,
   Nakamura et al. 2026) or width + height (`sum`, Shiro et al. 2022); `uniform` = one tick for
   every shape (M11). The model is assumed, not calibrated (L-21), so it is config and swept.
-  **Turns** *(0.50, D-92)*: with `turns: true` (default) a droplet that is not square may also
-  turn in place, h x w -> w x h at the same top-left anchor, in `morph_ticks` = its longer side
-  (Nakamura et al. 2026: 2 for 2 x 1); for the ticks before it lands it holds the turn box (the
-  square of its longer side, covering both shapes; conservative, the shapes in between are not
-  modelled). A droplet must arrive in its own shape, so placement and the executor are
+  **Turns** *(0.50, D-92; 0.51, D-93)*: with `turns: true` (default) a droplet that is not
+  square may also turn, h x w -> w x h, pivoting about one of its four corners (the turned
+  rectangle shares that corner; Nakamura et al. 2026: for 1 x 2, one half stays and the other
+  goes above or below it) in `morph_ticks` = its longer side (2 for 2 x 1). Like a move, it
+  holds its old footprint until it lands; the shapes in between are not modelled (as in the
+  paper). A droplet must arrive in its own shape, so placement and the executor are
   unchanged. The search runs over (anchor, orientation, tick); the heuristic counts an anchor
-  open if either orientation fits there. Heuristic: the shortest distance past dead cells and droplets
+  open if either orientation fits there. **Diagonals** *(0.51)*: no diagonal move from where a
+  dead cell lies next to a cell of the droplet in a cardinal direction (the paper's condition
+  9). Checked against an independent implementation of the paper's graph (E-99). Heuristic: the shortest distance past dead cells and droplets
   parked for good, in moves times the cheapest move (admissible; an unreachable goal fails at
   once). Spacing (14.6) is a mask, never a penalty. Search horizon
   `route_horizon` ticks after `release` (default 4 (H + W) times the droplet's slowest move);
@@ -2542,7 +2563,8 @@ space and routes. A failed route or a full chip makes an op wait and retry at th
 - **Takes from a stored droplet** (partial takes, 14.3). A take of u units from a stored droplet
   of volume V costs `split_ticks` (default 1): the part starts on the parent's anchor, the parent
   shrinks to the footprint of V - u at the same anchor, and the pair is exempt from spacing for
-  the part's first `spacing + 1` moves. The last take moves the whole droplet.
+  the part's first `spacing + 1` moves. The shrunk parent keeps the exemptions it had with
+  earlier parts (0.52). The last take moves the whole droplet.
 - **End:** the run ends when every op has ended and every droplet has left the chip; that tick
   is the makespan (doc §10, flush included).
 - **Deadlock:** if no op can commit, nothing moves and nothing runs, the executor raises
@@ -2556,10 +2578,10 @@ space and routes. A failed route or a full chip makes an op wait and retry at th
 `validate_run(run, graph, chip, platform)` replays the run tick by tick and raises `RunError`
 naming the instance and every broken rule:
 1. **Continuity:** a droplet moves to one of its 8 neighbours, no sooner than `move_ticks` for
-   its shape and direction after it reached its current anchor, and stays on the chip. A turn
-   (0.50) keeps the anchor, holds the turn box, lands in the other orientation no sooner than
-   `morph_ticks` after it began, and only a droplet that is not square turns; no move mid-turn;
-   a droplet starts and ends in its own shape.
+   its shape and direction after it reached its current anchor, not diagonally from beside a
+   dead cell (0.51), and stays on the chip. A turn (0.50, 0.51) lands in the other orientation
+   at one of `turn_anchors`, no sooner than `morph_ticks` after the droplet reached its place;
+   only a droplet that is not square turns; a droplet starts and ends in its own shape.
 2. **Spacing and obstacles:** 14.6's spacing in space and time between droplets, and against
    other modules and their rings, dead cells; only the stated exceptions.
 3. **Operations:** each op's inputs are in its module (or on its detector) at its start; its
@@ -2596,7 +2618,7 @@ every measurement sweeps `unit_ticks` in {1, 5, 20}: a 3 x 3 mix = 3, 15 or 60 c
 `grid` 60 x 60, the SAR `mixer_library` above, `spacing` 1, `edge_margin` 4, `waste_ports` 2,
 `ports_per_fluid` 1, `detectors` 2 (3 x 3 cells each, fixed on the east edge), `mixers` cap
 null, `unit_ticks` 5, `split_ticks` 1, `route_horizon` 4 (H + W) x the slowest move, `move_rule` extent,
-`diagonal_rule` max (0.49), `turns` true (0.50).
+`diagonal_rule` max (0.49), `turns` true (0.50; corner pivots 0.51).
 
 ---
 

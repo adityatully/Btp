@@ -5,7 +5,8 @@ executor and router made it, and raises `RunError` naming the instance and every
 
 1. CONTINUITY: a droplet moves to one of its 8 neighbours, no faster than
    `GridPlatform.move_ticks` for its shape and direction (it holds its anchor until it lands),
-   and stays on the chip.
+   not diagonally from beside a dead cell, and stays on the chip; a turn pivots about a corner
+   no faster than `morph_ticks` (0.51).
 2. SPACING: droplets keep `spacing` empty cells between them, in space and time (each one's
    footprint at t against the other's at u = t - 1, t, t + 1, exemptions judged at min(t, u)),
    keep out of active regions grown by
@@ -32,7 +33,7 @@ from itertools import combinations, pairwise
 import numpy as np
 
 from meda.pipeline.executor import Run
-from meda.pipeline.geometry import Cell, Chip, GridPlatform, Shape, at
+from meda.pipeline.geometry import Cell, Chip, GridPlatform, Rect, Shape, at
 from meda.pipeline.opgraph import OpGraph, OpKind
 from meda.pipeline.router import INF, Body, exempt, free_distances, turn_distances
 from meda.pipeline.schedule import peak, stored_intervals
@@ -58,6 +59,12 @@ class RunError(ValueError):
         lines = "; ".join(f"[{i.rule.value}] {i.message}" for i in issues[:10])
         more = f" (+{len(issues) - 10} more)" if len(issues) > 10 else ""
         super().__init__(f"{instance_id}: invalid run: {lines}{more}")
+        self.instance_id = instance_id
+
+    def __reduce__(self) -> tuple[type[RunError], tuple[str, list[RunIssue]]]:
+        # Rebuild from the constructor's arguments, so the error survives being
+        # sent back from a worker process.
+        return (RunError, (self.instance_id, self.issues))
 
     @property
     def rules(self) -> set[RunRule]:
@@ -85,11 +92,18 @@ def _last_tick(b: Body, horizon: int) -> int:
     return int(b.end) - 1 if b.end != INF else horizon
 
 
-def _check_motion(b: Body, gp: GridPlatform, bad: Callable[[RunRule, str], None]) -> None:
-    """Rule 1 for one body: moves to a neighbour, no faster than `move_ticks` for the shape it
-    holds; turns (0.50) keep the anchor, go through the turn box for at least `morph_ticks`
-    and land in the other orientation; it ends in its own shape."""
-    own, other, box = b.shape, gp.turned(b.shape), gp.turn_box(b.shape)
+def _check_motion(
+    b: Body,
+    gp: GridPlatform,
+    bad: Callable[[RunRule, str], None],
+    dead: frozenset[Cell] = frozenset(),
+) -> None:
+    """Rule 1 for one body: a move goes to a neighbour, no faster than `move_ticks` for the
+    shape it holds, and not diagonally from where a cell of it has a `dead` cell beside it
+    (0.51); a turn (0.51) lands in the other orientation at one of `turn_anchors`, no sooner
+    than `morph_ticks` after the droplet reached its current place; it starts and ends in its
+    own shape."""
+    own, other = b.shape, gp.turned(b.shape)
     if b.shapes:
         if len(b.shapes) != len(b.path):
             bad(RunRule.CONTINUITY, f"body {b.id}: {len(b.shapes)} shapes for {len(b.path)} ticks")
@@ -97,34 +111,26 @@ def _check_motion(b: Body, gp: GridPlatform, bad: Callable[[RunRule, str], None]
         if not gp.can_turn(own):
             bad(RunRule.CONTINUITY, f"body {b.id}: a {own} droplet may not turn")
             return
-        if any(x not in (own, other, box) for x in b.shapes):
-            bad(RunRule.CONTINUITY, f"body {b.id} takes a shape other than {own}, {other}, {box}")
+        if any(x not in (own, other) for x in b.shapes):
+            bad(RunRule.CONTINUITY, f"body {b.id} takes a shape other than {own} and {other}")
             return
         if b.shapes[0] != own or b.shapes[-1] != own:
             bad(RunRule.CONTINUITY, f"body {b.id} does not start and end in its own shape")
     held = 0  # index where the droplet reached its current anchor and orientation
-    turn = 0  # index of the last tick before the current turn
     for i, (p, q) in enumerate(pairwise(b.path), start=1):
         s0, s1 = b.shape_at(i - 1), b.shape_at(i)
-        if s0 != s1:  # a turn starts or lands
-            if p != q:
-                bad(RunRule.CONTINUITY, f"body {b.id} moves while it turns at tick {b.start + i}")
-            if s0 != box:
-                turn = i - 1
-            if s1 != box:
-                before = b.shape_at(turn)
-                if before == s1 or i - turn < gp.morph_ticks(own):
-                    bad(
-                        RunRule.CONTINUITY,
-                        f"body {b.id} turns {before} -> {s1} in {i - turn} ticks, "
-                        f"needs {gp.morph_ticks(own)}",
-                    )
-                held = i
+        if s0 != s1:  # a turn lands
+            if q not in gp.turn_anchors(p, s0):
+                bad(RunRule.CONTINUITY, f"body {b.id} turns from {p} to {q}, not about a corner")
+            elif i - held < gp.morph_ticks(own):
+                bad(
+                    RunRule.CONTINUITY,
+                    f"body {b.id} turns in {i - held} ticks, needs {gp.morph_ticks(own)}",
+                )
+            held = i
             continue
         if p == q:
             continue
-        if b.shapes and s0 == box:
-            bad(RunRule.CONTINUITY, f"body {b.id} moves mid-turn at tick {b.start + i}")
         dr, dc = q[0] - p[0], q[1] - p[1]
         if max(abs(dr), abs(dc)) > 1:
             bad(RunRule.CONTINUITY, f"body {b.id} jumps from {p} to {q}")
@@ -134,7 +140,18 @@ def _check_motion(b: Body, gp: GridPlatform, bad: Callable[[RunRule, str], None]
                 f"body {b.id} moves {p} -> {q} in {i - held} ticks, "
                 f"needs {gp.move_ticks(s0, dr, dc)} for a {s0} droplet",
             )
+        elif dr and dc and dead and _beside_dead(at(p, s0), dead):
+            bad(RunRule.CONTINUITY, f"body {b.id} moves diagonally next to a dead cell at {p}")
         held = i
+
+
+def _beside_dead(rect: Rect, dead: frozenset[Cell]) -> bool:
+    """Whether a dead cell lies next to a cell of `rect` in a cardinal direction."""
+    return any(
+        (r + a, c + b) in dead
+        for r, c in rect.cells()
+        for a, b in ((0, 1), (1, 0), (0, -1), (-1, 0))
+    )
 
 
 def check_run(run: Run, graph: OpGraph, chip: Chip, gp: GridPlatform) -> list[RunIssue]:
@@ -153,7 +170,7 @@ def check_run(run: Run, graph: OpGraph, chip: Chip, gp: GridPlatform) -> list[Ru
     rec = run.records
     # ---- 1. continuity and bounds
     for b in bodies:
-        _check_motion(b, gp, bad)
+        _check_motion(b, gp, bad, chip.dead)
         for i, p in enumerate(b.path):
             if i and p == b.path[i - 1] and b.shape_at(i) == b.shape_at(i - 1):
                 continue
@@ -166,6 +183,7 @@ def check_run(run: Run, graph: OpGraph, chip: Chip, gp: GridPlatform) -> list[Ru
             bad(RunRule.CONTINUITY, f"body {b.id} ends before it starts")
     # ---- 2. spacing between droplets: a pair is checked at the ticks where either moves,
     # appears, or the other changes (a still pair stays as it was)
+    by_id = {b.id: b for b in bodies}
     alive_at: dict[int, list[Body]] = defaultdict(list)
     for b in bodies:
         for t in range(b.start, _last_tick(b, horizon) + 1):
@@ -185,7 +203,7 @@ def check_run(run: Run, graph: OpGraph, chip: Chip, gp: GridPlatform) -> list[Ru
             if not moving and t not in (lo + 1, hi - 1):
                 continue
             for u in (t - 1, t, t + 1):
-                if exempt(a, b, min(t, u), gp):
+                if exempt(a, b, min(t, u), gp, by_id):
                     continue
                 rb = b.rect(u)
                 if rb is not None and ra.gap(rb) < sp:

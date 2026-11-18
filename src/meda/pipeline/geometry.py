@@ -213,12 +213,14 @@ class GridPlatform:
         """The shape a droplet of `shape` takes after a turn (h x w -> w x h)."""
         return (shape[1], shape[0])
 
-    def turn_box(self, shape: Shape) -> Shape:
-        """The footprint held during a turn at a fixed anchor: the square of the longer side,
-        which covers the shape before and after (a conservative bound on the shapes in
-        between)."""
-        m = max(shape)
-        return (m, m)
+    def turn_anchors(self, anchor: Cell, shape: Shape) -> list[Cell]:
+        """Anchors of the turned droplet after a turn from `anchor` (0.51, Nakamura et al.
+        2026): it pivots about one of its four corners, so the turned rectangle shares that
+        corner (for 1 x 2: one half stays, the other goes to the cell above or below it). May
+        lie off the chip; the caller checks."""
+        r, c = anchor
+        h, w = shape
+        return sorted({(r + dr, c + dc) for dr in (0, h - w) for dc in (0, w - h)})
 
     def can_turn(self, shape: Shape) -> bool:
         """Whether the router may turn a droplet of `shape` (`turns` on, not square)."""
@@ -372,6 +374,18 @@ def layout(instance: Instance, gp: GridPlatform) -> Chip:
 
 
 # ---------------------------------------------------------------- masks
+
+
+def near_dead(dead: np.ndarray, shape: Shape) -> np.ndarray:
+    """`out[r, c]` is True if a `shape` droplet anchored at `(r, c)` has a dead cell next to
+    one of its cells in a cardinal direction: it may not move diagonally from there (0.51,
+    Nakamura et al. 2026, condition 9). Shape of `out`: as `window_any`."""
+    plus = np.zeros_like(dead)
+    plus[1:, :] |= dead[:-1, :]
+    plus[:-1, :] |= dead[1:, :]
+    plus[:, 1:] |= dead[:, :-1]
+    plus[:, :-1] |= dead[:, 1:]
+    return window_any(plus, shape, 0)
 
 
 def window_any(grid: np.ndarray, shape: Shape, pad: int) -> np.ndarray:

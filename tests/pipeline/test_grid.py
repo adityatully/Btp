@@ -7,6 +7,7 @@ from __future__ import annotations
 
 from dataclasses import replace
 
+import numpy as np
 import pytest
 
 from meda.core.actions import Mix, Output, Source
@@ -21,11 +22,13 @@ from meda.pipeline.router import (
     ChipState,
     FreeRouter,
     RouteRequest,
+    exempt_until,
     free_distances,
     turn_distances,
 )
 from meda.pipeline.run_check import (
     RunError,
+    RunIssue,
     RunRule,
     _check_motion,
     check_run,
@@ -35,6 +38,7 @@ from meda.pipeline.run_check import (
 from meda.pipeline.schedule import critical_path
 from meda.solvers.baselines.share import ShareSolver
 from tests.core.helpers import chip, dilution
+from tests.pipeline import nakamura_reference
 from tests.pipeline.test_schedule import SHARED, SHARED_PLAN, _dag, _weights
 
 GP = GridPlatform.load()
@@ -198,8 +202,10 @@ def test_move_ticks_follow_width_height_and_the_diagonal_rule() -> None:
 
 def test_wide_droplet_is_slow_sideways_and_fast_up_and_down() -> None:
     """A 1 x 2 droplet (one row, two columns): 3 cells sideways = 6 ticks, 3 cells down = 3;
-    the path holds each anchor for the move's ticks."""
+    the path holds each anchor for the move's ticks. (Turns off: turned, the sideways trip
+    also takes 6, 2 + 2 + 2, by another path.)"""
     st = _bare(10, 10)
+    st.gp = replace(st.gp, turns=False)
     res = AStarRouter().route([RouteRequest(1, (1, 2), 2, (0, 0), (0, 3), 0, to_waste=True)], st)
     assert res.ok and len(res.paths[0]) - 1 == 6
     assert res.paths[0] == ((0, 0), (0, 0), (0, 1), (0, 1), (0, 2), (0, 2), (0, 3))
@@ -220,12 +226,13 @@ def test_free_distances_weigh_moves_by_shape() -> None:
 
 
 def test_turning_pays_off_on_long_trips_along_the_slow_side() -> None:
-    """A 1 x 2 droplet 6 cells to the right: 12 ticks as it is; turned to 2 x 1 (2 ticks),
-    6 moves at 1, turned back (2) = 10. Over 4 cells both take 8."""
+    """A 1 x 2 droplet 6 cells to the right: 12 ticks as it is. Turned about its right half to
+    2 x 1 one cell on (2 ticks), 5 moves at 1, turned back about its top cell (2) = 9. Over 4
+    cells: 8 as it is, 2 + 3 + 2 = 7 turned (pivots, 0.51)."""
     c = Chip("hand", 8, 12, {}, (), (), frozenset(), Rect(0, 0, 8, 12))
     assert int(free_distances(c, GP, (1, 2), (3, 6))[3, 0]) == 12
-    assert int(turn_distances(c, GP, (1, 2), (3, 6))[3, 0]) == 10
-    assert int(turn_distances(c, GP, (1, 2), (3, 4))[3, 0]) == 8
+    assert int(turn_distances(c, GP, (1, 2), (3, 6))[3, 0]) == 9
+    assert int(turn_distances(c, GP, (1, 2), (3, 4))[3, 0]) == 7
 
 
 def test_free_router_options_take_the_fastest_trip() -> None:
@@ -242,17 +249,17 @@ def test_free_router_options_take_the_fastest_trip() -> None:
 
 
 def test_astar_turns_on_a_long_trip_along_the_slow_side() -> None:
-    """The free case above, now with A*: 1 x 2 from (3, 0) to (3, 6) takes 10 ticks with
-    turns (turn 2, 6 moves at 1, turn back 2), 12 without; it holds the 2 x 2 turn box for one
-    tick each turn and ends in its own shape."""
+    """The free case above, now with A*: 9 ticks with turns, 12 without. Each turn, like a
+    move, holds the old shape and anchor for a tick, then lands about a corner; it ends in its
+    own shape."""
     st = _bare(8, 12)
     req = RouteRequest(1, (1, 2), 2, (3, 0), (3, 6), 0, to_waste=True)
     res = AStarRouter().route([req], st)
-    assert res.ok and len(res.paths[0]) - 1 == 10
+    assert res.ok and len(res.paths[0]) - 1 == 9
     shapes = res.shapes[0]
     assert shapes == st.bodies[1].shapes and len(shapes) == len(res.paths[0])
-    assert shapes[0] == shapes[-1] == (1, 2) and shapes.count((2, 2)) == 2
-    assert shapes.count((2, 1)) == 7  # the tick it lands turned, then 6 one-tick moves
+    assert shapes[0] == shapes[1] == shapes[-1] == (1, 2) and shapes.count((2, 1)) == 7
+    assert res.paths[0][2] == (3, 1)  # pivoted about its right half
     st = _bare(8, 12)
     st.gp = replace(st.gp, turns=False)
     res = AStarRouter().route([req], st)
@@ -260,10 +267,10 @@ def test_astar_turns_on_a_long_trip_along_the_slow_side() -> None:
 
 
 def test_astar_does_not_turn_when_it_does_not_pay() -> None:
-    """3 cells sideways: 6 ticks as it is, 7 with two turns."""
+    """2 cells sideways: 4 ticks as it is; turned, 2 + 1 + 2 = 5."""
     st = _bare(10, 10)
-    res = AStarRouter().route([RouteRequest(1, (1, 2), 2, (0, 0), (0, 3), 0, to_waste=True)], st)
-    assert res.ok and len(res.paths[0]) - 1 == 6 and res.shapes == ((),)
+    res = AStarRouter().route([RouteRequest(1, (1, 2), 2, (0, 0), (0, 2), 0, to_waste=True)], st)
+    assert res.ok and len(res.paths[0]) - 1 == 4 and res.shapes == ((),)
 
 
 def test_turning_gets_a_droplet_through_a_one_cell_gap() -> None:
@@ -287,29 +294,84 @@ def test_turning_gets_a_droplet_through_a_one_cell_gap() -> None:
     assert not issues
 
 
-def test_checker_rejects_bad_turns() -> None:
-    """A 1 x 2 turn takes 2 ticks through the 2 x 2 box: one tick is too fast, a move inside
-    the box is not allowed, and a droplet must end in its own shape."""
+def test_checker_rejects_bad_turns_and_diagonals_beside_dead_cells() -> None:
+    """A 1 x 2 turn takes 2 ticks and pivots about a corner (0.51); a droplet ends in its own
+    shape; it may not move diagonally from beside a dead cell (Nakamura et al. 2026)."""
     gp = _small(8, 8)
 
     def issues(
         path: tuple[tuple[int, int], ...],
-        shapes: tuple[tuple[int, int], ...],
+        shapes: tuple[tuple[int, int], ...] = (),
         shape: tuple[int, int] = (1, 2),
+        dead: frozenset[tuple[int, int]] = frozenset(),
     ) -> str:
         out: list[str] = []
         body = Body(1, shape, 2, 0, path, INF, "move", shapes=shapes)
-        _check_motion(body, gp, lambda rule, msg: out.append(msg))
+        _check_motion(body, gp, lambda rule, msg: out.append(msg), dead)
         return "; ".join(out)
 
-    own, turned, box = (1, 2), (2, 1), (2, 2)
-    here = ((0, 0),)
-    assert issues(here * 5, (own, box, turned, box, own)) == ""
-    assert "needs 2" in issues(here * 3, (own, turned, own))
-    assert "moves while it turns" in issues(((0, 0), (0, 0), (1, 0)), (own, box, turned))
-    assert "mid-turn" in issues(((0, 0), (0, 0), (0, 1), (0, 1)), (own, box, box, turned))
-    assert "own shape" in issues(here * 3, (own, box, turned))
-    assert "may not turn" in issues(here * 2, (box, box), shape=box)
+    own, turned = (1, 2), (2, 1)
+    a, b = (2, 2), (2, 3)  # turned about the right half: the anchor moves one cell right
+    assert issues((a, a, b, b, a), (own, own, turned, turned, own)) == ""
+    assert "needs 2" in issues((a, b, b, a), (own, turned, turned, own))
+    off = (3, 3)  # not one of the four corner pivots of a 1 x 2 at (2, 2)
+    assert "not about a corner" in issues((a, a, off, off, a), (own, own, turned, turned, own))
+    assert "own shape" in issues((a, a, b), (own, own, turned))
+    assert "may not turn" in issues((a, a), ((2, 2), (2, 2)), shape=(2, 2))
+    diag = ((2, 2), (2, 2), (3, 3))
+    assert issues(diag) == ""
+    assert "dead cell" in issues(diag, dead=frozenset({(1, 3)}))  # above the right half
+    assert issues(diag, dead=frozenset({(0, 0)})) == ""
+
+
+# ---------------------------------------------------------------- the Dijkstra check (E-99)
+
+
+def _astar_time(grid: list[str], turns: bool = True) -> int | None:
+    h, w, dead, start, target = nakamura_reference.parse(grid)
+    chip_ = Chip("nakamura", h, w, {}, (), (), dead, Rect(0, 0, h, w))
+    st = ChipState(chip_, replace(GP, grid=(h, w), turns=turns))
+    res = AStarRouter().route([RouteRequest(1, (1, 2), 2, start, target, 0, to_waste=True)], st)
+    if res.ok:
+        body = st.bodies[1]
+        issues: list[str] = []
+        _check_motion(body, st.gp, lambda rule, msg: issues.append(msg), dead)
+        assert not issues, issues
+    return len(res.paths[0]) - 1 if res.ok else None
+
+
+def test_astar_matches_the_dijkstra_paper_on_its_five_chips() -> None:
+    """Nakamura et al. 2026, Figs. 8-12: our A* with turns (no splitting) finds the optimum of
+    the paper's graph on every chip; without turns three are blocked. With the published 2 ->
+    1 + 1 split, the paper's model is faster still (Q-153)."""
+    expect = {"exp1": 10, "exp2": 11, "exp3": 14, "exp4": 16, "exp5": 24}
+    for name, grid in nakamura_reference.PAPER_GRIDS.items():
+        assert nakamura_reference.route_time(grid) == expect[name], name
+        assert _astar_time(grid) == expect[name], name
+    assert [_astar_time(g, turns=False) for g in nakamura_reference.PAPER_GRIDS.values()] == [
+        10,
+        None,
+        None,
+        16,
+        None,
+    ]
+    grids = nakamura_reference.PAPER_GRIDS.values()
+    split = [nakamura_reference.route_time(g, split=True) for g in grids]
+    assert split == [8, 7, 9, 10, 15]
+
+
+def test_astar_matches_the_dijkstra_paper_on_random_chips() -> None:
+    """As the paper's large experiments: random dead cells (5-30%), start bottom-left, target
+    top-right; 40 chips of 5 x 5 to 10 x 10, including unroutable ones."""
+    rng = np.random.default_rng(99)
+    for _ in range(40):
+        n = int(rng.integers(5, 11))
+        frac = float(rng.choice([0.05, 0.1, 0.15, 0.2, 0.25, 0.3]))
+        rows = [["X" if rng.random() < frac else "." for _ in range(n)] for _ in range(n)]
+        rows[n - 1][0] = rows[n - 1][1] = "S"
+        rows[0][n - 2] = rows[0][n - 1] = "T"
+        grid = ["".join(r) for r in rows]
+        assert _astar_time(grid) == nakamura_reference.route_time(grid), grid
 
 
 def test_checker_rejects_a_droplet_moving_too_fast() -> None:
@@ -450,3 +512,32 @@ def test_tampering_breaks_the_right_rule() -> None:
     with pytest.raises(RunError) as e:
         validate_run(replace(run, records=recs), g, c, GP)  # type: ignore[arg-type]
     assert RunRule.OPERATIONS in e.value.rules
+
+
+def test_run_error_survives_pickling() -> None:
+    # Workers send errors back by pickling; a bad round trip hangs the pool.
+    import pickle
+
+    err = RunError("x-1", [RunIssue(RunRule.SPACING, "too close")])
+    back = pickle.loads(pickle.dumps(err))
+    assert str(back) == str(err)
+    assert back.rules == {RunRule.SPACING}
+
+
+def test_remainder_keeps_its_parents_exemption() -> None:
+    # val_s5-040 (2026-11-18): a 2 x 2 droplet gives a 1 x 1 part (window from the 1 x 2
+    # remainder), then the remainder gives another part and shrinks to 1 x 1 in place. The
+    # shrunk remainder is the same liquid: the first part keeps its longer window.
+    gp = GP
+    parent = Body(1, (2, 2), 4, 0, ((5, 5),), 1, "stored", droplet=0)
+    part = Body(2, (1, 1), 1, 1, ((5, 5), (4, 4)), INF, "mix", dest=7, parent=1, droplet=0)
+    rem = Body(3, (1, 2), 3, 1, ((5, 5),), 2, "stored", parent=1, droplet=0)
+    rem2 = Body(4, (1, 1), 1, 2, ((5, 5),), INF, "stored", parent=3, droplet=0)
+    bodies = {b.id: b for b in (parent, part, rem, rem2)}
+    before = exempt_until(part, rem, gp)
+    assert exempt_until(part, rem2, gp) < before  # counted afresh from the second take
+    assert exempt_until(part, rem2, gp, bodies) == before
+    assert exempt_until(rem2, part, gp, bodies) == before
+    # a part that moves off is not a remainder: it keeps its own window only
+    other = Body(5, (1, 1), 1, 2, ((5, 5), (6, 6)), INF, "mix", dest=8, parent=3, droplet=0)
+    assert exempt_until(part, other, gp, bodies | {5: other}) == exempt_until(part, other, gp)
