@@ -44,7 +44,7 @@ They describe **about 25 methods**, of which **7 are built and benchmarked**.
 
 | Pri. | Method | Paper (file) | Problem | Optimises | Use for us |
 |---|---|---|---|---|---|
-| **built (L-23)** | **MTDA** | Kamal, Gupta, Singla, Tiwari, Kohli, Roy, Bhattacharya, TODAES 25(3) 2020 (`3357604.pdf` = `MTDA.pdf`) | dilution, **many targets**, N-segment mixer, targets as z base-N digits, intermediates reused up to N units, no demand | mixes, then waste | s1/s3 dilution with M = N; its mixes are (a:b), (a:1:b), (a:1:1:b) of unit volumes, so valid k:l MEDA mixes. Check against Fig. 5 (90/256, N 4) and Fig. 3(b) (234, 72, 136 over 256). Its own Table 4 has WARA ahead at N 2. Own protocol: `test_mtda_v1` (D-97) |
+| **built (L-23)** | **MTDA** | Kamal, Gupta, Singla, Tiwari, Kohli, Roy, Bhattacharya, TODAES 25(3) 2020 (`3357604.pdf` = `MTDA.pdf`) | dilution, **many targets**, N-segment mixer, targets as z base-N digits, intermediates reused up to N units, no demand | mixes, then waste | s1/s3 dilution with M = N; its mixes are (a:b), (a:1:b), (a:1:1:b) of unit volumes, so valid k:l MEDA mixes. Check against Fig. 5 (90/256, N 4) and Fig. 3(b) (234, 72, 136 over 256). Its own Table 4 has WARA ahead at N 2. Own protocol: `test_mtda_v2` (D-97) |
 
 ## 4. Cited by these papers, PDF not on disk
 

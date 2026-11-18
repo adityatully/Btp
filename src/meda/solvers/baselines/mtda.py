@@ -72,7 +72,8 @@ def mtda(instance: Instance, segments: int | None = None) -> PaperGraph:
 
 def digits_of(instance: Instance, n: int, s: int) -> tuple[int, list[Digits]]:
     """(z, each target's z radix-n digits): the least z with n^z within the chip's denominator
-    limit that puts every target's nearest c / n^z within its tolerance."""
+    limit that puts every target's nearest c / n^z within its tolerance and strictly between
+    0 and 1 (CFapprox, Algorithm 5, raises z until the target is met)."""
     top, den = 0, n
     while den <= instance.chip.max_denominator:
         top, den = top + 1, den * n
@@ -83,10 +84,8 @@ def digits_of(instance: Instance, n: int, s: int) -> tuple[int, list[Digits]]:
             c = t.composition.share(s)
             x = (2 * c.num * den + c.den) // (2 * c.den)  # nearest, ties up
             diff = Rational.of(x, den) - c
-            if max(diff, -diff) > t.tolerance:
+            if max(diff, -diff) > t.tolerance or not 0 < x < den:  # a pure fluid: next z
                 break
-            if not 0 < x < den:
-                raise NotApplicable(f"target {t.id} is a pure fluid at accuracy {n}^{z}")
             out.append(tuple((x // n ** (z - 1 - k)) % n for k in range(z)))
         else:
             return z, out

@@ -79,8 +79,10 @@ so we can put our numbers next to its printed table:
   sets per (N, T) for T = 2–5 (Table III).
 - NFSP: d = 10, all 1023 targets; its many-target table at d = 9 (Table II).
 - MRCM, DFMM: their worked examples and sweeps.
-- MTDA (added 2026-11-18, D-97): `test_mtda_v1`, its Section 8 protocol (mixer-N, N = 2..8,
-  z = 4, 2-100 targets) and Table 4 (N = 2, z = 10), 10 per cell, steps goal; B2(c).
+- MTDA (added 2026-11-18, D-97, D-99): `test_mtda_v2`, every kind of problem the paper runs it on:
+  Section 8's grid (mixer-N, N = 2..8, z = 4, 2-100 targets), Fig. 15 (N = 2, z = 8), Table 4
+  (N = 2, z = 10), Fig. 16(a)'s tolerant CFs (epsilon 0.01-0.0001, mixer chosen up to 10) and
+  the paper's Fig. 3, 5, 7 and Table 5(a); 10 per random cell, 564 problems, steps goal; B2(c).
 Answers: do we reproduce each paper's numbers, and do we beat it on its own problems and
 metric?
 

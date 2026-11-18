@@ -1486,6 +1486,23 @@ Format: date · decision · alternatives considered · why · evidence.
 - Sharing case (targets 3/4 and 1/4 at M = 2): optimum 3 mixes vs naive 4.
 
 ### E-2 (2026-10-13) Tabular Q on tiny instances (M6)
+- **D-99 (2026-11-18) MTDA's set covers every kind of problem the paper runs it on (user: "ensure
+  that you covered all possible variety of problems that this method can possibly work on").**
+  Checked against the paper section by section. `test_mtda_v1` (D-97, never run, removed) had
+  Section 8's grid and Table 4; missing were Fig. 15 (N = 2, z = 8, against MTSE+BCS), Fig.
+  16(a) (tolerant targets: eta = 10 real CFs, epsilon 0.01 / 0.001 / 0.0001, the mixer chosen by
+  MixerDesign among N = 2..10) and the paper's own examples (Fig. 3, 5, 7, Table 5(a)).
+  `test_mtda_v2` (SPEC 0.54) adds them: 60 cells, 564 problems; tolerant cells at M = 10 with
+  1-unit droplets (MTDA's root mix of N units then wastes N - 1, which costs it fluid, not mixes:
+  the steps goal ranks mixes first) and the chip's denominator limit 10^4 / 10^5 / 10^6. MTDA
+  takes the N with the fewest mixes, then least waste, not MixerDesign's weighted f (Eq. 5): the
+  best MTDA under the steps goal. A tolerant target that rounds to a pure fluid now moves to the
+  next accuracy level (CFapprox, Algorithm 5); before, 3 of 30 tolerant problems were declined;
+  now MTDA takes all 564. Out of scope, as before: storage scheduling (MTSA), the storage
+  architecture and valve control (Sections 6-7). Light check (Mac, 20 s search, not a result):
+  cheaper than MTDA on all 6 tried (paper-fig3 0.89, fig5 0.50, fig7 0.67, table5a 0.41,
+  tol1000 0.42, N2-z8-T20 0.76 of MTDA's steps-goal cost); on Fig. 3 MTDA's own N-segment count
+  is lower (6 against our 8 two-droplet mixes). Same reading as D-97.
 - **D-97 (2026-11-18) MTDA joins the benchmark, how it is measured (user: "we now would be
   required to benchmark against this MTDA method also").** MTDA (Kamal et al., TODAES 2020,
   L-22, built L-23) is a dilution method, many targets, its goal mixes then waste: `OWN_GOAL`

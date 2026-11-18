@@ -1,6 +1,12 @@
 # MEDA Design Automation — Codebase Specification
 
-Version 0.53 · 2026-11-18
+Version 0.54 · 2026-11-18
+
+Changes in 0.54 (MTDA coverage, paper log D-99): `test_mtda_v2` replaces `test_mtda_v1` (never
+run): it adds Fig. 15's N = 2, z = 8 cells, Fig. 16(a)'s tolerant cells (10 real CFs at epsilon
+0.01, 0.001, 0.0001, M = 10) and the paper's Fig. 3, 5, 7 and Table 5(a), 564 problems. MTDA
+moves a tolerant target that rounds to a pure fluid to the next accuracy level, as CFapprox
+does (before: not applicable). No default physical assumption changes.
 
 Changes in 0.53 (MTDA joins the published methods, 10.4; paper log D-97, L-23): `mtda.py`,
 Kamal et al.'s multi-target dilution for an N-segment mixer (TODAES 2020), read as one MEDA mix

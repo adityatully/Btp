@@ -871,7 +871,7 @@ def run_task(
     cfg = {"costs": _load(COSTS), "env": _load("env/sample_prep.yaml")}
     cfg["env"]["hint_source"] = opts["hints"]
     cfg["env"]["T_pad"] = max(cfg["env"]["T_pad"], len(inst.targets))
-    # D-97: and the droplet rows to the chip's storage (test_mtda_v1 has 64; a memory setting)
+    # D-97: and the droplet rows to the chip's storage (test_mtda_v2 has 64; a memory setting)
     cfg["env"]["N_pad"] = max(cfg["env"]["N_pad"], inst.chip.storage_capacity)
     env = build_env(cfg, [inst])
     task = dict(task)

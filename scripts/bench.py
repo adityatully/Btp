@@ -64,7 +64,7 @@ B3 (D-71), the 1:1 engine check: `sets=dmfb_sweep_v1 goals=fluid` (`dmfb_checks`
 
 MTDA (D-97, Kamal et al. 2020): `add=<records>[,..] methods=mtda out=<file>` puts a published
 method into earlier records (fluid records; nothing else is run again), for B1, B2(a), B2(b)
-and B3. B2(c), MTDA's own experiments: `sets=test_mtda_v1 goals=steps methods=mtda
+and B3. B2(c), MTDA's own experiments: `sets=test_mtda_v2 goals=steps methods=mtda
 planners=share published_goal=steps` (the lookahead planner runs take hours at 100 targets;
 they are our baselines, not the comparison), read by `mtda_table`. `planners` (default all 4)
 picks the planner runs; `published_goal` (default fluid) is the goal whose records hold them.
@@ -557,7 +557,7 @@ def summarise(path: Path) -> str:
         lines += ["", *dmfb_checks(recs)]
     if any(r["set"] == "test_emrcm_v1" for r in recs):
         lines += ["", *emrcm_table(recs)]
-    if any(r["set"] == "test_mtda_v1" for r in recs):
+    if any(r["set"] == "test_mtda_v2" for r in recs):
         lines += ["", *mtda_table(recs)]
     lines += ["", "Reading (fixed in advance, D-69; per set, D-70):"]
     for s in sorted({r["set"] for r in recs}):
@@ -644,7 +644,7 @@ def mtda_table(recs: list[dict[str, Any]]) -> list[str]:
     droplets) and MTDA's own N-segment mixes (one per node, as the paper counts). Table 4's
     printed per-target numbers sit beside MTDA's (our reading) for N = 2, z = 10."""
     rows = [
-        "## MTDA's protocol (`test_mtda_v1`, steps goal, our method at 900 s)",
+        "## MTDA's protocol (`test_mtda_v2`, steps goal, our method at 900 s)",
         "",
         "| N-z-T | n | MTDA accepts | ours / MTDA (mean) | w / t / l | mixes: ours / MTDA "
         "engine / MTDA N-segment | waste: ours / MTDA | sample: ours / MTDA | Table 4 per "
@@ -653,17 +653,21 @@ def mtda_table(recs: list[dict[str, Any]]) -> list[str]:
     ]
     groups: dict[str, list[dict[str, Any]]] = defaultdict(list)
     for r in recs:
-        if r["set"] == "test_mtda_v1" and r["goal"] == "steps" and "published" in r:
+        if r["set"] == "test_mtda_v2" and r["goal"] == "steps" and "published" in r:
             groups[r["cell"]].append(r)
 
     def mean(xs: list[float]) -> str:
         return f"{np.mean(xs):.2f}" if xs else "-"
 
-    def key(cell: str) -> tuple[int, ...]:
-        return tuple(int(x[1:]) for x in cell.split("-"))
+    def key(cell: str) -> tuple[int, int, int, str]:
+        """Exact cells N-z-T by number, then the tolerant cells, then the paper's examples."""
+        if cell.startswith("N"):
+            n, z, t = (int(x[1:]) for x in cell.split("-"))
+            return (0, n, z * 1000 + t, cell)
+        return (1 if cell.startswith("tol") else 2, 0, 0, cell)
 
     for cell in sorted(groups, key=key):
-        _, z, t = key(cell)
+        z, t = (key(cell)[2] // 1000, key(cell)[2] % 1000) if cell.startswith("N") else (0, 0)
         rs = [r for r in groups[cell] if ours_at(r, TIMES[1]) is not None]
         acc = [r for r in rs if r["published"].get("mtda", {}).get("by_goal")]
         wtl = "-"

@@ -109,3 +109,12 @@ def test_early_outputs_keep_storage_small() -> None:
     replay(inst, emit(inst, graph))
     with pytest.raises(NotApplicable):
         emit(inst, replace(graph, early_outputs=False))
+
+
+def test_near_pure_target_raises_z() -> None:
+    """D-99: 1/200 within 1/100 rounds to pure buffer at mixer-4 for z = 1-3; CFapprox raises
+    z until the CF is a dilution: 1/256 at z = 4."""
+    inst = instance([1], 200, 4, v=4, tol=Rational.of(1, 100))
+    z, digits = digits_of(inst, 4, 0)
+    assert z == 4 and digits == [(0, 0, 0, 1)]
+    counts(inst, 4)
