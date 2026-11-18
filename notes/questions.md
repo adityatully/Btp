@@ -37,6 +37,7 @@ chats. Last updated 2026-11-03.*
 | Q-41 | What's the reference ("best known") every grading uses? | 2.1 |
 | Q-42 | Can we prove more optima on the val sets? | 2.2 |
 | Q-156 | Does the sharing pass need all 4 target orders, or do 1-2 give the same plans faster? | 6.7 (D-96) |
+| Q-157 | Does our method beat MTDA (flow-based multi-target dilution) on the final sets and on its own protocol? | 6.8 (D-97) |
 | Q-158 | Is every choice in method-v3 backed by an ablation, a sweep, a proof or a citation? | 6.9 (D-98) |
 | Q-159 | Is the s4-s5 depth limit (E-81) a property of the method, or of 256 simulations per move? | 6.9, J2 (D-98) |
 | Q-160 | How much do method-v3's results vary between identical runs (CPU deadline, tie order)? | 6.9, J1 (D-98) |
@@ -981,6 +982,11 @@ the same 900 s. J2 sweeps sims x C_PUCT and records depth.
 **Q-158 Is every choice in method-v3 justified?** · **Open → plan 6.9** (D-98, 2026-11-18)
 `notes/justification_audit.md` lists 62 decisions; 17 have never been measured and 18 only
 partly. Runs J0-J9 close them.
+
+**Q-157 Does our method beat MTDA?** · **Open → plan 6.8** (D-97, 2026-11-18) MTDA (Kamal
+et al., TODAES 2020) is a flow-based multi-target dilution method from Sudip Roy's group, built
+as our reading (L-23). Check: added to the final B1-B3 records (`bench.py add=`), and B2(c) on
+its own protocol (`test_mtda_v1`, steps goal); bar in D-97.
 
 **Q-156 Does the sharing pass need all 4 target orders?** · **Open → plan 6.7** (D-96,
 2026-11-17) The pass runs once per distinct target order and the search calls it at every

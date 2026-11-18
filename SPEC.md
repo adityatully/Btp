@@ -1,6 +1,14 @@
 # MEDA Design Automation — Codebase Specification
 
-Version 0.52 · 2026-11-18
+Version 0.53 · 2026-11-18
+
+Changes in 0.53 (MTDA joins the published methods, 10.4; paper log D-97, L-23): `mtda.py`,
+Kamal et al.'s multi-target dilution for an N-segment mixer (TODAES 2020), read as one MEDA mix
+of N <= M units. `PaperGraph.early_outputs` (default off, so no other method's plan changes):
+a graph that sets it outputs a target as soon as it is made and discards an intermediate after
+its last use, as MTDA's chip does. New set `test_mtda_v1` (B2(c), MTDA's own experiments,
+storage 64); the search raises the env's `N_pad` to the chip's storage, like `T_pad` (memory
+settings). No default physical assumption changes.
 
 Changes in 0.52 (bug fix, found on val_s5-040 in the 0.51 pilot): a remainder left in place by
 a take is its parent shrunk (14.10), so it keeps every spacing exemption its parent had
@@ -1862,6 +1870,12 @@ serves as tabular Q's value prior (11.3).
     first in the bench), CFs up to 2^`MAX_BITS` = 2^10 (the paper's accuracy; 11 bits takes
     seconds a CF). Reproduces Table 5 and Table 6's sample,
     buffer and step averages; its waste average not (L-18).
+  - `mtda.py` (0.53): **MTDA** (Kamal et al., ACM TODAES 25(3), 2020), dilution, many targets,
+    mixer-N (N <= M; the fewest mixes, then least waste, over N unless given): each target's
+    tree from its radix-N digits, mixes (a:b), (a:1:b), (a:1:1:b) filling all N units, one
+    global table sharing an intermediate N times; targets used whole, demand made separately.
+    Reproduces Fig. 5 exactly and Table 4 at two targets (within 10%); at 10-100 targets it
+    shares more than Table 4 prints, so its mixes and waste are lower there (our reading, L-23).
 - `share.py` (0.24): the **sharing pass**. The targets are built one delivery group at a time
   on one chip; every leftover stays in a pool of idle droplets instead of going to waste. Per
   group it prices, on a copy of the plan, (1) a pool droplet within tolerance, (2) one mix of

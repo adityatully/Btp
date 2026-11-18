@@ -196,3 +196,24 @@ def test_skip_resumes_a_run_without_the_pairs_already_done(
     assert ran == [tasks[1]["id"]]
     with pytest.raises(ValueError, match="skip"):
         B.main(["sets=test_s1_v1", "goals=fluid", "limit=2", f"skip={old}", f"out={old}"])
+
+
+def test_add_runs_only_the_new_methods_on_earlier_records(tmp_path: Path) -> None:
+    """D-97 (`add=`): the named published methods are run on earlier fluid records and stored;
+    everything else in the record, and every non-fluid record, is kept as it was."""
+    import json
+
+    task = B.tasks(["test_s1_v1"], ["fluid"], 1)[0]
+    rec = {"set": task["set"], "id": task["id"], "goal": "fluid", "ours": {"x": 1},
+           "published": {"mrcm": {"cost": 1.0}}}  # fmt: skip
+    steps = {**rec, "goal": "steps", "published": {}}
+    src = tmp_path / "old.jsonl"
+    src.write_text(json.dumps(rec) + "\n" + json.dumps(steps) + "\n")
+    out = tmp_path / "new.jsonl"
+    B.add_records({"add": str(src), "methods": "mtda", "out": str(out)})
+    new = [json.loads(x) for x in out.read_text().splitlines()]
+    assert new[0]["ours"] == {"x": 1} and new[0]["published"]["mrcm"] == {"cost": 1.0}
+    assert set(new[0]["published"]) == {"mrcm", "mtda"}
+    assert new[1] == steps
+    with pytest.raises(ValueError):
+        B.add_records({"add": str(src), "methods": "mtda", "out": str(src)})

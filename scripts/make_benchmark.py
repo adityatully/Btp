@@ -623,6 +623,103 @@ def build_emrcm_val() -> BenchmarkSet:
     return build_emrcm("val_emrcm", EMRCM_VAL_SEED, EMRCM_VAL_CELLS, frozenset(test.hashes()))
 
 
+MTDA_SEED, MTDA_STORAGE = 20261118, 64  # D-97; Table 4's 100 targets need more than 32
+MTDA_TARGETS = (2, 5, 10, 20, 50, 100)  # Section 8: "sample size" eta
+MTDA_CELLS = [(n, 4, t) for n in range(2, 9) for t in MTDA_TARGETS] + [
+    (2, 10, t)
+    for t in (2, 10, 20, 50, 100)  # Table 4 (N = 2, z = 10)
+]
+MTDA_PER_CELL = 10
+
+
+def build_mtda(
+    cells: list[tuple[int, int, int]] = MTDA_CELLS, per_cell: int = MTDA_PER_CELL
+) -> BenchmarkSet:
+    """MTDA's own protocol (Kamal et al., TODAES 25(3) 2020, Section 8; benchmark plan B2,
+    D-97): mixer-N for N = 2..8 at accuracy z = 4, eta = 2, 5, 10, 20, 50, 100 random target CFs
+    c / N^z (c uniform in 1..N^z - 1, drawn with replacement: a repeated CF is a target of demand
+    2, which MTDA makes twice, as the paper does); and Table 4's N = 2, z = 10. The mixer is one
+    MEDA mix of N units (M = N), a target is the mixer's whole output (an N-unit droplet, used
+    whole, Section 4.4.3), storage `MTDA_STORAGE` (MTDA ignores storage, its scheduler MTSA comes
+    after; a plan of MTDA's that does not fit is reported as not applicable). `per_cell` sets
+    per (N, z, eta); no problem of any other set in `benchmarks/` is drawn."""
+    from meda.solvers.baselines.mtda import mtda
+    from meda.solvers.baselines.paper_graph import NotApplicable, emit
+
+    weights = load_weights("steps_first")
+    base = load_chip("meda_m8")
+    rng = np.random.default_rng(MTDA_SEED)
+    paths = sorted((ROOT / "benchmarks").glob("*_v*.json"))
+    seen: set[str] = set().union(
+        *(BenchmarkSet.read(p.stem).hashes() for p in paths if not p.stem.startswith("test_mtda"))
+    )
+    instances: list[Instance] = []
+    for n, z, eta in cells:
+        den = n**z
+        chip = replace(base, name=f"{base.name}-M{n}-S{MTDA_STORAGE}", max_mix_volume=n,
+                       storage_capacity=MTDA_STORAGE, max_denominator=den)  # fmt: skip
+        made = 0
+        while made < per_cell:
+            cs = sorted(int(c) for c in rng.integers(1, den, size=eta))
+            demand: dict[int, int] = {}
+            for c in cs:
+                demand[c] = demand.get(c, 0) + 1
+            targets = tuple(
+                Target(i, 0, Composition.from_ints((c, den - c), den), ZERO, n, d)
+                for i, (c, d) in enumerate(demand.items())
+            )
+            probe = Instance("probe", SB, targets, chip, 10**6)
+            key = instance_hash(probe)
+            if key in seen:
+                continue
+            seen.add(key)
+            witness = tree_plan(probe)
+            if witness is None:
+                raise ValueError(f"N{n}-z{z}-T{eta}: the split tree finds no plan for {cs}")
+            try:  # MTDA's plan must fit the step limit; one that breaks storage is reported
+                theirs = len(emit(replace(probe, step_limit=10**6), mtda(probe, n)))
+            except NotApplicable:
+                theirs = 0
+            limit = max(4 * step_limit_base(probe, "depth_support"), 2 * len(witness), 2 * theirs)
+            instances.append(
+                replace(
+                    probe,
+                    instance_id=f"test_mtda-{len(instances):04d}",
+                    step_limit=limit,
+                    metadata={
+                        "generator": "mtda_protocol",
+                        "cell": f"N{n}-z{z}-T{eta}",
+                        "segments": n,
+                        "witness_actions": len(witness),
+                        "witness_source": "tree",
+                    },
+                )
+            )
+            made += 1
+    return BenchmarkSet(
+        name="test_mtda",
+        version=1,
+        instances=tuple(instances),
+        reference=answer_key(instances, weights),
+        generator={
+            "builder": "scripts/make_benchmark.py:build_mtda",
+            "protocol": "MTDA (Kamal et al., ACM TODAES 25(3) 2020), Section 8 and Table 4",
+            "cells": [f"N{n}-z{z}-T{t}" for n, z, t in cells],
+            "per_cell": per_cell,
+            "storage": MTDA_STORAGE,
+            "costs": "steps_first",
+            "answer_key": "[root conservation bound (SPEC 0.21), cheaper of naive and tree]",
+        },
+        seeds=(MTDA_SEED,),
+        description=(
+            "Benchmark plan B2 (D-97): MTDA's own experiments. Mixer-N = one MEDA mix of N "
+            "units (M = N), N = 2..8 at z = 4 and N = 2 at z = 10 (Table 4); eta = 2..100 random "
+            "CFs c / N^z, each an N-unit droplet; a repeated CF is demand 2. Graded under "
+            "costs/steps_first (MTDA's goal: mixes, then waste)."
+        ),
+    )
+
+
 def build_dmfb_sweep() -> BenchmarkSet:
     """Tier 2 engine check (SPEC 8.4; benchmark plan B3, D-71): every n/2^d for d = 4..8 on the
     1:1 chip `dmfb_m2` at precision 2^d, one 1-unit droplet each (491 problems). The chip's
@@ -672,6 +769,7 @@ BUILDERS: dict[str, Callable[[], BenchmarkSet]] = {
     "test_emrcm_v1": build_emrcm,
     "val_emrcm_v1": build_emrcm_val,
     "dmfb_sweep_v1": build_dmfb_sweep,
+    "test_mtda_v1": build_mtda,
 }
 
 

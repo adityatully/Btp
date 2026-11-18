@@ -1486,6 +1486,33 @@ Format: date · decision · alternatives considered · why · evidence.
 - Sharing case (targets 3/4 and 1/4 at M = 2): optimum 3 mixes vs naive 4.
 
 ### E-2 (2026-10-13) Tabular Q on tiny instances (M6)
+- **D-97 (2026-11-18) MTDA joins the benchmark, how it is measured (user: "we now would be
+  required to benchmark against this MTDA method also").** MTDA (Kamal et al., TODAES 2020,
+  L-22, built L-23) is a dilution method, many targets, its goal mixes then waste: `OWN_GOAL`
+  steps (`costs/steps_first`). Two parts, nothing of the frozen method changes:
+  (1) **The finished runs (B1, B2(a), B2(b), B3):** MTDA is added to the final records with
+  `bench.py add=<records> methods=mtda` (new mode: runs only the named published method on the
+  fluid records, keeps the answer key, planners and our search as they are; seconds). It is read
+  by the same rule as the other 16 (D-69, own goal, 900 s); B2(b) and B3 ran fluid only, so there
+  MTDA appears in the tables, not the reading.
+  (2) **B2(c), MTDA's own experiments, new set `test_mtda_v1`** (`make_benchmark.py
+  build_mtda`, seed 20261118, 470 problems): Section 8's protocol, mixer-N for N = 2..8 at
+  z = 4, eta = 2, 5, 10, 20, 50, 100 random CFs c / N^z (with replacement; a repeat is demand 2),
+  plus Table 4's N = 2, z = 10, eta = 2..100; 10 per cell (the paper uses 5000; our search is
+  900 s a problem). Mixer-N = one MEDA mix of N units (M = N); a target is the mixer's whole
+  output (an N-unit droplet); storage 64 (MTDA ignores storage; Table 4's 100-target plans
+  need more than 32). Run: `sets=test_mtda_v1 goals=steps methods=mtda planners=share
+  published_goal=steps`: steps goal only (MTDA's own), the plain planner only (the lookahead
+  runs take more than 9 min a problem at 100 targets, N = 8; they are our baselines, not the
+  comparison). Estimate about 130 CPU-h (4-5 h on 30 workers). `mtda_table` puts per cell: our
+  cost over MTDA's, w / t / l, mixes counted both ways (2-input engine mixes for both, and MTDA's
+  N-segment mixes as the paper counts), waste, sample, and Table 4's printed numbers beside
+  MTDA's (N = 2, z = 10).
+  **Reading, fixed in advance:** D-69's verdict for `mtda (steps)` at 900 s on each set where it
+  has at least 10 problems (beats / level / loses), with the coverage per set. A loss on any cell
+  of B2(c) is listed with its cell. MTDA's plans are replayed with `early_outputs` (targets leave
+  when made, used-up intermediates discarded, as its chip does); the other methods' replays are
+  unchanged. Q-157.
 - **9 of 10** tiny instances reach the proved optimum, including the sharing case (it learns to
   reuse the 1/2 droplet).
 - Three settings decided everything (F-2, F-3, F-4): the value prior, step-count aliasing, and
@@ -4539,6 +4566,34 @@ independent reference (oracle, optimum, bound, validator) catches it.**
   ours reach 12; (5) Roy 2020 assumes uniform speed, Keszocze 2017 one speed per droplet;
   (6) no RL paper uses any of this. Under the generalised rule our big droplets travel 2-4x
   slower than in M11. Still missing: Li TBioCAS 2017, Lu 2018.
+- **L-22 (2026-11-18) Two flow-based papers from Sudip Roy's group read** (user added them to
+  `~/Downloads/sample prepration/`; `notes/lit_bench/coverage_audit.md` sections 3b and 5).
+  (1) **MTDA**, Kamal et al., TODAES 25(3) 2020 (`3357604.pdf` = `MTDA.pdf`, same file): dilution
+  of one sample to many targets on an N-segment rotary mixer, targets as z base-N digits; one
+  tree per target from its digits with 7 mix shapes ((a:b), (a:1:b), (a:1:1:b) and their zero
+  cases), an intermediate reused up to N units; objectives mixes then waste; no demand, each
+  target used whole. Compared against FloSPA-D, MTSE+BCS (5000 random sets, N 2-8, z 4 or 8) and
+  WARA (Table 4, N 2, z 10: WARA beats MTDA). **Buildable**: its mixes are k:l mixes of unit
+  volumes, so it runs on MEDA like the DMF methods (chip and storage design out of scope); fits
+  s1/s3 dilution sets with M = N. Not built. (2) **Fault-tolerant architecture synthesis**,
+  Huang, Gupta, Roy, Ho, Pop (`0534-5.pdf`): chip-level redundancy for flow-based chips, no
+  sample-preparation algorithm; out of scope. The Scholar profile the user sent was not read
+  (Google's robot check).
+- **L-23 (2026-11-18) MTDA built** (`src/meda/solvers/baselines/mtda.py`, SPEC 0.53, D-97). STDA
+  from the radix-N digits (cases 1-9 as three mix shapes), SharingUtility's global table (N uses
+  per mix, preorder registration, IC2 before IC1), N chosen as the fewest mixes then least waste
+  unless given. **Fig. 5 reproduces exactly** (90/256, mixer-4: 5 mixes, 4 sample, 11 buffer,
+  11 waste units). **Table 4 (N = 2, z = 10), MTDA per target, ours on 300 random sets / paper
+  (5000):** eta 2: mixes 8.69 / 8.78, sample 2.72 / 2.96, buffer 4.98 / 4.85, waste 5.70 / 5.81;
+  eta 10: 6.34 / 6.63, 2.10 / 2.41, 3.32 / 3.45, 3.42 / 3.80; eta 20: 5.42 / 5.92; eta 50:
+  4.48 / 5.41; eta 100: 3.88 / 5.35 mixes, 1.34 / 3.25 waste. Ours shares more as eta grows; five
+  other sharing readings (prime CFs only, no leading-zero CFs, across trees only, within a tree
+  only, CF keyed by level) all miss further. Kept as "our reading": it is MTDA made cheaper than
+  printed, so a win against it is not flattered. Coverage on the final sets (2-fluid, a mixer
+  N <= M within tolerance, droplet <= N): test_s1 70 / 100, s3 39, s4 10, s5 24, held-out 6 (16
+  break the chip's storage), litbench_paper 128 / 132, dmfb_sweep 491 / 491, test_emrcm 711 /
+  2847 (all its dilutions); milliseconds a problem. Light check (30 s search, Mac, not a
+  result): on 2 problems with 100 targets ours is 13-22% cheaper under the steps goal.
 
 ## 7. Figure and table ideas
 

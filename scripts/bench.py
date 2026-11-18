@@ -62,6 +62,13 @@ protocol, its own table `emrcm_table`; NFSP's experiments are 1:1, so B3's).
 
 B3 (D-71), the 1:1 engine check: `sets=dmfb_sweep_v1 goals=fluid` (`dmfb_checks`).
 
+MTDA (D-97, Kamal et al. 2020): `add=<records>[,..] methods=mtda out=<file>` puts a published
+method into earlier records (fluid records; nothing else is run again), for B1, B2(a), B2(b)
+and B3. B2(c), MTDA's own experiments: `sets=test_mtda_v1 goals=steps methods=mtda
+planners=share published_goal=steps` (the lookahead planner runs take hours at 100 targets;
+they are our baselines, not the comparison), read by `mtda_table`. `planners` (default all 4)
+picks the planner runs; `published_goal` (default fluid) is the goal whose records hold them.
+
 Reading, fixed in advance (D-69), is in `reading()`; it is given per set (D-70).
 """
 
@@ -141,6 +148,7 @@ OWN_GOAL = {
     "dong": "fluid",
     "fukui": "fluid",
     "simop": "waste",
+    "mtda": "steps",  # mixes, then waste (Kamal et al. 2020, Section 4.2)
 }
 TIMES = (60.0, 900.0)  # Q-139: both are reported
 # Fixed in advance (D-69).
@@ -191,6 +199,41 @@ def _check(rid: str, name: str, goal: str, st: dict[str, Any]) -> None:
             WEIGHTS_BY_GOAL[goal],
             {"cost": st["by_goal"][goal], "exact": st["by_goal_exact"][goal], **st},
         )
+
+
+def published(
+    inst: Instance, methods: Any, kept: dict[str, dict[str, Any]]
+) -> dict[str, dict[str, Any]]:
+    """`kept` (an earlier record's results) restricted to `methods`, plus the methods it lacks,
+    run now. A method that declines records why (`na`); a failure is recorded, never hidden."""
+    out = {m: st for m, st in kept.items() if m in methods}
+    for name, make in PUBLISHED.items():
+        if name not in methods or name in out:
+            continue
+        t0 = sc.CLOCK()
+        try:
+            graph = make(inst)
+            st_ = stats(inst, name, emit(inst, graph), sc.CLOCK() - t0)
+            # the paper's own counts: n-input mixes (one per node), units drawn, waste (D-97)
+            c = graph.counts(sum(t.droplet_volume * t.demand for t in inst.targets))
+            st_["paper"] = {"mixes": c["nm"], "drawn": c["drawn"], "waste": c["nw"]}
+        except NotApplicable as e:
+            st_ = {"cost": None, "na": str(e)[:200], "seconds": round(sc.CLOCK() - t0, 3)}
+        except (IllegalActionError, ValueError, AssertionError) as e:
+            st_ = {"cost": None, "error": f"{type(e).__name__}: {e}"[:200]}
+        out[name] = st_
+    return out
+
+
+def add_task(args: tuple[dict[str, Any], str, list[str]]) -> dict[str, Any]:
+    """`add=` (D-97): an earlier record with the published `methods` it lacks run and stored;
+    nothing else is run again (its answer key, planners and our search are kept as they are)."""
+    rec, instance, methods = args
+    if rec["goal"] != "fluid":
+        return rec
+    inst = Instance.from_json(instance)
+    have = rec.get("published", {})
+    return {**rec, "published": {**have, **published(inst, methods, have)}}
 
 
 def tasks(sets: list[str], goals: list[str], limit: int | None) -> list[dict[str, Any]]:
@@ -261,24 +304,11 @@ def run_task(task: dict[str, Any], opts: dict[str, Any]) -> dict[str, Any]:
 
     # 2. Published methods, once (their plans do not depend on the goal); an earlier record's
     # results are kept and only the methods it lacks are run (D-79)
-    if goal == "fluid":
+    if goal == opts.get("published_goal", "fluid"):  # B2(c) runs steps only (D-97)
         kept = (old or {}).get("published", {})
-        out["published"] = {m: st for m, st in kept.items() if m in opts.get("methods", PUBLISHED)}
-        for name, make in PUBLISHED.items():
-            if name not in opts.get("methods", PUBLISHED) or name in out["published"]:
-                continue
-            t0 = sc.CLOCK()
-            try:
-                st_ = stats(inst, name, emit(inst, make(inst)), sc.CLOCK() - t0)
-            except NotApplicable as e:
-                st_ = {
-                    "cost": None,
-                    "na": str(e)[:200],
-                    "seconds": round(sc.CLOCK() - t0, 3),
-                }
-            except (IllegalActionError, ValueError, AssertionError) as e:  # recorded, never hidden
-                st_ = {"cost": None, "error": f"{type(e).__name__}: {e}"[:200]}
-            out["published"][name] = st_
+        out["published"] = published(
+            inst, opts.get("methods", PUBLISHED), {m: st for m, st in kept.items()}
+        )
 
     # 2b. Bit scanning, the 1:1 floor (B3, D-71): the naive construction under M = 2.
     if goal == "fluid" and old is not None and "bitscan" in old:
@@ -296,6 +326,8 @@ def run_task(task: dict[str, Any], opts: dict[str, Any]) -> dict[str, Any]:
     out["planners"] = {}
     plans: dict[str, tuple[Action, ...]] = {}
     for name, make in makers.items():
+        if name not in opts.get("planners", PLANNERS):  # D-97: B2(c) runs the plain pass only
+            continue
         t0 = sc.CLOCK()
         made = make()
         out["planners"][name] = stats(inst, name, made, sc.CLOCK() - t0)
@@ -455,7 +487,7 @@ def verdict(p: dict[str, Any]) -> str:
 
 def summarise(path: Path) -> str:
     recs = [json.loads(x) for x in path.read_text().splitlines()]
-    fluid = {(r["set"], r["id"]): r for r in recs if r["goal"] == "fluid"}
+    fluid = published_records(recs)
     lines = [
         f"Records: `{path}`, {len(recs)} (problem, goal) pairs. Ratios are per problem; "
         "[95% bootstrap CI of the mean]; w / t / l = wins / ties / losses for our method.",
@@ -525,6 +557,8 @@ def summarise(path: Path) -> str:
         lines += ["", *dmfb_checks(recs)]
     if any(r["set"] == "test_emrcm_v1" for r in recs):
         lines += ["", *emrcm_table(recs)]
+    if any(r["set"] == "test_mtda_v1" for r in recs):
+        lines += ["", *mtda_table(recs)]
     lines += ["", "Reading (fixed in advance, D-69; per set, D-70):"]
     for s in sorted({r["set"] for r in recs}):
         lines.append(f"- {s}: {reading([r for r in recs if r['set'] == s])}")
@@ -584,6 +618,84 @@ def dmfb_checks(recs: list[dict[str, Any]]) -> list[str]:
     return lines
 
 
+def published_records(recs: list[dict[str, Any]]) -> dict[tuple[str, str], dict[str, Any]]:
+    """Per problem, the record holding the published methods' results (the fluid record, or
+    the steps record where only steps was run, B2(c))."""
+    out: dict[tuple[str, str], dict[str, Any]] = {}
+    for r in recs:
+        if "published" in r and (r["goal"] == "fluid" or (r["set"], r["id"]) not in out):
+            out[(r["set"], r["id"])] = r
+    return out
+
+
+# Kamal et al. 2020, Table 4 (N = 2, z = 10): MTDA's mixes, sample, buffer, waste per target
+MTDA_PAPER = {
+    2: (8.78, 2.96, 4.85, 5.81),
+    10: (6.63, 2.41, 3.45, 3.8),
+    20: (5.92, 2.27, 3.09, 3.37),
+    50: (5.41, 2.24, 2.88, 3.12),
+    100: (5.35, 2.31, 2.94, 3.25),
+}
+
+
+def mtda_table(recs: list[dict[str, Any]]) -> list[str]:
+    """B2(c) (D-97): MTDA's protocol per (N, z, eta) under the steps goal, our method at 900 s.
+    Mixes are counted two ways: engine mixes (2-input, both producers; a MEDA mix merges two
+    droplets) and MTDA's own N-segment mixes (one per node, as the paper counts). Table 4's
+    printed per-target numbers sit beside MTDA's (our reading) for N = 2, z = 10."""
+    rows = [
+        "## MTDA's protocol (`test_mtda_v1`, steps goal, our method at 900 s)",
+        "",
+        "| N-z-T | n | MTDA accepts | ours / MTDA (mean) | w / t / l | mixes: ours / MTDA "
+        "engine / MTDA N-segment | waste: ours / MTDA | sample: ours / MTDA | Table 4 per "
+        "target: MTDA mixes, sample, waste / paper |",
+        "|---|---|---|---|---|---|---|---|---|",
+    ]
+    groups: dict[str, list[dict[str, Any]]] = defaultdict(list)
+    for r in recs:
+        if r["set"] == "test_mtda_v1" and r["goal"] == "steps" and "published" in r:
+            groups[r["cell"]].append(r)
+
+    def mean(xs: list[float]) -> str:
+        return f"{np.mean(xs):.2f}" if xs else "-"
+
+    def key(cell: str) -> tuple[int, ...]:
+        return tuple(int(x[1:]) for x in cell.split("-"))
+
+    for cell in sorted(groups, key=key):
+        _, z, t = key(cell)
+        rs = [r for r in groups[cell] if ours_at(r, TIMES[1]) is not None]
+        acc = [r for r in rs if r["published"].get("mtda", {}).get("by_goal")]
+        wtl = "-"
+        if acc:
+            p = paired(
+                [ours_at(r, TIMES[1]) for r in acc],
+                [_cost(r["published"]["mtda"], "steps") for r in acc],
+            )
+            wtl = f"{p['wins']} / {p['n'] - p['wins'] - p['losses']} / {p['losses']}"
+        th = [r["published"]["mtda"] for r in acc]
+        per = "-"
+        if z == 10 and t in MTDA_PAPER and th:
+            pt = MTDA_PAPER[t]
+            per = (
+                f"{np.mean([x['paper']['mixes'] for x in th]) / t:.2f}, "
+                f"{np.mean([x['paper']['drawn'][0] for x in th]) / t:.2f}, "
+                f"{np.mean([x['paper']['waste'] for x in th]) / t:.2f} / "
+                f"{pt[0]}, {pt[1]}, {pt[3]}"
+            )
+        rows.append(
+            f"| {cell} | {len(groups[cell])} | {len(acc)} | "
+            f"{mean([ours_at(r, TIMES[1]) / _cost(r['published']['mtda'], 'steps') for r in acc])}"
+            f" | {wtl} | "
+            f"{mean([r['ours']['mixes'] for r in acc])} / {mean([x['mixes'] for x in th])} / "
+            f"{mean([x['paper']['mixes'] for x in th])} | "
+            f"{mean([r['ours']['waste'] for r in acc])} / {mean([x['waste'] for x in th])} | "
+            f"{mean([r['ours']['sample'] for r in acc])} / {mean([x['sample'] for x in th])} | "
+            f"{per} |"
+        )
+    return rows
+
+
 def emrcm_table(recs: list[dict[str, Any]]) -> list[str]:
     """B2 (D-70): e-MRCM's protocol per (N, T) under the fluid goal; e-MRCM's printed mixes and
     waste (its Table III, many targets) beside ours and e-MRCM (our reading), not graded (L-7)."""
@@ -623,7 +735,7 @@ def emrcm_table(recs: list[dict[str, Any]]) -> list[str]:
 
 def reading(recs: list[dict[str, Any]]) -> str:
     """D-69, per published method under its own goal at 900 s (Q-139: 60 s is reported too)."""
-    fluid = {(r["set"], r["id"]): r for r in recs if r["goal"] == "fluid"}
+    fluid = published_records(recs)
     out = []
     for m, goal in OWN_GOAL.items():
         rs = [
@@ -649,6 +761,9 @@ def main(argv: list[str]) -> None:
     if "summary" in args:
         print(summarise(Path(args["summary"])))
         return
+    if "add" in args:  # D-97: published methods added to earlier records, nothing else run
+        add_records(args)
+        return
     commit = subprocess.run(
         ["git", "rev-parse", "--short", "HEAD"], capture_output=True, text=True, cwd=ROOT
     ).stdout.strip()
@@ -661,6 +776,8 @@ def main(argv: list[str]) -> None:
         "sims": int(args.get("sims", METHOD["sims"])),
         "commit": commit,
         "methods": args.get("methods", ",".join(PUBLISHED)).split(","),
+        "planners": args.get("planners", ",".join(PLANNERS)).split(","),
+        "published_goal": args.get("published_goal", "fluid"),
         # D-72 pilot: the search's leaf finisher (v1: share_mrcm; A: auto) and auto's switch
         "finisher": args.get("finisher", METHOD["finisher"]),
         "switch_seconds": float(args.get("switch_seconds", sc.AUTO_LIMIT)),
@@ -719,6 +836,37 @@ def main(argv: list[str]) -> None:
             )
     print(f"wrote {len(todo)} records to {out}\n")
     print(summarise(out))
+
+
+def add_records(args: dict[str, str]) -> None:
+    """`add=<records>[,..] methods=<m,..> out=<file>`: every record of those files, with the
+    named published methods run where a fluid record lacks them (D-97)."""
+    methods = args["methods"].split(",")
+    unknown = [m for m in methods if m not in PUBLISHED]
+    if unknown:
+        raise ValueError(f"unknown published methods {unknown}")
+    recs = [
+        json.loads(line)
+        for path in args["add"].split(",")
+        for line in Path(path).read_text().splitlines()
+        if line.strip()
+    ]
+    insts = {
+        (s, i.instance_id): i.to_json()
+        for s in sorted({r["set"] for r in recs})
+        for i in BenchmarkSet.read(s).instances
+    }
+    todo = [(r, insts[(r["set"], r["id"])], methods) for r in recs]
+    out = Path(args["out"])
+    if out.resolve() in {Path(p).resolve() for p in args["add"].split(",")}:
+        raise ValueError(f"out={out} is one of the add= records: write elsewhere")
+    out.parent.mkdir(parents=True, exist_ok=True)
+    workers = int(args.get("workers", 1))
+    with out.open("w") as fh:
+        results = map(add_task, todo) if workers == 1 else Pool(workers).imap(add_task, todo)
+        for rec in results:
+            fh.write(json.dumps(rec) + "\n")
+    print(f"wrote {len(todo)} records with {','.join(methods)} to {out}")
 
 
 if __name__ == "__main__":

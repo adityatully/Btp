@@ -51,6 +51,9 @@ class PaperGraph:
     num_fluids: int
     nodes: tuple[tuple[In, ...], ...]
     roots: tuple[int, ...] | None = None
+    # a target leaves the chip as soon as its node is made (MTDA, D-97); otherwise outputs come
+    # last, as every other method's plan was replayed in the final runs
+    early_outputs: bool = False
 
     def root_nodes(self) -> tuple[int, ...]:
         return self.roots if self.roots is not None else (len(self.nodes) - 1,)
@@ -135,10 +138,12 @@ def emit(instance: Instance, graph: PaperGraph) -> tuple[Action, ...]:
 
     Inputs of a node are merged by source and folded into a running droplet one at a time, in
     the first order whose every intermediate mix is legal (a result equal to one of its sources,
-    or a denominator above the chip's limit, is not). Outputs come last; leftovers stay on chip
-    and go to waste at the end. A plan longer than the instance's step limit, which binds
-    every producer, is not applicable; so is one that breaks a chip rule on the way, such as a
-    storage limit the method does not model (SPEC 12: the share of plans that fit is reported)."""
+    or a denominator above the chip's limit, is not). Outputs come last and leftovers stay on
+    chip and go to waste at the end; with `early_outputs`, a node that only delivers outputs as
+    soon as it is made, and a droplet whose last use is made is discarded then. A plan longer
+    than the instance's step limit, which binds every producer, is not applicable; so is one
+    that breaks a chip rule on the way, such as a storage limit the method does not model
+    (SPEC 12: the share of plans that fit is reported)."""
     roots = graph.root_nodes()
     if graph.roots is None:
         single_target(instance)
@@ -176,10 +181,31 @@ def emit(instance: Instance, graph: PaperGraph) -> tuple[Action, ...]:
     b = PlanBuilder.start(instance)
     uid: dict[int, int] = {}
     try:
+        out = list(zip(roots, wanted, strict=True))
+        last = {  # early_outputs: the node after which each intermediate is used up
+            x.node: i
+            for i, node in enumerate(graph.nodes)
+            if keep[i]
+            for x in node
+            if x.node is not None
+        }
         for i, node in enumerate(graph.nodes):
-            if keep[i]:
-                uid[i] = _fold(b, _merged(node, uid, comps), instance, i)
-        for r, target in zip(roots, wanted, strict=True):
+            if not keep[i]:
+                continue
+            uid[i] = _fold(b, _merged(node, uid, comps), instance, i)
+            if not graph.early_outputs:
+                continue
+            for j, after in last.items():  # its last use made: the rest goes to waste now
+                if after == i and j not in roots:
+                    b.discard_leftover(uid[j])
+            if i in last:
+                continue
+            for r, target in out:  # a node that only delivers: its droplets leave now
+                if r == i:
+                    b.do(Output(Source.droplet(uid[r]), target.id))
+            out = [(r, t) for r, t in out if r != i]
+            b.discard_leftover(uid[i])
+        for r, target in out:
             b.do(Output(Source.droplet(uid[r]), target.id))
     except IllegalActionError as e:  # a method that ignores storage overfills a limited chip
         raise NotApplicable(f"the plan breaks a chip rule: {e}") from e

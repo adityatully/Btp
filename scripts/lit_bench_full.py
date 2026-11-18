@@ -42,6 +42,7 @@ from meda.solvers.baselines.ddmt import ddmt
 from meda.solvers.baselines.dong import dong
 from meda.solvers.baselines.emrcm import emrcm
 from meda.solvers.baselines.fukui import fukui
+from meda.solvers.baselines.mtda import mtda
 from meda.solvers.baselines.mtmd import mtmd
 from meda.solvers.baselines.mtwm import mtwm
 from meda.solvers.baselines.paper_graph import NotApplicable, PaperGraph, emit
@@ -69,6 +70,7 @@ METHODS: dict[str, Callable[[Instance], PaperGraph]] = {
     "dong": dong,  # one sample-buffer mix per droplet in our engine
     "fukui": fukui,
     "simop": simop,  # ordered waste > steps > sample > buffer
+    "mtda": mtda,  # flow-based mixer-N, N <= M chosen by fewest mixes then waste (L-22)
 }
 
 
