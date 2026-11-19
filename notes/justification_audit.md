@@ -46,9 +46,9 @@ MRCM is slow); the answer is the cheapest whole plan seen.
 | S12 | Move played after each 256 sims | most-visited child, tree below it kept | Never compared with "the child with the cheapest plan seen". | ❌ | J3 |
 | S13 | Answer = cheapest whole plan seen anywhere (leaf finishes included) | `_offer` | Anytime by construction; a plan is offered only if it fits the step limit. | ✅ construction | – |
 | S14 | A leaf finish longer than the step limit is still used as the leaf's value but not offered as a plan | `leaf()` | How often this happens, and whether it misleads the tree, is not measured. | ❌ | J0 |
-| S15 | Tie-breaking | candidate order (`run_task` passes no `rng`) | One run per problem; never tried other orders. | ❌ | J1 |
+| S15 | Tie-breaking | candidate order (`run_task` passes no `rng`) | E-106: random tie-breaking is 2.9-3.4% dearer than the candidate order (both CIs above 1; emrcm 5.5-6.3%). Not noise: the ordered flat prior is part of the method, said so in the paper. | ✅ ablation | – |
 | S16 | Time budget | 900 s CPU | E-76 (method-v1 curve), E-101 (median 71 s to the final plan; s4 367 s), E-102 (57% of CPU after the final plan). No method-v3 cost-vs-budget curve written down. | 🟡 | J0 |
-| S17 | CPU time, not wall time | `time.process_time` (D-78) | Argued (shared machine). But a faster CPU gets more leaves, so results depend on the machine, and run-to-run variance is not measured. | 🟡 | J1 |
+| S17 | CPU time, not wall time | `time.process_time` (D-78) | Argued (shared machine). E-106: identical runs on one machine differ by at most 0.2%. Another machine (faster CPU, more leaves) not run. | 🟡 | J1 on a second machine, if wanted |
 | S18 | Deadline checked only between leaves | `_descend` | E-102: runs overshoot up to 2,442 s against 900 s. Not yet in the report as a fairness caveat. | 🟡 | J0 |
 | S19 | Plain-pass plan before the root | `first_plan=True` | E-76: it removes the slow first plan. It does not change the search (by construction). | ✅ | – |
 | S20 | Moves = every legal env action (mixes with any k:l, outputs, discards, partial takes); identical droplets listed once | SPEC 5.6 | Planner jumps as macro-moves were tried and dropped (E-70). Dropping Discard or partial takes from the search was never tried. | 🟡 | J3 |
@@ -112,7 +112,7 @@ MRCM is slow); the answer is the cheapest whole plan seen.
 | V4 | Answer key: exact search 60 s, 1,000,000 nodes, counted only when proved | `bench.py` | Proved optima are exact whatever the budget; only coverage changes. | ✅ construction | – |
 | V5 | NFSP 600 s per ILP solve | Q-118 | User decision. | ✅ decision | – |
 | V6 | Open choices in each published method | `notes/lit_bench/selection.md` | Each reproduces a figure or table of its paper. | ✅ | – |
-| V7 | One run per problem | `bench.py` | The search has no random seed, but its CPU deadline makes it slightly nondeterministic. `benchmark_plan.md` asks for 3 seeds where results can vary. | 🟡 | J1 |
+| V7 | One run per problem | `bench.py` | E-106: identical runs within 0.2%, so one run per problem is enough. | ✅ ablation | – |
 | V8 | Time: ours at 900 s (and 60 s) vs each baseline's own time | E-101 | Reported, not a bar. | ✅ reported | – |
 
 ### 6. Not in method-v3

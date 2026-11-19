@@ -2309,6 +2309,38 @@ MRCM's intermediates on val_s2: 4 of 28 covered (chain D4), 5 of 28 (premix D3).
   again). (3) Built as SPEC 0.28 `hint_source: problem` (depth-4 chain in the recipe columns)
   for a copy-test comparison on stages 1–2 against the planner's hints.
 
+### E-106 (2026-11-19) J1, the noise floor: identical runs agree; random tie-breaking is 3% dearer
+coe9, `scripts/ablation.py runs=J1 workers=16`, records `outputs/ablation/j1.jsonl`, summary
+`outputs/ablation/j1_summary.md` (run started on `e3927e8` / `05f8bde`, warm memo caches, E-105).
+Dev subset (110), method-v3, 900 s CPU. Ratio = run / v3 repeat 0, per problem, mean [95% CI],
+worse / better:
+
+| group (n) | v3 rep 1 | v3 rep 2 | seed 1 | seed 2 |
+|---|---|---|---|---|
+| s1-s2 (20) | 1.0000, 0 / 0 | 1.0000, 0 / 0 | 1.0469 [0.993, 1.123], 5 / 1 | 1.0626 [0.977, 1.176], 4 / 2 |
+| s3 (20) | 1.0000, 0 / 0 | 1.0000, 0 / 0 | 0.9975 [0.969, 1.017], 8 / 3 | 0.9982 [0.980, 1.015], 5 / 4 |
+| s4-s5 (40) | 1.0008 [1.000, 1.002], 1 / 0 | 1.0016 [1.000, 1.004], 2 / 0 | 1.0163 [1.003, 1.036], 12 / 9 | 1.0143 [1.002, 1.030], 11 / 7 |
+| emrcm (30) | 0.9992 [0.998, 1.000], 0 / 1 | 0.9980 [0.994, 1.000], 0 / 1 | 1.0553 [1.010, 1.102], 13 / 3 | 1.0634 [1.017, 1.120], 9 / 4 |
+| all (110) | 1.0001 [0.999, 1.001], 1 / 1 | 1.0000 [0.999, 1.001], 2 / 1 | 1.0291 [1.011, 1.049], 38 / 16 | 1.0335 [1.011, 1.059], 29 / 17 |
+
+Median moves committed (depth): s1-s2 13, s3 9, s4-s5 5, emrcm 1; median leaves 3,283 / 2,388 /
+1,081 / 361; capped at 900 s on 69 of 110 (s4-s5 29 of 40, emrcm 26 of 30).
+- **Reading 1: run-to-run noise is negligible.** Identical runs differ by at most 0.2% in any
+  group (s1-s3 identical): the CPU-time deadline barely changes plans (S17, V7: one run per
+  problem is enough).
+- **Reading 2: the tie order is part of the method, not noise.** With a flat prior every
+  unvisited move ties, so the env's candidate order (outputs first, then mixes by canonical key,
+  discards last; SPEC 5.6) decides what the search tries first. Random tie-breaking is 2.9-3.4%
+  dearer overall (both CIs above 1), 5.5-6.3% on emrcm, 1.4-1.6% on s4-s5; level on s3. S15
+  moves from noise to a design choice worth about 3%; the paper says the flat prior is ordered.
+- **Reading 3: D-98's noise band does not fit these results.** Fixed in advance as the largest
+  gap of all of J1's other runs, it takes the seed runs and comes out at s1-s2 0.063, s3 0.0025,
+  s4-s5 0.016, emrcm 0.063; then any later setting within 6% reads "level". From the repeats
+  alone it is 0.000 / 0.000 / 0.0016 / 0.0020. Which one reads J2-J7 is the user's call (Q-162);
+  the summary prints the rule as fixed until then.
+- Depth: on s4-s5 the tree commits a median 5 moves (E-81's 0-2 were the 9 hardest losers);
+  on emrcm 1, at ~2.5 s a leaf.
+
 ### E-105 (2026-11-18) J1 kept; each later run is read against its own method-v3 run
 J1 was started on coe9 before E-104 (commit `e3927e8` / `05f8bde`), so its memo caches stay warm
 from one run to the next in a worker, while every later run starts cold. Restarting J1 would

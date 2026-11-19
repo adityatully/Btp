@@ -41,7 +41,8 @@ chats. Last updated 2026-11-03.*
 | Q-161 | Do the three methods we only draw level with (NFSP, MTWM, SIMOP) hold level, or beat us, on their own papers' experiments, which no set covers yet? | **Decided 2026-11-18 (D-100): not built**; expected level or worse (their exact solvers' home ground, B3 evidence); stated as a threat to validity |
 | Q-158 | Is every choice in method-v3 backed by an ablation, a sweep, a proof or a citation? | 6.9 (D-98) |
 | Q-159 | Is the s4-s5 depth limit (E-81) a property of the method, or of 256 simulations per move? | 6.9, J2 (D-98) |
-| Q-160 | How much do method-v3's results vary between identical runs (CPU deadline, tie order)? | 6.9, J1 (D-98) |
+| Q-160 | How much do method-v3's results vary between identical runs (CPU deadline, tie order)? | **Closed 2026-11-19 (E-106):** identical runs within 0.2%; random tie-breaking 3% dearer, so the candidate order is part of the method |
+| Q-162 | Which noise band reads J2-J7: D-98's (all of J1's runs, seeds included: up to 6.3%) or the repeats' alone (up to 0.2%)? | Waiting on the user (E-106) |
 | Q-49 | How do the agent and planner compare with published heuristics? Could one be a better teacher? | 2.4 (stages 1–2), 6.3 (all) |
 | Q-148 | Do the gaps on small problems (s1 6% above optima, deep 1:1 dilutions, NFSP level) close if the search uses its leftover time? | **Closed 2026-11-15 (E-95):** no; more sims at the root cheaper on 8 of 120, gap 2.88% → 2.80%; method-v3 stays |
 | Q-101 | Has the agent been fully trained (all stages, regime chosen, 3 seeds)? | 3.5, 3.6, 5.4 |
@@ -970,8 +971,14 @@ longer, gap 1.8% on 60 x 60 u5, 6.5% on 30 x 30 u5, 15% on 30 x 30 u1.*
 is a module-based harness first, hybrid end state. The router work (D-89 steps 2-6) is needed
 for every choice.
 
-**Q-160 How much do method-v3's results vary between identical runs?** · **Open → plan 6.9,
-J1** (D-98, 2026-11-18) The search has no random seed, but its deadline is CPU time, and ties
+**Q-162 Which noise band reads J2-J7?** · **Open, waiting on the user** (E-106, 2026-11-19)
+D-98 fixed the band as the largest gap of all of J1's other runs. The seed runs turned out to
+measure a design choice (tie order, ~3%), not noise, and push the band to 6.3% on s1-s2 and
+emrcm, where any later setting within 6% would read level. The repeats alone give 0-0.2%.
+
+**Q-160 How much do method-v3's results vary between identical runs?** · **Closed (experiment,
+E-106)** Identical runs differ by at most 0.2% (s1-s3 identical); random tie-breaking is 2.9-3.4%
+dearer overall, so the candidate order is part of the method. Asked 2026-11-18 (D-98). The search has no random seed, but its deadline is CPU time, and ties
 go in candidate order. Three repeats and two tie-break seeds on the dev subset give the noise
 band every other sweep is read against.
 
