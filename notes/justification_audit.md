@@ -73,18 +73,18 @@ MRCM is slow); the answer is the cheapest whole plan seen.
 
 | ID | Decision | Value / where | Evidence today | Status | Run |
 |---|---|---|---|---|---|
-| P1 | Several target orders, cheapest plan kept | 4 (`ORDER_RULES`) | E-28 (32 random orders, small gains), E-37 (random restarts, 1-2%). D-96 / Q-156 checks whether 1-2 suffice (coe9 run pending). | 🟡 running | J6, J7 |
-| P2 | Which orders: given, dearest first, cheapest first, nearest neighbour from the dearest; "dear" = fluid cost per unit; "near" = L∞ distance | `named_orders` | Never argued or compared with other rules (e.g. by demand, by denominator). D-96 measures which rule wins. | ❌ | J6 |
+| P1 | Several target orders, cheapest plan kept | 4 (`ORDER_RULES`) | E-28 (32 random orders, small gains), E-37 (random restarts, 1-2%). D-96 / Q-156 checks whether 1-2 suffice (coe9 run pending). | 🟡 running | J6 (orders: given only, dear only, dear + cheap, 4 rules + 8 / + 32 random), D-96, J7 |
+| P2 | Which orders: given, dearest first, cheapest first, nearest neighbour from the dearest; "dear" = fluid cost per unit; "near" = L∞ distance | `named_orders` | Never argued or compared with other rules (e.g. by demand, by denominator). D-96 measures which rule wins. | ❌ | J6 (each rule alone and in pairs), D-96 |
 | P3 | One target at a time (all its deliveries before the next) | `_run` | Never compared with interleaving delivery groups across targets. | ❌ | J6 |
-| P4 | Recipe set: direct, one mix, chain, split tree, MRCM tree | `_candidates` | E-17 (chain + tree beat the construction), E-57/58 (MRCM tree). Dropping each recipe from the final planner never run. | 🟡 | J6 |
-| P5 | Chain depth | `CHAIN_DEPTH = 3` | E-38: 2 vs 3 on the planner alone (3 is 4-18% cheaper, 5-18× slower). Depth 1 and 4 never tried, so no plateau shown. Inside the search, depth 2 would give 10-18× more leaves at the same time; never tested (parked, D-44). | 🟡 | J6, J7 |
+| P4 | Recipe set: direct, one mix, chain, split tree, MRCM tree | `_candidates` | E-17 (chain + tree beat the construction), E-57/58 (MRCM tree). Dropping each recipe from the final planner never run. | 🟡 | J6 (each recipe dropped in turn); a 6th recipe: argument (each covers a class of targets, E-17, E-57) or a new experiment |
+| P5 | Chain depth | `CHAIN_DEPTH = 3` | E-38: 2 vs 3 on the planner alone (3 is 4-18% cheaper, 5-18× slower). Depth 1 and 4 never tried, so no plateau shown. Inside the search, depth 2 would give 10-18× more leaves at the same time; never tested (parked, D-44). | 🟡 | J6 (depth 1, 2, 4, 5), J7 (inside the search) |
 | P6 | Blend partners per chain step | `BLEND_PARTNERS = 4`, nearest by L∞ | Set for speed only (code note). No cost measured. | ❌ | J6 |
 | P7 | A chain's last input must be pure or already in the pool | `_chain` | A pruning rule, never ablated. | ❌ | J6 |
 | P8 | Greedy rule | least marginal cost per delivery; ties: more deliveries, then fewer actions | Never compared with total cost or cost per unit volume. | ❌ | J6 |
 | P9 | Deliveries one droplet serves | tries the most and 1 only; the one-mix recipe keeps only the largest count that works | Never tried the counts in between. | ❌ | J6 |
 | P10 | One-mix recipe ranked by fluid drawn | `_one_mix` | Mixes and waste counted later in the marginal cost; never compared. | ❌ | J6 |
 | P11 | Eviction when storage is full | idle droplet furthest (L∞) from every open target, then the smallest | Never compared with another rule. | ❌ | J6 |
-| P12 | Lookahead k (each group's k cheapest recipes rolled out greedily) | 3, in the baselines `share_look3`, `share_mrcm_look3` (not in method-v3) | E-17: k = 3 fixed 4 of 14 small misses at ~15× time. Only k = 1 also measured. These are the baselines we beat, so a reviewer will ask if k = 3 is a strong enough baseline. | 🟡 | J6 |
+| P12 | Lookahead k (each group's k cheapest recipes rolled out greedily) | 3, in the baselines `share_look3`, `share_mrcm_look3` (not in method-v3) | E-17: k = 3 fixed 4 of 14 small misses at ~15× time. Only k = 1 also measured. These are the baselines we beat, so a reviewer will ask if k = 3 is a strong enough baseline. | 🟡 | J6 (k = 2, 3, 5, 8; k = 1 is the greedy base) |
 | P13 | Tolerant target aims at the coarsest reachable composition within tolerance | `tree.aim` (FacDA's transform) | Argued (shallower recipe); never compared with the nearest composition. | 🟡 | J6 |
 | P14 | Split tree: dilute-up or blend steps per recipe | `MAX_EXTRA_STEPS = 4` | Code note: 2 builds every dilution; 4 "leaves room". Never shown that 4 vs 6 changes nothing. | 🟡 | J6 |
 | P15 | Split tree search budget | `tree.SEARCH_BUDGET = 20,000` | For speed and determinism; how often it binds is not measured. | ❌ | J0, J6 |

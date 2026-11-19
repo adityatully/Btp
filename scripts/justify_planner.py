@@ -7,13 +7,15 @@ of `share` / `tree` swapped for a variant written here, then put back. Two bases
 tree, greedy: the search's default finisher, D-65). Dev sets only: val s1-s5 (`_v2`) and
 `val_emrcm_v1`, 322 problems; the test sets stay untouched.
 
-Settings (`configs()`; base value in brackets): chain depth {1, 2, 4} [3]; blend partners
+Settings (`configs()`; base value in brackets): chain depth {1, 2, 4, 5} [3]; blend partners
 {0, 2, 8, all} [4]; the chain's last input may be any droplet [pure or pool]; lookahead k
 {2, 3, 5, 8} [0]; one recipe dropped (direct, one mix, chain, tree, MRCM); eviction {smallest,
 oldest, random} [furthest from every open target]; greedy rule total marginal cost [per
 delivery]; deliveries per droplet every count [the most and 1]; tolerant aim finest [coarsest
 reachable]; split-tree extra steps {2, 6} [4]; one greedy over every open target at once
-[target by target]; tree and MRCM search budgets x4 [1x]. Target orders are D-96's check.
+[target by target]; tree and MRCM search budgets x4 [1x]; target orders: only the given one,
+only dearest first, dearest + cheapest first, the 4 rules plus 8 or 32 random orders [the 4
+rules]. D-96 checks the orders mid-plan, where the search's leaves finish.
 
 Every run is capped at `cap` CPU seconds (default 1800) and records whether it hit the cap,
 the cost, CPU seconds, and how often the split tree's and MRCM's search budgets ran out
@@ -38,6 +40,7 @@ import signal
 import subprocess
 import sys
 import time
+import zlib
 from collections import defaultdict
 from collections.abc import Callable
 from multiprocessing import Pool
@@ -71,6 +74,7 @@ _ORIGINAL = {
     (share, "_candidates"): share._candidates,
     (share, "_options"): share._options,
     (share, "_run"): share._run,
+    (share, "named_orders"): share.named_orders,
     (share, "aim"): share.aim,
     (share._Builder, "_idleness"): share._Builder._idleness,
     (tree, "aim"): tree.aim,
@@ -225,6 +229,35 @@ def aim_finest(target: Target, chip: Any) -> Composition | None:
     return None
 
 
+def orders_only(rules: tuple[str, ...]) -> Callable[..., Any]:
+    """`share.named_orders` keeping only the orders these rules give (at least one order)."""
+
+    def named(instance: Instance, weights: CostWeights) -> Any:
+        every = _ORIGINAL[(share, "named_orders")](instance, weights)
+        return [o for o in every if set(rules) & set(o[0])] or every[:1]
+
+    return named
+
+
+def orders_plus(k: int) -> Callable[..., Any]:
+    """`share.named_orders` plus up to `k` random target orders, seeded by the problem's id
+    (as `headroom_share.share_orders`, E-28), so every run of a problem tries the same ones."""
+
+    def named(instance: Instance, weights: CostWeights) -> Any:
+        every = list(_ORIGINAL[(share, "named_orders")](instance, weights))
+        seen = {tuple(o) for _, o in every}
+        n = len(instance.targets)
+        rng = np.random.default_rng([zlib.crc32(instance.instance_id.encode()), 0])
+        for _ in range(k if n > 1 else 0):
+            order = [int(i) for i in rng.permutation(n)]
+            if tuple(order) not in seen:
+                seen.add(tuple(order))
+                every.append((("random",), order))
+        return every
+
+    return named
+
+
 def _idle_smallest(self: Any, uid: int) -> tuple[Any, ...]:
     return (-self.state.droplet(uid).volume, uid)
 
@@ -241,7 +274,7 @@ def configs() -> dict[str, dict[str, Any]]:
     """Each setting as changes against the base: `set` (module constants), `swap`
     (functions), `drop` (a recipe), `lookahead`."""
     out: dict[str, dict[str, Any]] = {"base": {}}
-    for d in (1, 2, 4):
+    for d in (1, 2, 4, 5):
         out[f"chain{d}"] = {"set": {(share, "CHAIN_DEPTH"): d}}
     for p, name in ((0, "0"), (2, "2"), (8, "8"), (10_000, "all")):
         out[f"blend{name}"] = {"set": {(share, "BLEND_PARTNERS"): p}}
@@ -259,6 +292,15 @@ def configs() -> dict[str, dict[str, Any]]:
     for e in (2, 6):
         out[f"extra{e}"] = {"set": {(tree, "MAX_EXTRA_STEPS"): e}}
     out["global_greedy"] = {"swap": {(share, "_run"): run_global}}
+    # P1, P2: fewer target orders (the rules alone) and more (random orders added)
+    for name, rules in (
+        ("given", ("given",)),
+        ("dear", ("dear",)),
+        ("dear_cheap", ("dear", "cheap")),
+    ):
+        out[f"orders_{name}"] = {"swap": {(share, "named_orders"): orders_only(rules)}}
+    for k in (8, 32):
+        out[f"orders_plus{k}"] = {"swap": {(share, "named_orders"): orders_plus(k)}}
     out["budget4x"] = {
         "set": {
             (tree, "SEARCH_BUDGET"): 4 * tree.SEARCH_BUDGET,
