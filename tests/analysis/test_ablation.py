@@ -69,7 +69,8 @@ def test_one_short_run_records_depth() -> None:
 
 def test_new_groups_and_switch_filter() -> None:
     assert len(A.expand("J3")) == 10 and len(A.expand("J5")) == 8
-    assert len(A.expand("J4")) == 4 and len(A.expand("J7")) == 8 and len(A.expand("J8")) == 9
+    assert len(A.expand("J4")) == 4 and len(A.expand("J8")) == 9
+    assert len(A.expand("J7")) == 5 and len(A.expand("J7o")) == 4
     assert A.config("backup_max+sims64_c0.5") == {"backup": "max", "sims": 64, "cpuct": 0.5}
     entries = json.loads(A.SUBSET.read_text())
     picked = [e for e in entries if A.switch_problem(e)]

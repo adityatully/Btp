@@ -160,7 +160,9 @@ GROUPS: dict[str, list[tuple[str, int]]] = {
     "J3": [("v3", 0)] + [(name, 0) for name in J3],
     "J5": [("v3", 0)] + [(name, 0) for name in J5],
     "J4": [("v3", 0)] + [(name, 0) for name in J4],
-    "J7": [("v3", 0)] + [(name, 0) for name in J7],
+    "J7": [("v3", 0)] + [(name, 0) for name in J7 if name.startswith("leaf_")],
+    # D-96's search pilot: only if the order check (scripts/order_check.py) passes its bar
+    "J7o": [("v3", 0)] + [(name, 0) for name in J7 if name.startswith("orders_")],
     "J8": [(name, 0) for name in J8],
 }
 

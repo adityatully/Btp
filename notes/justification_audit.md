@@ -73,8 +73,8 @@ MRCM is slow); the answer is the cheapest whole plan seen.
 
 | ID | Decision | Value / where | Evidence today | Status | Run |
 |---|---|---|---|---|---|
-| P1 | Several target orders, cheapest plan kept | 4 (`ORDER_RULES`) | E-28 (32 random orders, small gains), E-37 (random restarts, 1-2%). D-96 / Q-156 checks whether 1-2 suffice (coe9 run pending). | 🟡 running | J6 (orders: given only, dear only, dear + cheap, 4 rules + 8 / + 32 random), D-96, J7 |
-| P2 | Which orders: given, dearest first, cheapest first, nearest neighbour from the dearest; "dear" = fluid cost per unit; "near" = L∞ distance | `named_orders` | Never argued or compared with other rules (e.g. by demand, by denominator). D-96 measures which rule wins. | ❌ | J6 (each rule alone and in pairs), D-96 |
+| P1 | Several target orders, cheapest plan kept | 4 (`ORDER_RULES`) | E-28 (32 random orders, small gains), E-37 (random restarts, 1-2%). D-96 / Q-156 checks whether 1-2 suffice (coe9 run pending). | 🟡 running | fewer orders: the order check (D-96, `scripts/order_check.py`, mid-plan finishes; Mac trials: no 1-2 rules hold 95%); more orders: J6 (+8 / +32 random); J7o only if D-96 passes |
+| P2 | Which orders: given, dearest first, cheapest first, nearest neighbour from the dearest; "dear" = fluid cost per unit; "near" = L∞ distance | `named_orders` | Never argued or compared with other rules (e.g. by demand, by denominator). D-96 measures which rule wins. | ❌ | the order check (D-96: which rule wins at each finish); J6 (each rule alone, empty chip) |
 | P3 | One target at a time (all its deliveries before the next) | `_run` | Never compared with interleaving delivery groups across targets. | ❌ | J6 |
 | P4 | Recipe set: direct, one mix, chain, split tree, MRCM tree | `_candidates` | E-17 (chain + tree beat the construction), E-57/58 (MRCM tree). Dropping each recipe from the final planner never run. | 🟡 | J6 (each recipe dropped in turn); a 6th recipe: argument (each covers a class of targets, E-17, E-57) or a new experiment |
 | P5 | Chain depth | `CHAIN_DEPTH = 3` | E-38: 2 vs 3 on the planner alone (3 is 4-18% cheaper, 5-18× slower). Depth 1 and 4 never tried, so no plateau shown. Inside the search, depth 2 would give 10-18× more leaves at the same time; never tested (parked, D-44). | 🟡 | J6 (depth 1, 2, 4, 5), J7 (inside the search) |
@@ -178,7 +178,9 @@ caches, so times compare.
 | J5 | nothing | J1 | coe9 | ~75 CPU-h (s5 and N 4-5 only) |
 | J8 runs | nothing | J1, J8 published plans | coe9 | ~300 CPU-h (search + 4 planner runs, capped) |
 | J3 | J2's chosen point (if not 256 / 1.5, join it with '+') | J1 | coe9 | ~250 CPU-h |
-| J7 | J6 and D-96 (which planner settings and orders to try inside the search) | J1 | coe9 | ~190 CPU-h |
+| J7 | J6 (which planner settings to try inside the search) | J1 | coe9 | ~110 CPU-h |
+| Order check (D-96) | nothing | nothing (its own bar) | coe9 | ~20-40 CPU-h; kept dying on coe9 (memory?), rerun with fewer workers |
+| J7o (fewer orders in the search) | the order check passing its bar | J1 | coe9 | ~110 CPU-h |
 
 Each later run holds its own method-v3 run and is read against it, with J1's noise band
 (E-105; J1 itself ran before the cache fix and is kept).
