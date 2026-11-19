@@ -251,7 +251,8 @@ depth 2 is 10-18× faster but 7-10% dearer, parked (D-44). *Round 3 done 2026-10
   to the final B1, B2(a), B2(b), B3 records (`bench.py add=... methods=mtda`, seconds); (b) B2(c),
   its own protocol, `test_mtda_v2` (564 problems: every kind the paper runs, D-99; steps goal, about 160 CPU-h on
   coe9). Reading
-  fixed in D-97. *Built 2026-11-18; coe9 runs next.*
+  fixed in D-97. *Built 2026-11-18. (a) done 2026-11-19 (E-107): beats MTDA on every set, 0
+  losses in 1,494 problems; (b) done 2026-11-19 (E-108): beats on its own protocol, 553 / 11 / 0, 0.692, 0 losses. Done; Q-157 closed.*
 - **6.9 Justification sweeps (D-98, Q-158 to Q-160):** every choice of method-v3 gets an
   ablation, a sweep, a proof or a citation (`notes/justification_audit.md`). Dev subset of 110
   val problems, runner `scripts/ablation.py`, reading in D-98. Order: J0 and J9 offline; J1

@@ -37,7 +37,7 @@ chats. Last updated 2026-11-03.*
 | Q-41 | What's the reference ("best known") every grading uses? | 2.1 |
 | Q-42 | Can we prove more optima on the val sets? | 2.2 |
 | Q-156 | Does the sharing pass need all 4 target orders, or do 1-2 give the same plans faster? | 6.7 (D-96) |
-| Q-157 | Does our method beat MTDA (flow-based multi-target dilution) on the final sets and on its own protocol? | 6.8 (D-97) |
+| Q-157 | Does our method beat MTDA (flow-based multi-target dilution) on the final sets and on its own protocol? | Closed (E-107, E-108): yes. 0 losses on the final sets (1,494) and on its own protocol (564, 0.692) |
 | Q-161 | Do the three methods we only draw level with (NFSP, MTWM, SIMOP) hold level, or beat us, on their own papers' experiments, which no set covers yet? | **Decided 2026-11-18 (D-100): not built**; expected level or worse (their exact solvers' home ground, B3 evidence); stated as a threat to validity |
 | Q-158 | Is every choice in method-v3 backed by an ablation, a sweep, a proof or a citation? | 6.9 (D-98) |
 | Q-159 | Is the s4-s5 depth limit (E-81) a property of the method, or of 256 simulations per move? | 6.9, J2 (D-98) |
@@ -1002,7 +1002,7 @@ under its waste-first goal (B3 ran fluid only). The other 13 published methods a
 clearly on B1-B2 (ratios 0.42-0.90), DFM, FacDA, Generic and e-MRCM on their own protocols too;
 Dong only ties (one mix per droplet) and cannot be cheaper; MTDA is covered (D-99).
 
-**Q-157 Does our method beat MTDA?** · **Open → plan 6.8** (D-97, 2026-11-18) MTDA (Kamal
+**Q-157 Does our method beat MTDA?** · **Closed → E-107, E-108 (2026-11-19): yes**, 0 losses in 2,058 problems; on its own protocol 553 / 11 / 0, 0.692. On the paper's N-segment mix count MTDA has fewer mixes at N >= 3 with 20+ targets; we keep far less waste and sample. Was: Open → plan 6.8 (D-97, 2026-11-18) MTDA (Kamal
 et al., TODAES 2020) is a flow-based multi-target dilution method from Sudip Roy's group, built
 as our reading (L-23). Check: added to the final B1-B3 records (`bench.py add=`), and B2(c) on
 its own protocol (`test_mtda_v2`, steps goal); bar in D-97.

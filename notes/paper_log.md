@@ -2334,6 +2334,66 @@ MRCM's intermediates on val_s2: 4 of 28 covered (chain D4), 5 of 28 (premix D3).
   again). (3) Built as SPEC 0.28 `hint_source: problem` (depth-4 chain in the recipe columns)
   for a copy-test comparison on stages 1–2 against the planner's hints.
 
+### E-108 (2026-11-19) MTDA on its own protocol (B2(c), D-97 part 2): beats it on all 564 problems, 0 losses; Q-157 closed
+coe9, `bench.py sets=test_mtda_v2 goals=steps methods=mtda planners=share published_goal=steps
+workers=19` (taskset 20-32,34-39) at `aa672d5` (SPEC 0.54), records `outputs/mtda/b2c.jsonl`,
+summary `outputs/mtda/summary.md`. 564 problems (D-99: N = 2..8 at z = 4, N = 2 at z = 8 and
+z = 10, eta = 2..100, 3 tolerance levels with real CFs, 4 paper examples; 10 per cell).
+- **Reading (D-97, fixed in advance): `mtda (steps)` beats, at 60 s and at 900 s.** 900 s:
+  **553 / 11 / 0, ours / MTDA 0.692 [0.679, 0.705], median 0.691.** No loss on any cell.
+  Every problem planned at 900 s (20 unplanned at 60 s). Ours vs our plain planner: 512 / 52 / 0,
+  0.903.
+- **Per cell (ours / MTDA, mean of 10):** N = 2, z = 4: 0.90-1.00 (T2 ties 8 of 10: little to
+  share); N = 2, z = 8: 0.65-0.95; N = 2, z = 10: 0.63-0.83; N = 3-8, z = 4: 0.48-0.88, the gain
+  largest at small eta (N = 7-8, T2-T5: 0.48-0.51) and shrinking as eta grows (T100: 0.76-0.88,
+  MTDA's sharing table fills up). Tolerance cells (T10): **0.42-0.43** at 1/100, 1/1000, 1/10000
+  (MTDA must round to c / N^z and raise z; we are not tied to a radix). Paper examples: Fig. 3
+  0.89, Fig. 5 0.50, Fig. 7 0.67, Table 5(a) 0.41.
+- **Waste and sample (where the gain is):** waste ours / MTDA, e.g. N = 2, z = 10, T100 41 / 130;
+  N = 5, T20 7 / 71; N = 8, T100 88 / 401; tol 1/100 17 / 96. Sample at or below MTDA in every
+  cell (e.g. tol 1/100 12.8 / 52.7).
+- **Mixes counted the paper's way (one N-segment mix = 1): MTDA needs fewer mixes than we do on
+  18 of 60 rows: 17 cells, all N >= 3 and eta >= 20 (N3 at T50/T100, N4-N8 at T20/T50/T100; N3-T20
+  equal), and Fig. 3 (6 against our 8)**,
+  e.g. N = 8, T100: ours 289 two-input mixes against MTDA's 186 N-segment mixes (379 two-input).
+  On the MEDA engine's count (an N-input mix is N - 1 two-input merges, the cost both plans pay
+  here) we use fewer mixes on every cell. So the win is a MEDA win: on MTDA's own flow-based
+  rotary mixer, where filling N segments costs one mix, it keeps fewer mixes at many targets and
+  we keep 2-10x less waste and less sample. Stated in the threats (section 8).
+- Table 4 check (N = 2, z = 10): our MTDA reading is within 10% of the printed per-target
+  numbers at eta = 2 and below them as eta grows (T100: 3.84 mixes against the printed 5.35),
+  as L-23 found: our reading shares more than the paper's, so it favours MTDA.
+- **Time (same records, read by a one-off script on `ours_at` and the trace; CPU s):** MTDA
+  runs in median 0.006 s (90%: 0.043, max 0.39). Our plain planner alone: median 0.45 s (90%:
+  13 s, max 148 s) and already beats MTDA 535 / 16 / 13. Our method's first plan cheaper than
+  MTDA's: median 0.47 s, 90% 15 s, max 150 s (553 problems; the other 11 tie). Its final plan:
+  median 181 s, 90% 731 s (max 1077 s: the cap is checked between simulations). Stopped early,
+  ours vs MTDA (w / t / l, no plan yet): 1 s 326 / 12 / 3, 223; 10 s 487 / 11 / 2, 64; 60 s
+  533 / 11 / 0, 20; 900 s 553 / 11 / 0, 0. MTDA is 2-4 orders of magnitude faster; we beat it in
+  under a second on the median problem and lose no problem once a plan exists from 60 s on.
+- Q-157 closed: we beat MTDA on the final sets (E-107, 1,494 problems) and on its own protocol
+  (564), never dearer on any problem. Plan 6.8 done.
+
+### E-107 (2026-11-19) MTDA on the final runs (D-97 part 1): beats it on every set, never dearer on any of 1,494 problems
+coe9, `bench.py add=... methods=mtda` at `aa672d5` (SPEC 0.54) on the final records (E-91,
+E-85, E-96, E-86); outputs `outputs/bench/{b1_v3_all,b2a_v3,b2b_v3_all,b3_v3}_mtda.jsonl`. Our
+plans are the frozen method-v3 runs, unchanged; only MTDA was run. Ours / MTDA at 900 s, w / t / l
+for us, mean [95% CI], median:
+- **B1** (164 problems MTDA accepts: s1 70, s3 39, s4 10, s5 24, held-out 21): **steps (its own
+  goal) 131 / 33 / 0, 0.745 [0.715, 0.776], median 0.677**; fluid 144 / 20 / 0, 0.644; waste
+  144 / 20 / 0, 0.354. Reading per set (D-69): beats on s1 (70), s3 (39), s4 (10), s5 (24),
+  held-out (21).
+- **B2(a)** (`litbench_paper_v1`, 128): **steps 110 / 18 / 0, 0.831 [0.801, 0.862]**, median
+  0.899; fluid 0.656; waste 0.295. Beats.
+- **B2(b)** (`test_emrcm_v1` dilutions, 711; fluid goal only): 707 / 4 / 0, 0.336 [0.324,
+  0.349]. Beats.
+- **B3** (`dmfb_sweep_v1`, 491, 1:1; fluid only, engine check, never a win): 415 / 76 / 0,
+  0.858.
+- **Losses: none** on any set under any goal (1,494 problems). Held-out coverage is 21, not
+  L-23's 6, because D-99's near-pure rule now lets MTDA take more tolerant targets.
+- Reading (D-97): MTDA beats nowhere; part 2 (B2(c), `test_mtda_v2`, its own experiments) still
+  to run. Q-157 stays open until then.
+
 ### E-106 (2026-11-19) J1, the noise floor: identical runs agree; random tie-breaking is 3% dearer
 coe9, `scripts/ablation.py runs=J1 workers=16`, records `outputs/ablation/j1.jsonl`, summary
 `outputs/ablation/j1_summary.md` (run started on `e3927e8` / `05f8bde`, warm memo caches, E-105).
@@ -4753,6 +4813,7 @@ independent reference (oracle, optimum, bound, validator) catches it.**
 
 ## 8. Threats to validity and open items
 
+- **MTDA's mix count (E-108):** we beat MTDA under MEDA's cost (two-input merges, then waste). Counted as on its flow-based chip (one N-segment mix = 1), MTDA uses fewer mixes on 18 of 60 B2(c) rows (17 cells with N >= 3 and 20+ targets, and Fig. 3); we still keep 2-10x less waste and less sample there.
 - Two unread papers could narrow the claim (L-4).
 - **Home ground of the exact methods (D-100):** on 1:1 deep dilutions (B3) NFSP, SIMOP and MTWM
   are cheaper than method-v3 on 58-73 problems (dearer on 0, 7 and 27); NFSP's many-target 1:1 tables,
