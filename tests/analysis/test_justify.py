@@ -108,3 +108,35 @@ def test_finish_cost_is_the_engines() -> None:
             _, pre, _ = JP.replay(relaxed, prefix)
             w = JP.WEIGHTS
             assert w.scalar(total, inst.fluids) - w.scalar(pre, inst.fluids) == found[1]
+
+
+def test_saturation_rule() -> None:
+    """D-101: the smallest value from which no larger value is more than 0.5% cheaper; a
+    dearer larger value (the greedy is not monotone) does not stop it."""
+    assert JP.saturation([(1, 1.16), (2, 1.16), (3, 1.001), (4, 1.001), (6, 1.07)]) == 3
+    assert JP.saturation([(1, 1.0), (2, 1.0)]) == 1
+    assert JP.saturation([(1, 1.10), (2, 1.05), (3, 1.0)]) == 3
+
+
+def test_order_list_covers_every_order_when_few_targets() -> None:
+    from meda.generators.benchmark_io import BenchmarkSet
+
+    inst = next(i for i in BenchmarkSet.read("val_emrcm_v1").instances if len(i.targets) == 3)
+    orders = JP.order_list(inst, JP.WEIGHTS)
+    assert len(orders) == 6 and len({tuple(o) for _, o in orders}) == 6
+    rules = [r for r, _ in orders if r[0] not in ("all", "random")]
+    assert rules and all(set(r) <= set(JP.share.ORDER_RULES) for r in rules)
+    rec = JP.run_orders(
+        {
+            "base": "plain",
+            "set": "val_emrcm_v1",
+            "id": inst.instance_id,
+            "commit": "t",
+            "cap": 120.0,
+        }
+    )
+    assert len(rec["runs"]) == 6 and all(x["cost"] is not None for x in rec["runs"])
+    plan = JP.share.share_plan(inst, JP.WEIGHTS)
+    _, total, _ = JP.replay(inst, plan)  # the pass keeps the best of its rules' orders
+    best_rules = min(x["cost"] for x in rec["runs"] if x["rules"][0] not in ("all", "random"))
+    assert float(JP.WEIGHTS.scalar(total, inst.fluids)) <= best_rules

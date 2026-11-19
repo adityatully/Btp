@@ -12,8 +12,10 @@ N = 5 10). Fluid goal (`costs/geometric`), as the finals.
 **Runs** (`runs=`, comma-separated groups or configs; each is (config, repeat)):
 - `J1`, the noise floor: method-v3 three times (`v3` repeats 0-2) and with random tie-breaking
   under two seeds (`seed1`, `seed2`).
-- `J2`, simulations x exploration: sims {16, 64, 256, 1024} x C_PUCT {0.5, 1.5, 4}; `v3` repeat 0
-  is the (256, 1.5) cell.
+- `J2`, two curves (D-101): sims per move {8, 16, 32, 64, 128, 256, 512, 1024, 2048} at C_PUCT
+  1.5, and C_PUCT {0.25, 0.5, 1, 1.5, 2, 3, 4, 8} at 256 sims; `v3` repeat 0 is (256, 1.5). Any
+  other pair runs by name (`sims64_c0.5`). The summary prints each curve with the moves the
+  tree committed and the plateau (values within 0.5% of the best).
 - `J3`, search mechanics one at a time: best-leaf backup, first-play value {0, -1}, value
   scale from the first plan, no floor, dead-end value {-2, -0.5}, play the move with the
   cheapest plan, never pick a Discard. Join with J2's chosen point by '+'
@@ -84,7 +86,9 @@ SUBSET_SETS = (
     ("val_emrcm_v1", 30),
 )
 SECONDS, SIMS = 900.0, 256  # method-v3 (bench.METHOD)
-SIMS_GRID, CPUCT_GRID = (16, 64, 256, 1024), (0.5, 1.5, 4.0)
+# J2's curves (D-101): each number swept well past its value, the other held at method-v3's
+SIMS_CURVE = (8, 16, 32, 64, 128, 256, 512, 1024, 2048)
+CPUCT_CURVE = (0.25, 0.5, 1.0, 1.5, 2.0, 3.0, 4.0, 8.0)
 
 
 J3 = {  # search mechanics, one at a time (S6-S10, S12, S20)
@@ -137,8 +141,8 @@ def configs() -> dict[str, dict[str, Any]]:
     """Every named config: changes against method-v3 (none = method-v3 itself). A run may join
     configs with '+' (e.g. `backup_max+sims64_c0.5`, J3 at J2's chosen point)."""
     out: dict[str, dict[str, Any]] = {"v3": {}, "seed1": {"seed": 1}, "seed2": {"seed": 2}}
-    for s in SIMS_GRID:
-        for c in CPUCT_GRID:
+    for s in SIMS_CURVE:
+        for c in CPUCT_CURVE:
             if (s, c) != (SIMS, sc.C_PUCT):
                 out[f"sims{s}_c{c:g}"] = {"sims": s, "cpuct": c}
     return out | J3 | J5 | J4 | J7 | J8
@@ -156,7 +160,9 @@ def config(name: str) -> dict[str, Any]:
 
 GROUPS: dict[str, list[tuple[str, int]]] = {
     "J1": [("v3", 0), ("v3", 1), ("v3", 2), ("seed1", 0), ("seed2", 0)],
-    "J2": [("v3", 0)] + [(name, 0) for name in configs() if name.startswith("sims")],
+    "J2": [("v3", 0)]
+    + [(f"sims{s}_c1.5", 0) for s in SIMS_CURVE if s != SIMS]
+    + [(f"sims256_c{c:g}", 0) for c in CPUCT_CURVE if c != 1.5],
     "J3": [("v3", 0)] + [(name, 0) for name in J3],
     "J5": [("v3", 0)] + [(name, 0) for name in J5],
     "J4": [("v3", 0)] + [(name, 0) for name in J4],
@@ -617,12 +623,58 @@ def summarise(paths: list[Path], noise: Path | None = None) -> str:
                 f"| {key[0]} | {key[1]} | {g} | {len(rs)} | {ratio} | {wb} | {v} | {depth} |"
                 f" {leaves} | {capped} |"
             )
+    lines += ["", *j2_curves(by)]
     lines += [
         "",
         "Noise band (D-98): "
         + ", ".join(f"{g} {b:.4f}" if b is not None else f"{g} -" for g, b in bands.items()),
     ]
     return "\n".join(lines)
+
+
+def j2_curves(by: dict[tuple[str, int], dict[str, dict]]) -> list[str]:
+    """J2's curves (D-101): per value, the mean of cost / the per-problem best over the curve
+    (problems every value finished), the median moves committed and leaves. Under a fixed time
+    budget more simulations are not always better, so the reading is the plateau: every value
+    within 0.5% of the curve's best, and whether method-v3's value is on it."""
+    lines = ["## J2 curves (D-101): mean cost / best of the curve; depth; leaves", ""]
+    for name, pts in (
+        (
+            "sims per move (C_PUCT 1.5)",
+            [(v, "v3" if v == SIMS else f"sims{v}_c1.5") for v in SIMS_CURVE],
+        ),
+        ("C_PUCT (256 sims)", [(v, "v3" if v == 1.5 else f"sims256_c{v:g}") for v in CPUCT_CURVE]),
+    ):
+        runs = [by.get((cfg, 0), {}) for _, cfg in pts]
+        if sum(bool(r) for r in runs) < 2:
+            continue
+        have = [(v, r) for (v, _), r in zip(pts, runs, strict=True) if r]
+        for g in ("s1-s2", "s3", "s4-s5", "emrcm", "all"):
+            ids = [
+                i
+                for i, r in have[0][1].items()
+                if (g == "all" or r["group"] == g)
+                and all(i in rs and rs[i]["cost"] is not None for _, rs in have)
+            ]
+            if not ids:
+                continue
+            best = {i: min(rs[i]["cost"] for _, rs in have) for i in ids}
+            cells, ratios = [], {}
+            for v, rs in have:
+                r = float(np.mean([rs[i]["cost"] / best[i] for i in ids]))
+                ratios[v] = r
+                depth = int(np.median([rs[i]["depth"] for i in ids]))
+                leaves = int(np.median([rs[i]["leaves"] for i in ids]))
+                mark = "*" if v in (SIMS, 1.5) and (v == SIMS) == name.startswith("sims") else ""
+                cells.append(f"{v:g}{mark}: {r:.4f} (d {depth}, {leaves} leaves)")
+            top = min(ratios.values())
+            plateau = [f"{v:g}" for v, r in ratios.items() if r <= top + 0.005]
+            lines.append(
+                f"- **{name}**, {g} (n {len(ids)}): "
+                + "; ".join(cells)
+                + f" -> plateau (within 0.5% of the best): {', '.join(plateau)}"
+            )
+    return lines
 
 
 # --------------------------------------------------------------------------- main

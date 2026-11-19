@@ -125,6 +125,28 @@ need no sweeps unless the paper claims something about them.
 
 ## Part 2. The runs
 
+### Every number and the curve that justifies it (D-101)
+
+No number here can be proved optimal at full size. Each is shown at or past the point where a
+wider sweep stops paying (the **saturation point**: no larger value is more than 0.5% cheaper),
+or, where the budget is fixed (J2), on the plateau of the best values, with the time each
+step costs.
+
+| Number | Value | Curve | Ceiling that ends the curve | Run |
+|---|---|---|---|---|
+| Target orders | 4 rules | 1, 2, 3, 4 rules (every subset scored), then + random orders, up to every order | all permutations (problems with <= 4 targets): the best order there is | J6 orders curve |
+| Chain depth | 3 | 1, 2, 3, 4, 5, 6 | - (time grows ~10x per step) | J6, J7 |
+| Lookahead k | 3 (baselines), 1 (method-v3) | 1-6, 8, 10 | k >= candidates per delivery group = exhaustive one-step lookahead | J6 |
+| Blend partners | 4 | 0, 1, 2, 3, 4, 6, 8, 12, all | all idle droplets | J6 |
+| Recipes | 5 | tree, + direct, + one mix, + chain, + MRCM (and each dropped) | - (a 6th recipe: argument, E-17, E-57) | J6 |
+| Split-tree extra steps | 4 | 1-6, 8 | - | J6 |
+| Tree / MRCM search budget | 20,000 / 2,000,000 | x0.25, 0.5, 1, 4, 16 | - | J6 |
+| Simulations per move | 256 | 8 ... 2048 (x2 steps) | fixed 900 s budget: a plateau, not a ceiling | J2 |
+| C_PUCT | 1.5 | 0.25, 0.5, 1, 1.5, 2, 3, 4, 8 | plateau | J2 |
+| Time budget | 900 s | 1, 10, 30, 60, 120, 300, 600, 900 s (from the traces) | - | J0 |
+| Finisher switch | 20 s, 3 leaves, 0.5 | 5, 10, 20, 40 s; 1, 3, 10; 0.25, 0.5, 0.75 | - | J5 |
+
+
 All runs use dev sets only (val s1-s5, `val_emrcm_v1`); the test sets stay untouched (SPEC
 0.33). Method-v3 is frozen (D-83): if a sweep finds a clearly better setting, the paper reports
 it as sensitivity, and changing the method (which means rerunning the finals) is the user's call.
@@ -148,11 +170,11 @@ chain depth 4 and large k on s4-s5 (likely hours).
 |---|---|---|---|---|---|
 | **J0** | **Offline, from the final B1 / B2b records and existing logs.** Method-v3's cost-vs-budget curve per stage (cost at 10, 30, 60, 120, 300, 600, 900 s from `ours.trace`). Overshoot of the cap. Switch times and finisher modes. Plus small instrumented reruns on the subset: how often a leaf's finish exceeds the step limit (S14), whether `finish_from`'s cost agrees with the engine's at success (F8), and how often the tree and MRCM search budgets bind (P15, P16). | S14, S16, S18, F7, F8, P15, P16 | – | none (records) + minutes | nothing |
 | **J1** | **Noise floor.** Method-v3 three times on the subset, plus two runs with random tie-breaking (seeded `rng`). Gives the noise band every other run is read against. | S15, S17, V7 | 5 | ~4 h wall | run first |
-| **J2** | **Sims and exploration**, a grid: sims per move {16, 64, 256, 1024} × C_PUCT {0.5, 1.5, 4}. Reports depth committed. Answers whether the s4-s5 depth limit is a property of the method or of 256. | S2, S3 | 11 (+ J1's v3) | ~8 h wall | J1 |
+| **J2** | **Two curves (D-101):** sims per move {8, 16, 32, 64, 128, 256, 512, 1024, 2048} at C_PUCT 1.5, and C_PUCT {0.25, 0.5, 1, 1.5, 2, 3, 4, 8} at 256. Reports cost, the moves the tree committed and leaves per value, and the plateau (values within 0.5% of the best). Answers whether the s4-s5 depth limit is a setting. | S2, S3 | 16 | ~430 CPU-h | J1 |
 | **J3** | **Search mechanics**, one factor at a time at J2's chosen point: max backup; first-play value {0, −1}; value scale from the first plan / rank-based; floor off; dead-end value {−2, −0.5}; move played = cheapest plan through it; transpositions merged; moves without Discard. | S6-S10, S12, S20, S21 | ~9 | ~7 h wall | J2 |
 | **J4** | **Other ways to spend the time**, same finisher, same 900 s: beam search over moves (width 4 and 16, leaves scored by the finisher); nested rollout (NRPA, level 2); greedy one-move lookahead repeated to the end. E-37's random restarts are the existing fourth arm. | S1 | 4 | ~3 h wall | J1 (code for beam and NRPA) |
 | **J5** | **Finisher switch**, only on the problems where it fires (N 4-5, s5): mean {5, 10, 40} s with the real rule, min leaves {1, 10}, tier share {0.25, 0.75}. | F3-F5 | 7 | ~3 h wall | J1 |
-| **J6** | **Planner alone**, every val problem, cost and time per stage: chain depth {1, 2, 3, 4}; blend partners {0, 2, 4, 8, all}; last-input rule off; lookahead k {1, 2, 3, 5, 8}; drop each recipe in turn; eviction {furthest, smallest, oldest, random}; greedy rule {per delivery, total, per unit volume}; deliveries per droplet {most and 1, all counts}; tolerant aim {coarsest, nearest}; extra steps {2, 4, 6}; interleaved targets vs one at a time; order rules (with D-96). | P1-P16 | ~30 | ~1 day, mostly depth 4 and k ≥ 5 on s4-s5 | nothing (can start now, Mac for s1-s3) |
+| **J6** | **Planner curves (D-101)**, every val problem, plain and greedy-MRCM bases: chain depth 1-6; blend partners 0-12 and all; lookahead k 1-10; extra steps 1-8; search budgets x0.25-16; recipes added one at a time; ceilings (candidates and idle droplets per group). **Order curve** (`orders=1`): every order of each problem, all permutations when at most 24. Plus the other settings one at a time. Saturation point per curve. | P1-P16 | ~50 + orders | ~300 + ~80 CPU-h | nothing |
 | **J7** | **The planner settings that matter inside the search** (from J6 and D-96): chain depth 2 vs 3 at the leaves under 900 s; orders {best 1-2, 4}; blend partners if J6 shows a speed-cost trade. | P1, P5, P6 | 3-5 | ~4 h wall | J1, J6, D-96 |
 | **J8** | **Problem-side sensitivity**, method-v3 and the strongest baselines on the subset: fluid weights {16/4/1, 64/8/1, 256/16/1}; mix weight {0, 1, 4}; waste weight {0, 1, 4}; step-limit floor {1.5, 2, 4}× the witness. Question: does the ranking of ours against the best baseline hold? | E2, E3 | ~9 | ~8 h wall | J1 |
 | **J9** | **Offline statistics from the final records:** power of 40 and 100 problems for the effect sizes we report; the verdicts re-read with the loss threshold at 5% and 20%. | V1, V2 | – | none | nothing |
@@ -171,9 +193,10 @@ caches, so times compare.
 |---|---|---|---|---|
 | J0, J9 | nothing (final records on coe9) | nothing | coe9, 1 core | minutes |
 | J8 published plans (`justify_problem.py published=build`) | nothing | – | coe9, few cores | ~1-3 h (NFSP) |
-| J6 | nothing | nothing (deterministic) | coe9 | ~150-200 CPU-h |
+| J6 (curves) | nothing | nothing (deterministic) | coe9 | ~300 CPU-h (caps on depth 5-6 and k 8-10 at s4-s5) |
+| J6 orders curve | nothing | nothing | coe9 | ~80 CPU-h |
 | **J1** | nothing | nothing | coe9 | 145 CPU-h |
-| J2 | nothing | J1 (noise band) | coe9, whole machine | ~350 CPU-h |
+| J2 (curves) | nothing | J1 (noise band) | coe9, whole machine | ~430 CPU-h |
 | J4 | nothing | J1 | coe9 | ~110 CPU-h |
 | J5 | nothing | J1 | coe9 | ~75 CPU-h (s5 and N 4-5 only) |
 | J8 runs | nothing | J1, J8 published plans | coe9 | ~300 CPU-h (search + 4 planner runs, capped) |

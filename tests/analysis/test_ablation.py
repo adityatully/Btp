@@ -40,8 +40,9 @@ def test_subset_is_frozen_and_rebuilds_the_same() -> None:
 def test_groups() -> None:
     assert A.expand("J1") == [("v3", 0), ("v3", 1), ("v3", 2), ("seed1", 0), ("seed2", 0)]
     j2 = A.expand("J2")
-    assert len(j2) == 12  # the 4 x 3 grid, method-v3's cell is v3 repeat 0
+    assert len(j2) == 16  # 8 more sims values, 7 more C_PUCT values, method-v3 (D-101)
     assert ("v3", 0) in j2 and ("sims256_c1.5", 0) not in j2
+    assert ("sims2048_c1.5", 0) in j2 and ("sims256_c8", 0) in j2
     assert A.expand("J1,J2")[:5] == A.expand("J1")  # no duplicates
 
 
@@ -133,3 +134,32 @@ def test_summary_reads_own_reference_and_j1_noise(tmp_path: Any) -> None:
         assert "twice" in str(e)
     else:
         raise AssertionError("two files with the same run must be refused")
+
+
+def test_j2_curve_reads_plateau_and_depth(tmp_path: Any) -> None:
+    rows = []
+    for e in json.loads(A.SUBSET.read_text())[:12]:
+        for cfg, cost, depth in (
+            ("v3", 100.0, 5),
+            ("sims16_c1.5", 100.2, 20),
+            ("sims8_c1.5", 110.0, 30),
+        ):
+            rows.append(
+                json.dumps(
+                    {
+                        "config": cfg,
+                        "repeat": 0,
+                        "id": e["id"],
+                        "cost": cost,
+                        "depth": depth,
+                        "leaves": 9,
+                        "capped": True,
+                    }
+                )
+            )
+    path = tmp_path / "j2.jsonl"
+    path.write_text("\n".join(rows) + "\n")
+    text = A.summarise([path])
+    line = next(x for x in text.splitlines() if x.startswith("- **sims per move") and "all (n" in x)
+    assert "256*: 1.0000 (d 5," in line and "16: 1.0020 (d 20," in line
+    assert line.endswith("plateau (within 0.5% of the best): 16, 256")

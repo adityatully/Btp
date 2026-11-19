@@ -1474,6 +1474,31 @@ Format: date · decision · alternatives considered · why · evidence.
   else better / worse; a value is justified when its neighbours on each side are level or
   worse. *Mac trial (1 problem per set, 5 s, 3 configs; not a result):* runs end to end;
   seed 1 is cheaper on 2 of 6 (0.15-0.3%), so tie order alone moves results a little.
+- **D-101 (2026-11-19) Every number gets a convergence curve, not a neighbour check (user:
+  "I cannot prove a number to be optimal ... I need to show convergence, that either the
+  results saturate after a particular limit"; "why only 4 orders, not 5 or 6", "why 3-step
+  lookahead, not 10", "why 256 simulations").** D-98's sweeps checked one value on each side of
+  each number; they cannot show saturation. Now each number is swept well past its value
+  (`notes/justification_audit.md`, "Every number and the curve that justifies it"): chain depth
+  1-6, blend partners 0-12 and all, lookahead k 1-10, extra steps 1-8, search budgets x0.25-16,
+  the recipes added one at a time (`scripts/justify_planner.py`); target orders from 1 rule to
+  every order of the problem (`orders=1`: each problem planned once per order, all
+  permutations when at most 24, else 32 random); simulations per move 8-2048 and C_PUCT
+  0.25-8 (`scripts/ablation.py runs=J2`, two one-factor curves at method-v3's other value).
+  Where a curve has a natural end it is reached and counted: lookahead k at or above the
+  candidates per delivery group is exhaustive, blend partners at or above the idle droplets
+  take every one, every order of a problem with <= 4 targets includes the best order.
+  **Reading, fixed in advance:** per curve, base and group, the mean of cost / the per-problem
+  best over the curve's values (problems every value finished), and the median time over the
+  base's. Saturation point = the smallest value from which no larger value is more than 0.5%
+  cheaper (a larger, dearer value does not stop it: the greedy pass is not monotone). A number
+  is justified if it is at or past its saturation point; below it, the curve states the gain
+  left and its time cost. For sims and C_PUCT (fixed 900 s budget, more is not always better)
+  the reading is the plateau: values within 0.5% of the best, with the moves committed. Not
+  provable: a 6th recipe (no list of candidates to sweep); argued from E-17, E-57.
+  *Mac trials (2-4 problems, not results):* chain depth saturates at 3 (4 and 5 equal, 6 dearer,
+  8-290x the time); lookahead saturates at k = 1 (k = 2 is 0.16% cheaper, under the 0.5% line); the 4 order rules often give only 2 distinct
+  orders, and on val_s4-001 a random third order is 4.2% cheaper than every rule.
 
 ## 4. Experiments and results
 
