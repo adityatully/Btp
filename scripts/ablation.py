@@ -50,11 +50,13 @@ cleared per run (E-104), so its method-v3 runs are not the reference for later o
 
 from __future__ import annotations
 
+import itertools
 import json
 import math
 import signal
 import subprocess
 import sys
+import zlib
 from collections import defaultdict
 from dataclasses import replace
 from multiprocessing import Pool
@@ -124,6 +126,10 @@ J7 = {  # planner settings inside the search's finisher (P1, P5, P6); J6's patch
     "orders_given": {"orders": ("given",)},
     "orders_dear": {"orders": ("dear",)},
     "orders_dear_cheap": {"orders": ("dear", "cheap")},
+    # E-109: more orders than the 4 rules (Q-163): the rules' orders, then n more distinct
+    # ones, seeded per problem (every permutation shuffled up to 4 targets, else random)
+    "more_orders4": {"more_orders": 4},
+    "more_orders12": {"more_orders": 12},
 }
 # J8: the problem's own numbers (E2, E3). Weight profiles in configs/costs/sensitivity; each
 # J8 run also runs the 4 planner runs under the same weights and limit (`baselines`)
@@ -169,6 +175,7 @@ GROUPS: dict[str, list[tuple[str, int]]] = {
     "J7": [("v3", 0)] + [(name, 0) for name in J7 if name.startswith("leaf_")],
     # D-96's search pilot: only if the order check (scripts/order_check.py) passes its bar
     "J7o": [("v3", 0)] + [(name, 0) for name in J7 if name.startswith("orders_")],
+    "J7m": [("v3", 0)] + [(name, 0) for name in J7 if name.startswith("more_orders")],
     "J8": [(name, 0) for name in J8],
 }
 
@@ -413,7 +420,42 @@ def _set_problem(cfg: dict[str, Any]) -> CostWeights:
             return [o for o in every if allowed & set(o[0])] or every[:1]
 
         share.named_orders = limited
+    if "more_orders" in cfg:  # E-109, Q-163: the rules' orders and n more
+        share.named_orders = more_orders(int(cfg["more_orders"]))
     return w
+
+
+def more_orders(n: int) -> Any:
+    """`named_orders` with n extra distinct target orders after the rules' (Q-163): every
+    other permutation in a seeded shuffle when there are at most 4 targets, else seeded random
+    ones, as J6's order curve (`justify_planner.order_list`) draws them."""
+    memo: dict[str, Any] = {}
+
+    def named(instance: Any, weights: Any) -> Any:
+        if instance.instance_id in memo:
+            return memo[instance.instance_id]
+        out = list(_BASE["orders"](instance, weights))
+        seen = {tuple(o) for _, o in out}
+        k = len(instance.targets)
+        seed = zlib.crc32(instance.instance_id.encode())
+        if math.factorial(k) <= jp.ALL_ORDERS:
+            perms = [list(p) for p in itertools.permutations(range(k))]
+            rng = np.random.default_rng([seed, 1])
+            extra = [perms[int(i)] for i in rng.permutation(len(perms))]
+        else:
+            rng = np.random.default_rng([seed, 0])
+            extra = [[int(i) for i in rng.permutation(k)] for _ in range(4 * n)]
+        most = len(out) + n
+        for order in extra:
+            if len(out) >= most:
+                break
+            if tuple(order) not in seen:
+                seen.add(tuple(order))
+                out.append((("extra",), order))
+        memo[instance.instance_id] = out
+        return out
+
+    return named
 
 
 def baselines(inst: Any, w: CostWeights) -> dict[str, dict[str, Any]]:

@@ -2334,6 +2334,46 @@ MRCM's intermediates on val_s2: 4 of 28 covered (chain D4), 5 of 28 (premix D3).
   again). (3) Built as SPEC 0.28 `hint_source: problem` (depth-4 chain in the recipe columns)
   for a copy-test comparison on stages 1–2 against the planner's hints.
 
+### E-109 (2026-11-20) Planner curves (J6, D-101): lookahead and budgets justified; chain depth 3 and the 4 target orders are not at saturation
+coe9, commit `db0d921` (D-101 code of `86a47f2`), plain base only, cap 600 CPU-s, every val
+problem (322): `justify_planner.py bases=plain configs=look2..look10,chain1,chain2,chain4,
+recipes1..4 cap=600 workers=12` → `outputs/ablation/j6.jsonl`; order curve `orders=1
+bases=plain cap=600 workers=6` → `outputs/ablation/j6_orders.jsonl`. The MRCM base, chain
+depth 5-6, blend partners, split-tree steps and budget multiples were not run (cut to fit
+~10 h on 18 free cores). Ratios are mean cost / the base (or / the best on the curve).
+- **Lookahead k: justified.** Saturates at **k = 2** (D-101 rule). k = 1 is 0.59% dearer
+  overall, 1.9% on s4-s5, 0.8% on s3; k = 2 to 10 are within 0.04% of each other (k = 10:
+  0.9950 of k = 1, 32 better / 0 worse; k = 3: 0.9951). Ceiling: candidates per delivery group
+  median 2, max 4, so k >= 4 tries every candidate and cannot differ. Time: k = 3 is 3.0x k = 1
+  on s4-s5, 1.14x overall. The baselines' k = 3 is past saturation; method-v3's finisher uses
+  k = 1 (greedy), 1.9% dearer on s4-s5 for a third of the time per leaf.
+- **Chain depth 3: not saturated.** Depth 1: 1.129 (worse 112 / better 6); 2: 1.067; **4: 0.9525
+  [0.930, 0.979], better 92 / worse 26, at 10.4x the time** (s1-s2 0.921, s4-s5 0.960, emrcm
+  0.949, s3 level 1.010). Saturation needs depth 5-6 (not run; 8-290x the time in Mac trials).
+  The Mac trial that showed 4 = 3 (D-101) was 2-4 problems and does not hold at scale.
+- **Recipes (plain base): every recipe up to the chain is needed; MRCM's cannot be read here.**
+  Cumulative tree, +direct, +one mix, +chain: 1.153, 1.153, 1.131, 1.003 (of the curve's best);
+  the chain recipe gives almost all of it (s4-s5 1.27 → 1.00). The plain base has no MRCM
+  recipe, so recipes 5 = 4 by construction: the MRCM recipe needs the MRCM base (not run).
+  Adding "direct" after the tree alone changes nothing; the drop-one runs (not run) would show
+  whether it matters with the others present.
+- **Split-tree search budget: justified (non-binding).** 0 of 322 base runs hit
+  `tree.SEARCH_BUDGET`, so a larger budget cannot change a plan. (MRCM budget: no MRCM recipe
+  in the plain base, so not tested.)
+- **Target orders (4 rules): not saturated.** Best of the first n orders (rules first, then
+  others) / best of every order tried. <= 4 targets (54 problems, every permutation tried):
+  4 orders 1.0174, 6 orders 1.0008 → **saturates at 6**. > 4 targets (44, rules + 32 random):
+  4 orders 1.0421 (s4-s5 1.0545), 12: 1.019, 24: 1.0065, 28: 1.0043, **still falling at 36**
+  (the reference is the best of 36, so the true gap is larger). Fewer is worse: best single
+  rule (`cheap`) 1.057 / 1.081, best pair 1.024 / 1.053. emrcm with > 4 targets: the rules
+  already give the best of 36. Caveats: the rules give a median 2-4 distinct orders, so "4
+  orders" on the curve includes non-rule orders where rules coincide; capped problems are left
+  out uncounted; time per order not printed (summary fix staged, not yet pushed).
+- **Reading.** Lookahead and the split-tree budget have their convergence evidence. Chain
+  depth and target orders are speed choices on the planner alone: each leaves ~4-5% on the
+  table. Whether that survives inside method-v3 (the search may make it up) is the next check
+  (J7: `leaf_chain4`; more orders at the leaves).
+
 ### E-108 (2026-11-19) MTDA on its own protocol (B2(c), D-97 part 2): beats it on all 564 problems, 0 losses; Q-157 closed
 coe9, `bench.py sets=test_mtda_v2 goals=steps methods=mtda planners=share published_goal=steps
 workers=19` (taskset 20-32,34-39) at `aa672d5` (SPEC 0.54), records `outputs/mtda/b2c.jsonl`,

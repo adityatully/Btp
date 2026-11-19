@@ -650,6 +650,36 @@ def order_curve(recs: list[dict[str, Any]]) -> list[str]:
                     f"- {base}, {g}, {scope} (n {len(rs)}; distinct rule orders median "
                     f"{int(np.median(rules))}): " + "; ".join(cells)
                 )
+                # the pass itself: the best of all 4 rules' orders; time per order; caps
+                pass_ratio = [
+                    min(
+                        x["cost"]
+                        for x in r["runs"]
+                        if x["cost"] is not None and x["rules"][0] not in ("all", "random")
+                    )
+                    / min(x["cost"] for x in r["runs"] if x["cost"] is not None)
+                    for r in rs
+                    if any(
+                        x["cost"] is not None and x["rules"][0] not in ("all", "random")
+                        for x in r["runs"]
+                    )
+                ]
+                per_order = [x["seconds"] for r in rs for x in r["runs"]]
+                capped = sum(
+                    r["capped"]
+                    for r in recs
+                    if r["base"] == base
+                    and (g == "all" or group(r["set"]) == g)
+                    and (r["targets"] <= 4) == full
+                    and r["targets"] > 1
+                )
+                lines.append(
+                    f"  - the pass (all 4 rules): {np.mean(pass_ratio):.4f}, worst "
+                    f"{max(pass_ratio):.4f}, >0.5% dearer on "
+                    f"{sum(x > 1.005 for x in pass_ratio)}/{len(pass_ratio)}; seconds per "
+                    f"order median {np.median(per_order):.2f}, p90 "
+                    f"{np.percentile(per_order, 90):.2f}; capped (left out) {capped}"
+                )
                 # every subset of the rules, by size: best subset and mean over subsets
                 rule_names = ("given", "dear", "cheap", "near")
                 for k in (1, 2, 3):

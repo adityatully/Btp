@@ -42,6 +42,7 @@ chats. Last updated 2026-11-03.*
 | Q-158 | Is every choice in method-v3 backed by an ablation, a sweep, a proof or a citation? | 6.9 (D-98) |
 | Q-159 | Is the s4-s5 depth limit (E-81) a property of the method, or of 256 simulations per move? | 6.9, J2 (D-98) |
 | Q-160 | How much do method-v3's results vary between identical runs (CPU deadline, tie order)? | **Closed 2026-11-19 (E-106):** identical runs within 0.2%; random tie-breaking 3% dearer, so the candidate order is part of the method |
+| Q-163 | Do chain depth 4 and more target orders, cheaper by ~4-5% in the planner alone (E-109), make method-v3 cheaper too? | 6.9, J7 (E-109) |
 | Q-162 | Which noise band reads J2-J7: D-98's (all of J1's runs, seeds included: up to 6.3%) or the repeats' alone (up to 0.2%)? | Waiting on the user (E-106) |
 | Q-49 | How do the agent and planner compare with published heuristics? Could one be a better teacher? | 2.4 (stages 1–2), 6.3 (all) |
 | Q-148 | Do the gaps on small problems (s1 6% above optima, deep 1:1 dilutions, NFSP level) close if the search uses its leftover time? | **Closed 2026-11-15 (E-95):** no; more sims at the root cheaper on 8 of 120, gap 2.88% → 2.80%; method-v3 stays |
@@ -970,6 +971,12 @@ longer, gap 1.8% on 60 x 60 u5, 6.5% on 30 x 30 u5, 15% on 30 x 30 u1.*
 2026-11-15) The user finds routing-based more interesting (no blocked areas); the doc's default
 is a module-based harness first, hybrid end state. The router work (D-89 steps 2-6) is needed
 for every choice.
+
+**Q-163 Do chain depth 4 and more target orders make method-v3 cheaper?** · **Open → plan
+6.9, J7** (E-109, 2026-11-20) In the planner alone chain depth 4 is 4.8% cheaper than 3 (10x
+the time) and the best of 36 orders 4.2% cheaper than the 4 rules on > 4 targets, so neither
+number is at its saturation point. The search may make up both (it tries other moves); check
+with method-v3 at its leaves: `ablation.py runs=v3,leaf_chain4` and more orders.
 
 **Q-162 Which noise band reads J2-J7?** · **Open, waiting on the user** (E-106, 2026-11-19)
 D-98 fixed the band as the largest gap of all of J1's other runs. The seed runs turned out to

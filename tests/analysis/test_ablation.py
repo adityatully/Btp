@@ -72,6 +72,7 @@ def test_new_groups_and_switch_filter() -> None:
     assert len(A.expand("J3")) == 10 and len(A.expand("J5")) == 8
     assert len(A.expand("J4")) == 4 and len(A.expand("J8")) == 9
     assert len(A.expand("J7")) == 5 and len(A.expand("J7o")) == 4
+    assert A.expand("J7m") == [("v3", 0), ("more_orders4", 0), ("more_orders12", 0)]
     assert A.config("backup_max+sims64_c0.5") == {"backup": "max", "sims": 64, "cpuct": 0.5}
     entries = json.loads(A.SUBSET.read_text())
     picked = [e for e in entries if A.switch_problem(e)]
@@ -163,3 +164,21 @@ def test_j2_curve_reads_plateau_and_depth(tmp_path: Any) -> None:
     line = next(x for x in text.splitlines() if x.startswith("- **sims per move") and "all (n" in x)
     assert "256*: 1.0000 (d 5," in line and "16: 1.0020 (d 20," in line
     assert line.endswith("plateau (within 0.5% of the best): 16, 256")
+
+
+def test_more_orders_extends_the_rules_and_is_put_back() -> None:
+    """Q-163: the rules' orders first, then n more distinct ones, the same on every call."""
+    from meda.generators.benchmark_io import BenchmarkSet
+
+    inst = next(i for i in BenchmarkSet.read("val_emrcm_v1").instances if len(i.targets) == 3)
+    rules = A.share.named_orders(inst, A.sc.WEIGHTS)
+    A._set_problem(A.config("more_orders4"))
+    try:
+        got = A.share.named_orders(inst, A.sc.WEIGHTS)
+        assert got[: len(rules)] == rules
+        assert len(got) == min(len(rules) + 4, 6)  # 3 targets: 6 orders in all
+        assert len({tuple(o) for _, o in got}) == len(got)
+        assert A.share.named_orders(inst, A.sc.WEIGHTS) == got
+    finally:
+        A._set_problem({})
+    assert A.share.named_orders(inst, A.sc.WEIGHTS) == rules
