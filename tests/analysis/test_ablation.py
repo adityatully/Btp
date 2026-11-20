@@ -182,3 +182,15 @@ def test_more_orders_extends_the_rules_and_is_put_back() -> None:
     finally:
         A._set_problem({})
     assert A.share.named_orders(inst, A.sc.WEIGHTS) == rules
+
+
+def test_no_plan_record_has_the_logged_fields(monkeypatch) -> None:  # type: ignore[no-untyped-def]
+    def no_finish(*_a, **_k):  # type: ignore[no-untyped-def]
+        raise RuntimeError("the sharing pass does not finish")
+
+    monkeypatch.setattr(A.sc, "run_task", no_finish)
+    entry = json.loads(A.SUBSET.read_text())[0]
+    rec = A.run_one({**entry, "config": "leaf_drop_tree", "repeat": 0, "commit": "t", "seconds": 2})
+    assert rec["cost"] is None and "no_plan" in rec
+    for key in ("cost", "depth", "leaves", "seconds", "sims"):  # the progress line in main()
+        assert key in rec

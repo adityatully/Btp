@@ -527,6 +527,7 @@ def run_one(task: dict[str, Any]) -> dict[str, Any]:
     }
     sims = int(cfg.get("sims", SIMS))
     jp.COUNTS.update(tree_budget=0, mrcm_budget=0)
+    t0 = sc.CLOCK()
     try:
         try:
             rec = sc.run_task(search_task, "uniform", sims, opts, "switch")
@@ -541,8 +542,11 @@ def run_one(task: dict[str, Any]) -> dict[str, Any]:
                 "id": task["id"],
                 "commit": task["commit"],
                 "settings": cfg,
+                "sims": sims,
+                "cpuct": sc.C_PUCT,
                 "cost": None,
                 "no_plan": str(e),
+                "seconds": round(sc.CLOCK() - t0, 3),
                 "trace": [],
                 "leaves": 0,
                 "depth": 0,
