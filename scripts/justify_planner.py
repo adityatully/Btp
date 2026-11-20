@@ -542,7 +542,8 @@ def curves(by: dict[tuple[str, str], dict[str, dict]]) -> list[str]:
     the curve's values (on the problems every value finished), the median time over the
     base's, and the runs capped; then the saturation point."""
     lines = [
-        "## Curves (D-101): mean cost / best of the curve; (median time / base's); capped",
+        "## Curves (D-101): mean cost / best of the curve; (median time / base's, mean CPU s per "
+        "problem); capped",
         "",
         f"Saturation point = the smallest value from which no larger value is more than "
         f"{EPS:.1%} cheaper. Ceilings: candidates and idle droplets per delivery group in the "
@@ -578,9 +579,10 @@ def curves(by: dict[tuple[str, str], dict[str, dict]]) -> list[str]:
                         1 for x in rs.values() if (g == "all" or x["group"] == g) and x["capped"]
                     )
                     mark = "*" if dict(pts)[v] == "base" else ""
+                    secs = float(np.mean([rs[i]["seconds"] for i in ids]))
                     cells.append(
-                        f"{v if v != 10_000 else 'all'}{mark}: {r:.4f} ({np.median(t):.2f}x)"
-                        + (f" {capped}c" if capped else "")
+                        f"{v if v != 10_000 else 'all'}{mark}: {r:.4f} ({np.median(t):.2f}x, "
+                        f"{secs:.1f} s/problem)" + (f" {capped}c" if capped else "")
                     )
                     points.append((v, r))
                 sat = saturation(points)

@@ -16,20 +16,21 @@ CPU-h ÷ workers = wall hours (18 free cores on coe9: 27 CPU-h ≈ 1.5 h).
 | Recipes | tree, direct, one mix, chain (+ MRCM) | Each up to the chain needed; the chain gives 13-27% (E-109) | (a), MRCM recipe still open |
 | Repeats per problem | 1 | Identical runs within 0.2% (E-106) | (a) |
 | Tie order | candidate order | Random tie-breaking 3% dearer (E-106) | part of the method |
+| Simulations per move | 256 | Lowest mean on the 32-2048 curve; fewer is 1-2% dearer on s4-s5, more gains nothing (E-110) | (a) |
 
-## Running tonight (`night1`)
+## Not justified yet
 
-| Number | Ours | Run | Turns into |
+| Number | Ours | Evidence | Open |
 |---|---|---|---|
-| Simulations per move | 256 | 32 … 2048, 900 s each | (a) if 256 is on the plateau |
-| Chain depth | 3 | depth 4 inside the search (`leaf_chain4`) | (b) if the search does not gain; planner alone: 4 is 4.8% cheaper at 10x time (E-109) |
+| Chain depth | 3 | Depth 4 is 4.8% cheaper in the planner (E-109) and 2.1% inside the search (E-110) | keep 3 and report, or change the method (user) |
+| Target orders | 4 rules | 4.2% from the best of 36 in the planner (E-109); inside the search: J7m running | Q-163 |
 
 ## Next, in order
 
 | # | Number | Ours | Run | Cost |
 |---|---|---|---|---|
 | 1 | Time budget; verdict thresholds | 900 s; 10% losses | J0, J9: offline, from the final runs' records | minutes |
-| 2 | Target orders | 4 rules | `more_orders4`, `more_orders12` inside the search (J7m). Planner alone: 4.2% from the best of 36 on > 4 targets (E-109) | ~3 h |
+| 2 | Target orders | 4 rules | `more_orders4`, `more_orders12` inside the search (J7m), running | ~3 h |
 | 3 | C_PUCT | 1.5 | 0.25 … 8 at 256 sims (J2's second curve) | ~10 h, one night |
 | 4 | Finisher switch | 20 s, 3 leaves, 0.5 | J5, only where it fires | ~4 h |
 | 5 | Blend partners; split-tree steps; MRCM budget and recipe | 4; 4; 2,000,000 | J6 curves not run yet (MRCM base) | ~3-6 h |

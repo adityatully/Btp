@@ -121,6 +121,8 @@ J4 = {  # other ways to spend the same time over the same finisher (S1)
 J7 = {  # planner settings inside the search's finisher (P1, P5, P6); J6's patches
     "leaf_chain2": {"planner": "chain2"},
     "leaf_chain4": {"planner": "chain4"},
+    "leaf_chain1": {"planner": "chain1"},  # depth 1 = one mix only: no chain recipe
+    "leaf_chain5": {"planner": "chain5"},  # E-110: depth 4 cheaper in the search; where it stops
     "leaf_blend2": {"planner": "blend2"},
     "leaf_blend8": {"planner": "blend8"},
     "orders_given": {"orders": ("given",)},

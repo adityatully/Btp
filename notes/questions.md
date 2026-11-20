@@ -40,9 +40,9 @@ chats. Last updated 2026-11-03.*
 | Q-157 | Does our method beat MTDA (flow-based multi-target dilution) on the final sets and on its own protocol? | Closed (E-107, E-108): yes. 0 losses on the final sets (1,494) and on its own protocol (564, 0.692) |
 | Q-161 | Do the three methods we only draw level with (NFSP, MTWM, SIMOP) hold level, or beat us, on their own papers' experiments, which no set covers yet? | **Decided 2026-11-18 (D-100): not built**; expected level or worse (their exact solvers' home ground, B3 evidence); stated as a threat to validity |
 | Q-158 | Is every choice in method-v3 backed by an ablation, a sweep, a proof or a citation? | 6.9 (D-98) |
-| Q-159 | Is the s4-s5 depth limit (E-81) a property of the method, or of 256 simulations per move? | 6.9, J2 (D-98) |
+| Q-159 | Is the s4-s5 depth limit (E-81) a property of the method, or of 256 simulations per move? | **Closed 2026-11-20 (E-110):** of sims per move (32 sims: 12 moves on s4-s5; 2048: 0), but deeper is dearer, so not a limit on cost |
 | Q-160 | How much do method-v3's results vary between identical runs (CPU deadline, tie order)? | **Closed 2026-11-19 (E-106):** identical runs within 0.2%; random tie-breaking 3% dearer, so the candidate order is part of the method |
-| Q-163 | Do chain depth 4 and more target orders, cheaper by ~4-5% in the planner alone (E-109), make method-v3 cheaper too? | 6.9, J7 (E-109) |
+| Q-163 | Do chain depth 4 and more target orders, cheaper by ~4-5% in the planner alone (E-109), make method-v3 cheaper too? | Chain: yes, 2.1% (E-110), keep-or-change is the user's call; orders: J7m running |
 | Q-162 | Which noise band reads J2-J7: D-98's (all of J1's runs, seeds included: up to 6.3%) or the repeats' alone (up to 0.2%)? | Waiting on the user (E-106) |
 | Q-49 | How do the agent and planner compare with published heuristics? Could one be a better teacher? | 2.4 (stages 1–2), 6.3 (all) |
 | Q-148 | Do the gaps on small problems (s1 6% above optima, deep 1:1 dilutions, NFSP level) close if the search uses its leftover time? | **Closed 2026-11-15 (E-95):** no; more sims at the root cheaper on 8 of 120, gap 2.88% → 2.80%; method-v3 stays |
@@ -989,7 +989,10 @@ dearer overall, so the candidate order is part of the method. Asked 2026-11-18 (
 go in candidate order. Three repeats and two tie-break seeds on the dev subset give the noise
 band every other sweep is read against.
 
-**Q-159 Is the s4-s5 depth limit a property of the method or of 256 sims?** · **Open → plan
+**Q-159 Is the s4-s5 depth limit a property of the method or of 256 sims?** · **Closed
+(experiment, E-110, 2026-11-20):** depth falls as sims per move rise (s4-s5 median 12 moves at
+32 sims, 5 at 256, 0 at 2048), but fewer sims are dearer (s4-s5 1.7-2.3%), so the shallow tree
+is the right trade at 900 s. · Was: **Open → plan
 6.9, J2** (D-98, 2026-11-18) E-81: on s4-s5 the tree commits only 0-2 moves, since each leaf
 needs a long finish and every move takes 256 simulations. Fewer sims per move may go deeper in
 the same 900 s. J2 sweeps sims x C_PUCT and records depth.

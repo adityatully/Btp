@@ -2334,6 +2334,34 @@ MRCM's intermediates on val_s2: 4 of 28 covered (chain D4), 5 of 28 (premix D3).
   again). (3) Built as SPEC 0.28 `hint_source: problem` (depth-4 chain in the recipe columns)
   for a copy-test comparison on stages 1–2 against the planner's hints.
 
+### E-110 (2026-11-20) Simulations curve (J2): 256 is the best point; chain depth 4 inside the search is 2.1% cheaper; Q-159 closed
+coe9, commit `86a47f2` code (night run started before `1775e95`), dev subset of 110, 900 s CPU,
+18 workers: `ablation.py runs=v3,leaf_chain4,sims{32,64,128,512,1024,2048}_c1.5` →
+`outputs/ablation/night1.jsonl`; read with `summary=… noise=outputs/ablation/j1.jsonl`
+(D-98's band: s1-s2 6.3%, s3 0.25%, s4-s5 1.6%, emrcm 6.3%). Ratios are to the file's own v3.
+- **Simulations per move: 256 justified, as the best point of a non-monotone curve.** Mean
+  ratio to v3 over all 110: 32 1.026 [1.005, 1.051], 64 1.023 [1.004, 1.044], 128 1.009
+  [0.993, 1.027], 256 1, 512 1.017 [1.001, 1.036], 1024 1.005 [0.994, 1.019], 2048 1.003
+  [0.990, 1.017]. Against the curve's best per problem: 256 has the lowest mean (1.0264;
+  next 2048 1.0276, 1024 1.0305), and the plateau rule (within 0.5% of the best) gives 256,
+  1024, 2048. Fewer sims are dearer where it matters: s4-s5 32/64/128 are 1.7/2.3/1.9% dearer
+  (CIs above 1); s1-s2 32/64 are 10%/7% dearer. More than 256 gains nothing (all within
+  ±0.5% bar 512's 1.7%, mostly emrcm, the noisiest group). All verdicts are "level" under
+  D-98's band.
+- **Q-159 closed: the depth limit follows from sims per move, but depth is not what limits
+  cost.** Median committed moves (all): 32 → 18, 64 → 13, 128 → 10, 256 → 6, 512 → 3, 1024
+  → 1, 2048 → 1 (s4-s5: 12, 11, 6, 5, 3, 1, 0). Going deeper with fewer sims is dearer, so
+  the shallow tree on s4-s5 is the right trade at 900 s, not a flaw. Leaves (median, all):
+  595 at 32 to 1,893 at 2048, 1,533 at 256.
+- **Chain depth 4 at the leaves: 2.1% cheaper than depth 3, despite 5.6x fewer leaves.** Mean
+  0.9792 [0.9635, 0.9942], better 32 / worse 23; s3 0.966 (better), s1-s2 0.976, emrcm 0.978,
+  s4-s5 0.988 [0.965, 1.010]; median leaves 273 vs 1,533. "Level" under D-98's band (s1-s2,
+  emrcm bands 6.3%), "better" under the repeats-only band (0.2%), so Q-162 decides the
+  verdict. In the planner alone depth 4 was 4.8% cheaper (E-109): the search makes up about
+  half of it, not all. Depth 3 is therefore not justified by convergence: a deeper chain helps
+  the method too. Method-v3 is frozen (D-83); whether to report this as sensitivity or change
+  the method is the user's call (Q-163).
+
 ### E-109 (2026-11-20) Planner curves (J6, D-101): lookahead and budgets justified; chain depth 3 and the 4 target orders are not at saturation
 coe9, commit `db0d921` (D-101 code of `86a47f2`), plain base only, cap 600 CPU-s, every val
 problem (322): `justify_planner.py bases=plain configs=look2..look10,chain1,chain2,chain4,
