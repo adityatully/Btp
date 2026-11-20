@@ -123,6 +123,9 @@ J7 = {  # planner settings inside the search's finisher (P1, P5, P6); J6's patch
     "leaf_chain4": {"planner": "chain4"},
     "leaf_chain1": {"planner": "chain1"},  # depth 1 = one mix only: no chain recipe
     "leaf_chain5": {"planner": "chain5"},  # E-110: depth 4 cheaper in the search; where it stops
+    # #9: a recipe taken out of the whole method (first plan and every leaf finish)
+    "leaf_drop_tree": {"planner": "drop_tree"},
+    "leaf_drop_mrcm": {"planner": "drop_mrcm"},
     "leaf_blend2": {"planner": "blend2"},
     "leaf_blend8": {"planner": "blend8"},
     "orders_given": {"orders": ("given",)},
@@ -177,6 +180,7 @@ GROUPS: dict[str, list[tuple[str, int]]] = {
     "J7": [("v3", 0)] + [(name, 0) for name in J7 if name.startswith("leaf_")],
     # D-96's search pilot: only if the order check (scripts/order_check.py) passes its bar
     "J7o": [("v3", 0)] + [(name, 0) for name in J7 if name.startswith("orders_")],
+    "J7r": [("v3", 0), ("leaf_chain1", 0), ("leaf_drop_tree", 0), ("leaf_drop_mrcm", 0)],
     "J7m": [("v3", 0)] + [(name, 0) for name in J7 if name.startswith("more_orders")],
     "J8": [(name, 0) for name in J8],
 }
@@ -524,7 +528,26 @@ def run_one(task: dict[str, Any]) -> dict[str, Any]:
     sims = int(cfg.get("sims", SIMS))
     jp.COUNTS.update(tree_budget=0, mrcm_budget=0)
     try:
-        rec = sc.run_task(search_task, "uniform", sims, opts, "switch")
+        try:
+            rec = sc.run_task(search_task, "uniform", sims, opts, "switch")
+        except RuntimeError as e:  # #9: without a recipe the pass may not finish at all
+            if "does not finish" not in str(e):
+                raise
+            return {
+                "config": task["config"],
+                "repeat": task["repeat"],
+                "set": task["set"],
+                "cell": task["cell"],
+                "id": task["id"],
+                "commit": task["commit"],
+                "settings": cfg,
+                "cost": None,
+                "no_plan": str(e),
+                "trace": [],
+                "leaves": 0,
+                "depth": 0,
+                "capped": False,
+            }
         search = _LAST[0]
         jp.apply({})
         share.named_orders = _BASE["orders"]
@@ -663,9 +686,10 @@ def summarise(paths: list[Path], noise: Path | None = None) -> str:
             depth = int(np.median([r["depth"] for r in rs.values()]))
             leaves = int(np.median([r["leaves"] for r in rs.values()]))
             capped = sum(bool(r["capped"]) for r in rs.values())
+            none = sum(r["cost"] is None for r in rs.values())
             lines.append(
                 f"| {key[0]} | {key[1]} | {g} | {len(rs)} | {ratio} | {wb} | {v} | {depth} |"
-                f" {leaves} | {capped} |"
+                f" {leaves} | {capped}{f', {none} no plan' if none else ''} |"
             )
     lines += ["", *j2_curves(by)]
     lines += [

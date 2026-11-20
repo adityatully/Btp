@@ -34,6 +34,8 @@ CPU-h ÷ workers = wall hours (18 free cores on coe9: 27 CPU-h ≈ 1.5 h).
 | 3 | C_PUCT | 1.5 | 0.25 … 8 at 256 sims (J2's second curve) | ~10 h, one night |
 | 4 | Finisher switch | 20 s, 3 leaves, 0.5 | J5, only where it fires | ~4 h |
 | 5 | Blend partners; split-tree steps; MRCM budget and recipe | 4; 4; 2,000,000 | J6 curves not run yet (MRCM base) | ~3-6 h |
+| 6 | Why each recipe exists (Q-164) | 5 recipes | #8 recipe counts (`recipes=1`); #9 drop one in the planner (`drop_*`) and in the search (J7r) | minutes; ~1 h; ~4.5 h |
+| 7 | Chain depth curve | 3 | planner 5-6; search 1, 2, 5 | ~6 h |
 
 ## Argued or cited (no run planned)
 

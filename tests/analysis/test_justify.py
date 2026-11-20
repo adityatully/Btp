@@ -140,3 +140,27 @@ def test_order_list_covers_every_order_when_few_targets() -> None:
     _, total, _ = JP.replay(inst, plan)  # the pass keeps the best of its rules' orders
     best_rules = min(x["cost"] for x in rec["runs"] if x["rules"][0] not in ("all", "random"))
     assert float(JP.WEIGHTS.scalar(total, inst.fluids)) <= best_rules
+
+
+def test_recipe_trace_is_the_pass_step_for_step() -> None:
+    """#8: the traced greedy makes the same plan as `share._run` (lookahead 0), on both bases,
+    and records one choice per delivery group with the winner among the legal recipes."""
+    from meda.generators.benchmark_io import BenchmarkSet
+
+    for name in ("val_s4_v2", "val_emrcm_v1"):
+        inst = BenchmarkSet.read(name).instances[0]
+        for cache in (None, {}):
+            for order in JP.share.orders(inst, JP.WEIGHTS):
+                start = JP.share._Builder(
+                    inst, JP.PrepState.initial(inst), [], JP.WEIGHTS, mrcm=cache
+                )
+                plain = JP.share._run(start.copy(), order, 0)
+                traced, steps = JP._greedy_traced(start.copy(), order)
+                assert traced.actions == plain.actions and traced.cost == plain.cost
+                assert steps and all(st["recipe"] in st["best"] for st in steps)
+                assert all(st["per"] == min(st["best"].values()) for st in steps)
+    rec = JP.run_recipes(
+        {"base": "mrcm", "set": name, "id": inst.instance_id, "commit": "t", "cap": 120.0}
+    )
+    json.dumps(rec)
+    assert rec["steps"] and "| mrcm | all" in "\n".join(JP.recipe_table([rec]))

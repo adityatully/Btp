@@ -708,18 +708,165 @@ def order_curve(recs: list[dict[str, Any]]) -> list[str]:
     return lines
 
 
+# --------------------------------------------------------------------------- recipe counts
+
+
+def _greedy_traced(b: Any, order: list[int]) -> tuple[Any, list[dict[str, Any]]]:
+    """`share._run` with lookahead 0, step for step (the same candidates, the same sort, the
+    same pick), recording each delivery group's choice: the recipe that won, deliveries
+    served, its cost per delivery, and the cheapest cost per delivery of every other recipe
+    that was legal there (#8, Q-164)."""
+    steps: list[dict[str, Any]] = []
+    for tid in order:
+        while b.state.remaining_demand[tid]:
+            target = b.instance.targets[tid]
+            left = b.state.remaining_demand[tid]
+            opts = []
+            for count, emit in share._candidates(b, target, left):
+                trial = b.copy()
+                try:
+                    if not share._deliver(trial, target, count, emit):
+                        continue
+                except IllegalActionError:
+                    continue
+                served = left - trial.state.remaining_demand[tid]
+                per = (trial.cost - b.cost) * share.Rational.of(1, served)
+                opts.append((per, served, trial, _recipe_kind(emit)))
+            if not opts:
+                raise IllegalActionError(
+                    f"instance '{b.instance.instance_id}': no way to make target {tid}"
+                )
+            opts.sort(key=lambda o: (o[0], -o[1], len(o[2].actions)))
+            per, served, trial, kind = opts[0]
+            best: dict[str, float] = {}
+            for o in opts:
+                if o[3] not in best:
+                    best[o[3]] = float(o[0])
+            steps.append(
+                {"target": tid, "recipe": kind, "served": served, "per": float(per), "best": best}
+            )
+            b = trial
+    if not b.state.is_success:
+        raise IllegalActionError(f"instance '{b.instance.instance_id}': demand left")
+    return b, steps
+
+
+def run_recipes(task: dict[str, Any]) -> dict[str, Any]:
+    """#8: the pass from the empty chip, as `share_plan` runs it (every rule order, the
+    cheapest kept), with the winning order's choices recorded; also whether the
+    construction (`cheapest_construction`, P17) beat every order."""
+    apply({})
+    cold()
+    inst: Instance = BenchmarkSet.read(task["set"]).by_id(task["id"])
+    cache: dict[Any, list[Any]] | None = {} if task["base"] == "mrcm" else None
+    signal.signal(signal.SIGPROF, _alarm)
+    signal.setitimer(signal.ITIMER_PROF, float(task["cap"]))
+    best: tuple[Any, list[dict[str, Any]]] | None = None
+    capped = False
+    try:
+        for order in share.orders(inst, WEIGHTS):
+            try:
+                start = share._Builder(inst, PrepState.initial(inst), [], WEIGHTS, mrcm=cache)
+                done, steps = _greedy_traced(start, order)
+            except IllegalActionError:
+                continue
+            if best is None or done.cost < best[0].cost:
+                best = (done, steps)
+    except _Cap:
+        capped = True
+    finally:
+        signal.setitimer(signal.ITIMER_PROF, 0)
+    construction = share.cheapest_construction(inst, WEIGHTS) if not capped else None
+    return {
+        "mode": "recipes",
+        "base": task["base"],
+        "set": task["set"],
+        "id": task["id"],
+        "commit": task["commit"],
+        "capped": capped,
+        "cost": None if best is None else float(best[0].cost),
+        "construction_wins": bool(
+            construction is not None and (best is None or construction[1] < best[0].cost)
+        ),
+        "steps": None if best is None else best[1],
+    }
+
+
+RECIPE_KINDS = ("direct", "one_mix", "chain", "tree", "mrcm")
+
+
+def recipe_table(recs: list[dict[str, Any]]) -> list[str]:
+    """#8's reading: per base and group, for each recipe, how often it was legal, how often
+    it won when legal, its share of deliveries and of the plan's cost, and, when it won, its
+    saving per delivery over the cheapest other recipe (median), and how often it was the
+    only recipe legal."""
+    lines = [
+        "## Which recipe wins each delivery group (#8): the pass from the empty chip, the "
+        "winning order's choices",
+        "",
+        "| base | group | recipe | legal (% of groups) | wins when legal | deliveries | cost "
+        "share | saving when it wins (median) | only legal |",
+        "|---|---|---|---|---|---|---|---|---|",
+    ]
+    for base in BASES:
+        for g in GROUPS:
+            rs = [
+                r
+                for r in recs
+                if r["base"] == base and r["steps"] and (g == "all" or group(r["set"]) == g)
+            ]
+            if not rs:
+                continue
+            steps = [st for r in rs for st in r["steps"]]
+            n = len(steps)
+            deliveries = sum(st["served"] for st in steps)
+            cost = sum(st["per"] * st["served"] for st in steps) or 1.0
+            for kind in RECIPE_KINDS:
+                legal = [st for st in steps if kind in st["best"]]
+                if not legal:
+                    continue
+                won = [st for st in steps if st["recipe"] == kind]
+                saves = []
+                alone = 0
+                for st in won:
+                    others = [v for k, v in st["best"].items() if k != kind]
+                    if not others:
+                        alone += 1
+                    elif min(others) > 0:
+                        saves.append(1 - st["per"] / min(others))
+                lines.append(
+                    f"| {base} | {g} (n {len(rs)}, {n} groups) | {kind} | "
+                    f"{len(legal) / n:.0%} | {len(won) / len(legal):.0%} | "
+                    f"{sum(st['served'] for st in won) / deliveries:.0%} | "
+                    f"{sum(st['per'] * st['served'] for st in won) / cost:.0%} | "
+                    f"{(f'{np.median(saves):.1%}' if saves else '-')} | {alone} |"
+                )
+            lost = sum(r["construction_wins"] for r in rs)
+            lines.append(
+                f"| {base} | {g} | (construction beat every order) | | | | | | "
+                f"{lost} of {len(rs)} |"
+            )
+    capped = sum(r["capped"] for r in recs)
+    lines += ["", f"Capped (left out): {capped}"]
+    return lines
+
+
 def summarise(paths: list[Path]) -> str:
     by: dict[tuple[str, str], dict[str, dict]] = defaultdict(dict)
     orders: list[dict[str, Any]] = []
+    recipes: list[dict[str, Any]] = []
     for path in paths:
         for line in path.read_text().splitlines():
             r = json.loads(line)
             if r.get("mode") == "orders":
                 orders.append(r)
                 continue
+            if r.get("mode") == "recipes":
+                recipes.append(r)
+                continue
             by[(r["config"], r["base"])][r["id"]] = r | {"group": group(r["set"])}
-    if orders and not by:
-        return "\n".join(order_curve(orders))
+    if (orders or recipes) and not by:
+        return "\n".join([*order_curve(orders), "", *recipe_table(recipes)])
     lines = [
         "| setting | base | group | n | mean cost ratio [95% CI] | worse / better | verdict |"
         " median time ratio | capped | no plan |",
@@ -777,6 +924,9 @@ def main(argv: list[str]) -> None:
     if args.get("orders") == "1":
         run_order_curve(args)
         return
+    if args.get("recipes") == "1":
+        run_order_curve(args, run_recipes)
+        return
     names = list(configs()) if "configs" not in args else ["base", *args["configs"].split(",")]
     for n in names:
         if n not in configs():
@@ -829,8 +979,10 @@ def main(argv: list[str]) -> None:
             )
 
 
-def run_order_curve(args: dict[str, str]) -> None:
-    """`orders=1`: every problem with at least 2 targets, planned once per order."""
+def run_order_curve(args: dict[str, str], fn: Callable[..., dict[str, Any]] | None = None) -> None:
+    """`orders=1`: every problem with at least 2 targets, planned once per order. With `fn`
+    (`recipes=1`: `run_recipes`), every problem, one record each."""
+    fn = fn or run_orders
     bases = args.get("bases", ",".join(BASES)).split(",")
     sets = args.get("sets", ",".join(SETS)).split(",")
     limit = int(args["limit"]) if "limit" in args else None
@@ -844,7 +996,9 @@ def run_order_curve(args: dict[str, str]) -> None:
     ).stdout.strip()
     todo = []
     for s in sets:
-        insts = [i for i in BenchmarkSet.read(s).instances if len(i.targets) > 1]
+        insts = [
+            i for i in BenchmarkSet.read(s).instances if len(i.targets) > 1 or fn is not run_orders
+        ]
         for inst in insts[:limit] if limit else insts:
             for b in bases:
                 if (b, inst.instance_id) not in done:
@@ -862,12 +1016,14 @@ def run_order_curve(args: dict[str, str]) -> None:
     print(f"{len(todo)} problems x bases, {workers} workers, commit {commit}", flush=True)
     with out.open("a") as fh:
         pool = Pool(workers, maxtasksperchild=20) if workers > 1 else None
-        results = pool.imap_unordered(run_orders, todo) if pool else map(run_orders, todo)
+        results = pool.imap_unordered(fn, todo) if pool else map(fn, todo)
         for i, rec in enumerate(results, 1):
             fh.write(json.dumps(rec) + "\n")
             fh.flush()
             print(
-                f"[{i}/{len(todo)}] {rec['base']} {rec['id']}: {len(rec['runs'])} orders"
+                f"[{i}/{len(todo)}] {rec['base']} {rec['id']}: "
+                f"{len(rec['runs']) if 'runs' in rec else len(rec['steps'] or [])} "
+                f"{'orders' if 'runs' in rec else 'groups'}"
                 f"{' capped' if rec['capped'] else ''}",
                 flush=True,
             )

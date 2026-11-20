@@ -43,6 +43,7 @@ chats. Last updated 2026-11-03.*
 | Q-159 | Is the s4-s5 depth limit (E-81) a property of the method, or of 256 simulations per move? | **Closed 2026-11-20 (E-110):** of sims per move (32 sims: 12 moves on s4-s5; 2048: 0), but deeper is dearer, so not a limit on cost |
 | Q-160 | How much do method-v3's results vary between identical runs (CPU deadline, tie order)? | **Closed 2026-11-19 (E-106):** identical runs within 0.2%; random tie-breaking 3% dearer, so the candidate order is part of the method |
 | Q-163 | Do chain depth 4 and more target orders, cheaper by ~4-5% in the planner alone (E-109), make method-v3 cheaper too? | Chain: yes, 2.1% (E-110), keep-or-change is the user's call; orders: J7m running |
+| Q-164 | Why does each planner recipe exist (chain, split tree, MRCM tree), from first principles and by measurement? | 6.9: recipe counts (#8) and drop-one in the planner and the search (#9) |
 | Q-162 | Which noise band reads J2-J7: D-98's (all of J1's runs, seeds included: up to 6.3%) or the repeats' alone (up to 0.2%)? | Waiting on the user (E-106) |
 | Q-49 | How do the agent and planner compare with published heuristics? Could one be a better teacher? | 2.4 (stages 1–2), 6.3 (all) |
 | Q-148 | Do the gaps on small problems (s1 6% above optima, deep 1:1 dilutions, NFSP level) close if the search uses its leftover time? | **Closed 2026-11-15 (E-95):** no; more sims at the root cheaper on 8 of 120, gap 2.88% → 2.80%; method-v3 stays |
@@ -971,6 +972,15 @@ longer, gap 1.8% on 60 x 60 u5, 6.5% on 30 x 30 u5, 15% on 30 x 30 u1.*
 2026-11-15) The user finds routing-based more interesting (no blocked areas); the doc's default
 is a module-based harness first, hybrid end state. The router work (D-89 steps 2-6) is needed
 for every choice.
+
+**Q-164 Why does each planner recipe exist?** · **Open → plan 6.9** (user, 2026-11-20) The
+recipes answer "how can this droplet be made from what is on the chip": 0 mixes (direct), 1 mix
+(one mix), up to d mixes stacking leftovers (chain), or from pure fluids only (split tree, MRCM
+tree: the only recipes that can always make a target). Direct and one mix are argued. The chain
+and the two trees need numbers: (#8) per delivery group, which recipe wins, how often it is
+legal, and its saving over the next best recipe (`justify_planner.py recipes=1`); (#9) each
+taken out of the planner (`drop_*`, both bases) and of the whole method (`leaf_chain1` = no
+chain, `leaf_drop_tree`, `leaf_drop_mrcm`; group J7r).
 
 **Q-163 Do chain depth 4 and more target orders make method-v3 cheaper?** · **Open → plan
 6.9, J7** (E-109, 2026-11-20) In the planner alone chain depth 4 is 4.8% cheaper than 3 (10x
