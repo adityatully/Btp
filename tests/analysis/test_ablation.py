@@ -194,3 +194,39 @@ def test_no_plan_record_has_the_logged_fields(monkeypatch) -> None:  # type: ign
     assert rec["cost"] is None and "no_plan" in rec
     for key in ("cost", "depth", "leaves", "seconds", "sims"):  # the progress line in main()
         assert key in rec
+
+
+def test_chain_time_curve_reads_cost_at_the_same_second(tmp_path: Any) -> None:
+    """Q-163: depth 5 is dearer than v3 at 60 s (its first plan is late) and cheaper by 900 s."""
+    rows = []
+    for e in json.loads(A.SUBSET.read_text())[:10]:
+        for cfg, trace, secs in (
+            ("v3", [[1.0, 100.0], [500.0, 90.0]], 900.0),
+            ("leaf_chain5", [[50.0, 120.0], [200.0, 80.0]], 950.0),
+        ):
+            rows.append(
+                json.dumps(
+                    {
+                        "config": cfg,
+                        "repeat": 0,
+                        "id": e["id"],
+                        "cost": trace[-1][1],
+                        "trace": trace,
+                        "seconds": secs,
+                        "depth": 0,
+                        "leaves": 1,
+                        "capped": True,
+                    }
+                )
+            )
+    path = tmp_path / "chain.jsonl"
+    path.write_text("\n".join(rows) + "\n")
+    text = A.summarise([path])
+    row = next(x for x in text.splitlines() if x.startswith("| leaf_chain5 | all |"))
+    cells = [c.strip() for c in row.strip("|").split("|")]
+    at = dict(zip(A.TIMES, cells[2:], strict=False))
+    assert at[10] == "-; 0%"  # no plan by 10 s
+    assert at[60] == "1.200 [10]; 0%"  # 120 vs 100 at the same second
+    assert at[300] == "0.800 [10]; 100%"  # 80 vs 100; v3's 900 s cost (90) already reached
+    assert at[900] == "0.889 [10]; 100%"
+    assert cells[-2:] == ["50.0", "950 / 950"]

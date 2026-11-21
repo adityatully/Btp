@@ -696,12 +696,58 @@ def summarise(paths: list[Path], noise: Path | None = None) -> str:
                 f" {leaves} | {capped}{f', {none} no plan' if none else ''} |"
             )
     lines += ["", *j2_curves(by)]
+    lines += ["", *time_curves(by)]
     lines += [
         "",
         "Noise band (D-98): "
         + ", ".join(f"{g} {b:.4f}" if b is not None else f"{g} -" for g, b in bands.items()),
     ]
     return "\n".join(lines)
+
+
+TIMES = (10, 30, 60, 120, 300, 600, 900)  # CPU seconds at which the time curves are read
+CHAIN_CURVE = ("leaf_chain1", "leaf_chain2", "leaf_chain4", "leaf_chain5")
+
+
+def time_curves(by: dict[tuple[str, int], dict[str, dict]]) -> list[str]:
+    """What a chain depth gains for its time (Q-163): per config and group, the mean of
+    cost(t) / v3's cost(t) at the same CPU second t over the problems both have a plan by t
+    (n in brackets); v3's cost at 900 s reached by t (share of problems); the median CPU
+    second of the first plan; and the median and largest search CPU seconds (the cap's
+    overshoot)."""
+    base = by.get(("v3", 0))
+    have = [c for c in CHAIN_CURVE if (c, 0) in by]
+    if not base or not have:
+        return []
+    lines = [
+        "## Chain depth against time (Q-163): cost(t) / v3's cost(t) [n]; v3's 900 s cost"
+        " reached by t; first plan s (median); search s (median / max)",
+        "",
+        "| config | group | " + " | ".join(f"{t} s" for t in TIMES) + " | first plan | search s |",
+        "|---|---|" + "---|" * len(TIMES) + "---|---|",
+    ]
+    for cfg in ["v3", *have]:
+        recs = by[(cfg, 0)]
+        for g in ("s1-s2", "s3", "s4-s5", "emrcm", "all"):
+            rs = {i: r for i, r in recs.items() if (g == "all" or r["group"] == g) and r["trace"]}
+            if not rs:
+                continue
+            cells = []
+            for t in TIMES:
+                pairs = [
+                    (cost_at(r, t), cost_at(base[i], t), base[i]["cost"])
+                    for i, r in rs.items()
+                    if i in base and base[i]["trace"]
+                ]
+                both = [(a, b) for a, b, _ in pairs if a is not None and b is not None]
+                ratio = f"{np.mean([a / b for a, b in both]):.3f} [{len(both)}]" if both else "-"
+                hit = sum(a is not None and a <= f + 1e-9 for a, _, f in pairs)
+                cells.append(f"{ratio}; {100 * hit / max(len(pairs), 1):.0f}%")
+            first = np.median([r["trace"][0][0] for r in rs.values()])
+            secs = [r["seconds"] for r in rs.values() if r.get("seconds") is not None]
+            spent = f"{np.median(secs):.0f} / {max(secs):.0f}" if secs else "-"
+            lines.append(f"| {cfg} | {g} | " + " | ".join(cells) + f" | {first:.1f} | {spent} |")
+    return lines
 
 
 def j2_curves(by: dict[tuple[str, int], dict[str, dict]]) -> list[str]:
