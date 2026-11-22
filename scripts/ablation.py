@@ -87,7 +87,8 @@ SUBSET_SETS = (
     ("val_s5_v2", 20),
     ("val_emrcm_v1", 30),
 )
-SECONDS, SIMS = 900.0, 256  # method-v3 (bench.METHOD)
+SECONDS, SIMS, CPUCT = 900.0, 256, 1.5  # method-v3 (bench.METHOD); constants: run_one sets
+# sc.C_PUCT per run, so the configs must not read it back
 # J2's curves (D-101): each number swept well past its value, the other held at method-v3's
 SIMS_CURVE = (8, 16, 32, 64, 128, 256, 512, 1024, 2048)
 CPUCT_CURVE = (0.25, 0.5, 1.0, 1.5, 2.0, 3.0, 4.0, 8.0)
@@ -154,7 +155,7 @@ def configs() -> dict[str, dict[str, Any]]:
     out: dict[str, dict[str, Any]] = {"v3": {}, "seed1": {"seed": 1}, "seed2": {"seed": 2}}
     for s in SIMS_CURVE:
         for c in CPUCT_CURVE:
-            if (s, c) != (SIMS, sc.C_PUCT):
+            if (s, c) != (SIMS, CPUCT):
                 out[f"sims{s}_c{c:g}"] = {"sims": s, "cpuct": c}
     return out | J3 | J5 | J4 | J7 | J8
 
@@ -497,7 +498,7 @@ def run_one(task: dict[str, Any]) -> dict[str, Any]:
     cfg = config(task["config"])
     _SETTINGS.clear()
     _SETTINGS.update(cfg)
-    sc.C_PUCT = float(cfg.get("cpuct", 1.5))
+    sc.C_PUCT = float(cfg.get("cpuct", CPUCT))
     w = _set_problem(cfg)
     jp.cold()  # every run starts with empty memo caches (D-98)
     inst = BenchmarkSet.read(task["set"]).by_id(task["id"])

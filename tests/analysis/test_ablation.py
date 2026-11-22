@@ -230,3 +230,10 @@ def test_chain_time_curve_reads_cost_at_the_same_second(tmp_path: Any) -> None:
     assert at[300] == "0.800 [10]; 100%"  # 80 vs 100; v3's 900 s cost (90) already reached
     assert at[900] == "0.889 [10]; 100%"
     assert cells[-2:] == ["50.0", "950 / 950"]
+
+
+def test_configs_do_not_depend_on_the_last_run_cpuct(monkeypatch) -> None:  # type: ignore[no-untyped-def]
+    """A worker that just ran C_PUCT 0.5 must still know `sims256_c0.5` (the 2026-11-22 crash)."""
+    monkeypatch.setattr(A.sc, "C_PUCT", 0.5)
+    names = A.configs()
+    assert "sims256_c0.5" in names and "sims256_c1.5" not in names

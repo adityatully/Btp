@@ -2334,6 +2334,139 @@ MRCM's intermediates on val_s2: 4 of 28 covered (chain D4), 5 of 28 (premix D3).
   again). (3) Built as SPEC 0.28 `hint_source: problem` (depth-4 chain in the recipe columns)
   for a copy-test comparison on stages 1–2 against the planner's hints.
 
+### E-116 (2026-11-22) Finisher switch (J5): method-v3's settings sit in a flat region; C_PUCT run crashed on a config-list bug
+coe9, commit `27de74a`, 12 workers: `ablation.py runs=J5` → `outputs/ablation/night1.jsonl`,
+read against the file's v3 run. Only the 42 dev-subset problems where the switch fires (20
+s4-s5, 22 emrcm). Mean ratio to v3 (all 42), D-98 verdict:
+- **Switch mean time (ours 20 s):** 5 s 1.001, 10 s 0.998 [0.994, 1.000], 40 s 1.028 [1.001,
+  1.061] (emrcm 1.053). **Leaves before switching (ours 3):** 1 0.994 [0.982, 1.002], 10 0.999.
+  **MRCM time share (ours 0.5):** 0.25 0.995 [0.988, 1.000], 0.75 1.017 [1.000, 1.039] (emrcm
+  1.033). All level; s4-s5 within 0.02% for every setting (the switch barely matters there).
+- **Reading.** No setting is more than 0.6% cheaper than ours; the far ends (40 s, 0.75) are
+  2-3% dearer on mixtures. The three numbers are justified as a flat optimum (case (a)).
+- **Bug (C_PUCT run).** The chained `sims256_c{0.5,1,3,8}` run stopped after one problem:
+  `configs()` left out "the v3 point" by reading `sc.C_PUCT`, which `run_one` sets per run, so
+  a worker that had just run C_PUCT 0.5 no longer knew `sims256_c0.5`. Each run's own C_PUCT
+  was always set correctly, so no earlier result is affected. Fixed: method-v3's C_PUCT is a
+  constant in `ablation.py`; regression test added. The one finished record is kept (resume).
+
+### E-115 (2026-11-21) Chain depth at equal time: depth 5 often has no plan by 900 s; depth 4 is 1.7% cheaper, level; depth 3 justified as a time trade
+Commit `27de74a` (`ablation.py summary=…` gained the time table), read from the same records as
+E-110 and E-114 (`outputs/ablation/night1.jsonl`, 110 problems): each run's trace gives its
+cheapest plan by CPU second t, compared with v3's at the same t.
+- **Correction to E-110 / E-114.** Their ratios used each run's final cost, after any
+  overshoot past 900 s. Depth 5 overshoots badly: median search 913 s, max **25,727 s** (s4-s5);
+  depth 4 max 3,127 s; v3 max 1,364 s. At t = 900 s the fair numbers are below.
+- **Depth 5 at 900 s:** a plan on only 98 of 110 (s4-s5 29 of 40, emrcm 29 of 30); median
+  first plan 23.7 s on s4-s5 and 68.9 s on mixtures (v3 0.2 s). Where both have a plan, 0.979;
+  s4-s5 1.028 (dearer), s3 1.009, s1-s2 0.969, emrcm 0.915. v3's own 900 s cost reached by 900
+  s on 60% (v3 97%). Not usable as a setting: it cannot promise a plan within the budget.
+- **Depth 4 at 900 s:** a plan on 109 of 110; 0.983 overall (s1-s2 0.976, s3 0.966, s4-s5
+  0.991, emrcm 0.987); first plan 3.0 s (s4-s5), 7.2 s (emrcm). Inside D-98's band in every group
+  but s3; reaches v3's 900 s cost on 75% (v3 97%). Ahead only from about 300 s on.
+- **Depth 1-2 at 900 s:** 1.062 and 1.039, as before (they do not overshoot).
+- **Reading.** At equal time the curve is 1.062, 1.039, 1, 0.983, 0.979 (on 98 that finish):
+  past 3 each level gains under 2% at equal time while the first plan arrives 15-300x later
+  and large problems start to go without a plan. Depth 3 is the deepest chain that always
+  plans within the first second: justified as a time trade (case (b), D-101). Q-163's chain part
+  answered. **User, 2026-11-21: depth 3 kept**; the paper reports the curve 1-5 in the search
+  (and 1-6 in the planner) as the reason.
+
+### E-114 (2026-11-21) Recipes and chain depth inside the search (J7r): chain, MRCM and the split tree are each needed; the chain-depth curve still falls at 5; Q-164 closed
+coe9, commit `670971e` (resumed after the no-plan log crash; the first 112 runs at `acab4f3`,
+same code paths), dev subset of 110, 900 s CPU, 12 workers: `ablation.py runs=leaf_chain1,
+leaf_chain2,leaf_chain5,leaf_drop_tree,leaf_drop_mrcm` → `outputs/ablation/night1.jsonl`; read
+with `summary=… noise=outputs/ablation/j1.jsonl` against the file's v3 run. Verdicts use
+D-98's band (s1-s2 6.3%, s3 0.25%, s4-s5 1.6%, emrcm 6.3%).
+- **Chain depth inside the search (mean ratio to v3, all 110).** 1 (no chain) 1.061 [1.037,
+  1.088], worse 47 / better 6; 2 1.039 [1.021, 1.060]; 3 = 1; 4 0.979 [0.964, 0.994] (E-110);
+  5 **0.961 [0.928, 0.994]** (final cost after overshoot; at 900 s see E-115), better 39 / worse 35. By group at 5: emrcm 0.885 [0.793, 0.975]
+  (better), s1-s2 0.969, s3 1.009, s4-s5 0.991 (level). Leaves (median) 2,594 / 2,700 / 1,533 /
+  273 / 49: at depth 5 the search barely branches (s4-s5 15 leaves, 38 of 40 at the time cap),
+  so its gain is the deeper finisher's, mostly on mixtures. The curve has not flattened by 5
+  (about 2% per level, emrcm 11.5% at 5); "level" overall under D-98's band, "better" under the
+  repeats-only band (Q-162). Depth 3 is not justified by convergence (Q-163: user's call).
+- **Each recipe taken out of the whole method.** No chain (`leaf_chain1`): 6.1% dearer (s1-s2
+  10%, s4-s5 7.6%). No MRCM (`leaf_drop_mrcm`): 13.4% dearer [1.068, 1.211] (s1-s2 40%, s4-s5
+  8%, emrcm 12%; s3 level). No split tree (`leaf_drop_tree`): **no plan at all on 77 of 110**
+  (all 30 mixtures, 28 of 40 s4-s5, 10 s3, 9 s1-s2), because the first plan is the plain pass
+  and without the tree it cannot make every target; on the 33 it finishes, identical cost.
+  So the split tree is what makes the method always finish; MRCM and the chain each give
+  6-13%. With E-113: direct and one mix change nothing (argued as the 0- and 1-mix cases).
+  Q-164 closed.
+
+### E-113 (2026-11-21) Why each recipe exists, in the planner (#8, #9) and chain depth 5-6: every recipe but direct and one mix carries weight; the chain-depth curve does not flatten
+coe9, commit `acab4f3`, val sets (322 problems), plain and MRCM bases, 6 workers:
+`justify_planner.py recipes=1` → `outputs/ablation/recipes.jsonl`; `drop_{direct,one_mix,
+chain,tree,mrcm}` and `chain5`, `chain6` → `outputs/ablation/j6.jsonl`; read with
+`summary=…`. Planner alone (the pass from the empty chip, greedy, 4 orders). Q-164's planner half.
+- **#8, which recipe wins each delivery group (all 322; plain base / MRCM base).**
+  - direct: never legal (0 of 978 groups). Kept as the zero-mix case; costs nothing.
+  - one mix: legal in 5%, wins 87% / 78% of those, median saving over the next best **0.0%**:
+    when it wins, a chain ties it (one mix is a chain of depth 1; `chain1` = `drop_chain`,
+    1.1292 both).
+  - chain: legal 47% / 46%, wins 89% / 78% when legal, median saving 37% (plain); 44% / 37% of
+    deliveries.
+  - split tree: always legal; the only legal recipe in 511 / 241 groups; 77% / 57% of the cost.
+    On mixtures (emrcm) it wins 95% / 84% even with MRCM present.
+  - MRCM tree: legal 73%, wins 43%, median saving 43%; a third of deliveries.
+  - The construction search beat every order on 4 of 322 (plain), 0 (MRCM).
+- **#9, each recipe taken out of the planner (mean cost ratio, all 322; plain / MRCM base).**
+  direct 1.0000 / 1.0000; one mix 1.0005 / 1.0005 (level); chain **1.129 / 1.030** (s4-s5
+  1.185 / 1.082); split tree **1.191 / 1.087** (s3 1.37, s4-s5 1.46 plain; with MRCM: s1-s3
+  level, s4-s5 1.135, emrcm 1.136); MRCM **1.209** (s1-s2 1.34). So the chain, the split tree
+  and MRCM each cost 3-21% when removed, and neither tree covers the other on s4-s5 and
+  mixtures. Direct and one mix change nothing on these sets: they are argued (the 0- and 1-mix
+  cases), not measured.
+- **MRCM budget (P16) binds on mixtures.** MRCM base: 114 of 120 emrcm problems hit the
+  2,000,000 budget at least once (s1-s2 7/80, s3 4/40, s4-s5 13/82); the split tree's budget
+  never binds. Feeds the MRCM-budget curve (one-page row 5).
+- **Chain depth 5-6 (plain base): the curve does not flatten.** Mean ratio to depth 3, all:
+  4 0.953, 5 0.891 [0.859, 0.925], 6 0.834 [0.797, 0.874] (emrcm 0.73, s1-s2 0.83, s4-s5 0.91;
+  s3 level). Cost of time: 0.1 s/problem at 3, 1.2 at 4, 9.2 at 5, 55 at 6 (8-10x per level);
+  20 and 56 of 322 capped at 5 and 6 (left out). Against the curve's best each step still gains
+  8-17%, so there is no saturation point by 6. In the planner alone depth is a pure time trade;
+  whether the method gains is the search run (`leaf_chain1/2/5`, J7r), still running.
+
+### E-112 (2026-11-21) Time budget (J0) and verdict thresholds (J9): 900 s is not a plateau on s3-s5; no threshold turns a win into a loss
+coe9, commit `670971e`, offline from the final runs' records: `justify_offline.py
+j0=outputs/bench/b1_v3_all.jsonl` and `j9=…` → `outputs/ablation/j0.log`, `j9.log`. Test
+sets are only read here, nothing is tuned on them.
+- **J0, cost against CPU time (mean cost(t) / cost(900 s), fluid goal).** s1 is at 1.000 by
+  120 s; s2 1.000 by 300 s. At 600 s: heldout 1.001, s3 1.008, s4 1.009 [1.004, 1.014], s5 1.012
+  [1.001, 1.029]; at 300 s: 1.005, 1.012, 1.026, 1.030. Steps goal the same shape (s4 1.010,
+  s5 1.008 at 600 s); waste goal falls longest (heldout 1.089, s4 1.043, s5 1.031 at 600 s). The
+  final plan is found after 600 s in 22% of heldout, 30% of s4 and 11% of s5 runs (fluid).
+  So 900 s is **not** converged under D-101's 0.5% rule on heldout-waste and s3-s5: the gain
+  halves with each doubling (300→600 s about 2%, 600→900 s about 1% on s4-s5) but has not
+  stopped. 900 s is a chosen budget, argued (case (c)), with this curve and the 60 s column
+  (Q-139) reported. Against the best planner run the method is already cheaper by 60-120 s on
+  every set except heldout/s4 waste (1.1-1.2 at 120 s).
+- **J0, the cap's overshoot.** Search CPU median 900 s; 32 of 1,815 runs pass 990 s (s3 1,
+  s4 12, s5 19), max 2,442 s (s5) and 1,524 s (s4): one leaf finish can run long past the cap.
+  The finisher switch fired in 0-17% of runs (s4 50/300, s5 51/315), at the 2nd-4th leaf.
+  Threat to validity: state it, or report the costs at the cap from the trace.
+- **J9, verdicts at 5% / 10% (D-69) / 20% losses.** 46 (method, set) cells with n ≥ 10. At
+  10%: 38 beats, 8 level, 0 loses. 13 cells change across the three thresholds, every one
+  between level and beats; no threshold gives a loss. At n = 20 the verdict matches the full
+  set in 100% of cells except dfmm s2 86%, mtwm s2 92%, nfsp s1 94%, fukui s2 87%, simop s1
+  75%, mtmd s2 44% and s3 48% (mtmd's s2-s3 cells are the fragile ones). 10% is justified
+  as argued (case (c)): the claim "never loses" holds at every threshold.
+
+### E-111 (2026-11-20) More target orders inside the search: no gain, dearer on mixtures; 4 orders justified as a time trade
+coe9, commit `1775e95`, dev subset of 110, 900 s CPU, 18 workers: `ablation.py
+runs=more_orders4,more_orders12` appended to `outputs/ablation/night1.jsonl` (read against its
+v3 run). The rules' orders plus 4 or 12 more distinct orders (seeded per problem, as J6's
+order curve draws them) at the first plan and every leaf finish.
+- Mean ratio to v3 (all 110): +4 orders 1.0075 [0.9992, 1.0171] (worse 16 / better 7); +12
+  orders 1.0103 [1.0004, 1.0218] (18 / 11). s1-s3: identical (one target order there).
+  s4-s5: 1.0013 and 1.0010, level (8/5, 9/9). emrcm: 1.026 and 1.036 dearer (leaves median 50
+  and 49 vs v3's 313: each finish runs once per order, so the tree gets fewer leaves).
+- **Reading.** In the planner alone the best of 36 orders is 4.2% cheaper than the 4 rules on
+  > 4 targets (E-109), but inside method-v3 the extra orders cost leaves and gain nothing; the
+  search makes up the order gap itself. So 4 orders is justified as a time trade (case (b) of
+  D-101): more orders help the planner alone, not the method. Q-163's orders part closed.
+
 ### E-110 (2026-11-20) Simulations curve (J2): 256 is the best point; chain depth 4 inside the search is 2.1% cheaper; Q-159 closed
 coe9, commit `86a47f2` code (night run started before `1775e95`), dev subset of 110, 900 s CPU,
 18 workers: `ablation.py runs=v3,leaf_chain4,sims{32,64,128,512,1024,2048}_c1.5` →

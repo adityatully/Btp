@@ -42,8 +42,8 @@ chats. Last updated 2026-11-03.*
 | Q-158 | Is every choice in method-v3 backed by an ablation, a sweep, a proof or a citation? | 6.9 (D-98) |
 | Q-159 | Is the s4-s5 depth limit (E-81) a property of the method, or of 256 simulations per move? | **Closed 2026-11-20 (E-110):** of sims per move (32 sims: 12 moves on s4-s5; 2048: 0), but deeper is dearer, so not a limit on cost |
 | Q-160 | How much do method-v3's results vary between identical runs (CPU deadline, tie order)? | **Closed 2026-11-19 (E-106):** identical runs within 0.2%; random tie-breaking 3% dearer, so the candidate order is part of the method |
-| Q-163 | Do chain depth 4 and more target orders, cheaper by ~4-5% in the planner alone (E-109), make method-v3 cheaper too? | Chain: yes, 2.1% (E-110), keep-or-change is the user's call; orders: J7m running |
-| Q-164 | Why does each planner recipe exist (chain, split tree, MRCM tree), from first principles and by measurement? | 6.9: recipe counts (#8) and drop-one in the planner and the search (#9) |
+| Q-163 | Do chain depth 4 and more target orders, cheaper by ~4-5% in the planner alone (E-109), make method-v3 cheaper too? | Chain: at equal time (900 s) depth 4 is 1.7% cheaper (level), depth 5 has no plan by 900 s on 12/110 (E-115); **depth 3 kept** (user, 2026-11-21); orders: **no** (E-111: +4/+12 orders 0.8-1.0% dearer, emrcm 2.6-3.6% dearer from fewer leaves) |
+| Q-164 | Why does each planner recipe exist (chain, split tree, MRCM tree), from first principles and by measurement? | **Closed** (E-113, E-114): in the method, no chain 6.1% dearer, no MRCM 13.4%, no split tree = no plan on 77/110; direct and one mix change nothing (argued) |
 | Q-162 | Which noise band reads J2-J7: D-98's (all of J1's runs, seeds included: up to 6.3%) or the repeats' alone (up to 0.2%)? | Waiting on the user (E-106) |
 | Q-49 | How do the agent and planner compare with published heuristics? Could one be a better teacher? | 2.4 (stages 1–2), 6.3 (all) |
 | Q-148 | Do the gaps on small problems (s1 6% above optima, deep 1:1 dilutions, NFSP level) close if the search uses its leftover time? | **Closed 2026-11-15 (E-95):** no; more sims at the root cheaper on 8 of 120, gap 2.88% → 2.80%; method-v3 stays |
@@ -980,7 +980,11 @@ tree: the only recipes that can always make a target). Direct and one mix are ar
 and the two trees need numbers: (#8) per delivery group, which recipe wins, how often it is
 legal, and its saving over the next best recipe (`justify_planner.py recipes=1`); (#9) each
 taken out of the planner (`drop_*`, both bases) and of the whole method (`leaf_chain1` = no
-chain, `leaf_drop_tree`, `leaf_drop_mrcm`; group J7r).
+chain, `leaf_drop_tree`, `leaf_drop_mrcm`; group J7r). **Planner half (E-113, 2026-11-21):**
+removing the chain costs 12.9% (plain) / 3.0% (MRCM base), the split tree 19.1% / 8.7%, MRCM
+20.9%; direct is never legal and one mix always ties a chain (both 1.000). Open until the search
+half (J7r) is read. **Closed (E-114, 2026-11-21):** inside the method, no chain costs 6.1%,
+no MRCM 13.4%, and without the split tree 77 of 110 problems get no plan at all.
 
 **Q-163 Do chain depth 4 and more target orders make method-v3 cheaper?** · **Open → plan
 6.9, J7** (E-109, 2026-11-20) In the planner alone chain depth 4 is 4.8% cheaper than 3 (10x
