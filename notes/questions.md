@@ -44,6 +44,7 @@ chats. Last updated 2026-11-03.*
 | Q-160 | How much do method-v3's results vary between identical runs (CPU deadline, tie order)? | **Closed 2026-11-19 (E-106):** identical runs within 0.2%; random tie-breaking 3% dearer, so the candidate order is part of the method |
 | Q-163 | Do chain depth 4 and more target orders, cheaper by ~4-5% in the planner alone (E-109), make method-v3 cheaper too? | Chain: at equal time (900 s) depth 4 is 1.7% cheaper (level), depth 5 has no plan by 900 s on 12/110 (E-115); **depth 3 kept** (user, 2026-11-21); orders: **no** (E-111: +4/+12 orders 0.8-1.0% dearer, emrcm 2.6-3.6% dearer from fewer leaves) |
 | Q-164 | Why does each planner recipe exist (chain, split tree, MRCM tree), from first principles and by measurement? | **Closed** (E-113, E-114): in the method, no chain 6.1% dearer, no MRCM 13.4%, no split tree = no plan on 77/110; direct and one mix change nothing (argued) |
+| Q-165 | Does a larger MRCM budget (4x, 16x: 5.6% / 8.3% cheaper in the planner alone, E-118) or more blend partners make method-v3 cheaper at 900 s? | 6.9, J7 (`leaf_mrcm_budget4x/16x`, `leaf_blend2/8`) |
 | Q-162 | Which noise band reads J2-J7: D-98's (all of J1's runs, seeds included: up to 6.3%) or the repeats' alone (up to 0.2%)? | Waiting on the user (E-106) |
 | Q-49 | How do the agent and planner compare with published heuristics? Could one be a better teacher? | 2.4 (stages 1–2), 6.3 (all) |
 | Q-148 | Do the gaps on small problems (s1 6% above optima, deep 1:1 dilutions, NFSP level) close if the search uses its leftover time? | **Closed 2026-11-15 (E-95):** no; more sims at the root cheaper on 8 of 120, gap 2.88% → 2.80%; method-v3 stays |
@@ -972,6 +973,12 @@ longer, gap 1.8% on 60 x 60 u5, 6.5% on 30 x 30 u5, 15% on 30 x 30 u1.*
 2026-11-15) The user finds routing-based more interesting (no blocked areas); the doc's default
 is a module-based harness first, hybrid end state. The router work (D-89 steps 2-6) is needed
 for every choice.
+
+**Q-165 Does a larger MRCM budget pay inside the search?** · **Open → plan 6.9, J7** (E-118,
+2026-11-22) In the planner alone the MRCM tree's budget does not saturate: 4x is 5.6% cheaper,
+16x 8.3% (mixtures 20%), at 2.5x / 8.5x the time on mixtures. Blend partners past 4 gain under
+0.8%. As with chain depth (E-115), read inside the search at equal time: `ablation.py
+runs=leaf_mrcm_budget4x,leaf_mrcm_budget16x,leaf_blend2,leaf_blend8`.
 
 **Q-164 Why does each planner recipe exist?** · **Open → plan 6.9** (user, 2026-11-20) The
 recipes answer "how can this droplet be made from what is on the chip": 0 mixes (direct), 1 mix

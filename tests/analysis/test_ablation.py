@@ -71,7 +71,7 @@ def test_one_short_run_records_depth() -> None:
 def test_new_groups_and_switch_filter() -> None:
     assert len(A.expand("J3")) == 10 and len(A.expand("J5")) == 8
     assert len(A.expand("J4")) == 4 and len(A.expand("J8")) == 9
-    assert len(A.expand("J7")) == 9 and len(A.expand("J7o")) == 4
+    assert len(A.expand("J7")) == 11 and len(A.expand("J7o")) == 4
     assert A.expand("J7m") == [("v3", 0), ("more_orders4", 0), ("more_orders12", 0)]
     assert A.config("backup_max+sims64_c0.5") == {"backup": "max", "sims": 64, "cpuct": 0.5}
     entries = json.loads(A.SUBSET.read_text())
@@ -237,3 +237,13 @@ def test_configs_do_not_depend_on_the_last_run_cpuct(monkeypatch) -> None:  # ty
     monkeypatch.setattr(A.sc, "C_PUCT", 0.5)
     names = A.configs()
     assert "sims256_c0.5" in names and "sims256_c1.5" not in names
+
+
+def test_mrcm_budget_leaf_configs_name_planner_patches() -> None:
+    """E-118: the search's MRCM-budget configs point at the planner's own patches and are
+    read in the equal-time table."""
+    planner = A.jp.configs()
+    for name in ("leaf_mrcm_budget4x", "leaf_mrcm_budget16x"):
+        cfg = A.configs()[name]
+        assert cfg["planner"] in planner
+        assert name in A.TIME_CURVE

@@ -129,6 +129,10 @@ J7 = {  # planner settings inside the search's finisher (P1, P5, P6); J6's patch
     "leaf_drop_mrcm": {"planner": "drop_mrcm"},
     "leaf_blend2": {"planner": "blend2"},
     "leaf_blend8": {"planner": "blend8"},
+    # E-118: the MRCM tree's budget binds on 114/120 mixtures; 4x / 16x are 5.6% / 8.3%
+    # cheaper in the planner alone, 2.5x / 8.5x its time on mixtures
+    "leaf_mrcm_budget4x": {"planner": "mrcm_budget4x"},
+    "leaf_mrcm_budget16x": {"planner": "mrcm_budget16x"},
     "orders_given": {"orders": ("given",)},
     "orders_dear": {"orders": ("dear",)},
     "orders_dear_cheap": {"orders": ("dear", "cheap")},
@@ -708,21 +712,30 @@ def summarise(paths: list[Path], noise: Path | None = None) -> str:
 
 TIMES = (10, 30, 60, 120, 300, 600, 900)  # CPU seconds at which the time curves are read
 CHAIN_CURVE = ("leaf_chain1", "leaf_chain2", "leaf_chain4", "leaf_chain5")
+# planner settings read at equal time: chain depth (Q-163), blend partners and MRCM budget (E-118)
+TIME_CURVE = (
+    *CHAIN_CURVE,
+    "leaf_blend2",
+    "leaf_blend8",
+    "leaf_mrcm_budget4x",
+    "leaf_mrcm_budget16x",
+)
 
 
 def time_curves(by: dict[tuple[str, int], dict[str, dict]]) -> list[str]:
-    """What a chain depth gains for its time (Q-163): per config and group, the mean of
+    """What a planner setting (chain depth, Q-163; blend partners, MRCM budget, E-118) gains
+    for its time: per config and group, the mean of
     cost(t) / v3's cost(t) at the same CPU second t over the problems both have a plan by t
     (n in brackets); v3's cost at 900 s reached by t (share of problems); the median CPU
     second of the first plan; and the median and largest search CPU seconds (the cap's
     overshoot)."""
     base = by.get(("v3", 0))
-    have = [c for c in CHAIN_CURVE if (c, 0) in by]
+    have = [c for c in TIME_CURVE if (c, 0) in by]
     if not base or not have:
         return []
     lines = [
-        "## Chain depth against time (Q-163): cost(t) / v3's cost(t) [n]; v3's 900 s cost"
-        " reached by t; first plan s (median); search s (median / max)",
+        "## Planner settings against time (Q-163, E-118): cost(t) / v3's cost(t) [n];"
+        " v3's 900 s cost reached by t; first plan s (median); search s (median / max)",
         "",
         "| config | group | " + " | ".join(f"{t} s" for t in TIMES) + " | first plan | search s |",
         "|---|---|" + "---|" * len(TIMES) + "---|---|",

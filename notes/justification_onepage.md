@@ -20,20 +20,22 @@ CPU-h ÷ workers = wall hours (18 free cores on coe9: 27 CPU-h ≈ 1.5 h).
 | Finisher switch | 20 s, 3 leaves, 0.5 | 5/10/40 s, 1/10 leaves, 0.25/0.75 share all level; none > 0.6% cheaper, the far ends 2-3% dearer on mixtures (E-116) | (a) |
 | Chain depth | 3 | At equal time (900 s): 1 / 2 / 4 / 5 = 1.062 / 1.039 / 0.983 / 0.979; depth 5 has no plan by 900 s on 12/110 and overshoots to 25,727 s; depth 3 is the deepest that always plans in under 1 s (E-113, E-115) | (b), kept (user, 2026-11-21) |
 | Simulations per move | 256 | Lowest mean on the 32-2048 curve; fewer is 1-2% dearer on s4-s5, more gains nothing (E-110) | (a) |
+| C_PUCT | 1.5 | Lowest mean on 0.5-8 at 256 sims; 0.5 / 1 / 3 / 8 are 1.4 / 1.5 / 1.0 / 2.4% dearer, all level; 8 dearer on s4-s5 (E-117) | (a) |
+| Split-tree extra steps | 4 | 1-8 give identical plans on all 322 val problems (E-118) | (a) |
 | Verdict threshold | 10% losses | At 5/10/20% no cell becomes a loss; 13 of 46 move between level and beats (E-112) | (c), shown robust |
 
 ## Not justified yet
 
 | Number | Ours | Evidence | Open |
 |---|---|---|---|
-| (none left) | | | |
+| MRCM budget | 2,000,000 | Planner alone: 4x 5.6%, 16x 8.3% cheaper (mixtures 20%), 2.5x / 8.5x time on mixtures; not saturated (E-118) | Does it pay inside the search at 900 s? |
+| Blend partners | 4 | Planner: within 0.8% of every droplet; saturates at 4 (MRCM base), 6 (plain) (E-118) | Confirm in the search (`leaf_blend8`) |
 
 ## Next, in order
 
 | # | Number | Ours | Run | Cost |
 |---|---|---|---|---|
-| 3 | C_PUCT | 1.5 | 0.25 … 8 at 256 sims (J2's second curve) | ~10 h, one night |
-| 5 | Blend partners; split-tree steps; MRCM budget | 4; 4; 2,000,000 | J6 curves not run yet (MRCM base); MRCM budget binds on 114/120 mixtures (E-113) | ~3-6 h |
+| 5 | MRCM budget; blend partners in the search | 2,000,000; 4 | `leaf_mrcm_budget4x`, `leaf_mrcm_budget16x`, `leaf_blend2`, `leaf_blend8` on the dev subset, equal-time table | ~4 h on 36 workers |
 
 ## Argued or cited (no run planned)
 

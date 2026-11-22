@@ -2334,6 +2334,47 @@ MRCM's intermediates on val_s2: 4 of 28 covered (chain D4), 5 of 28 (premix D3).
   again). (3) Built as SPEC 0.28 `hint_source: problem` (depth-4 chain in the recipe columns)
   for a copy-test comparison on stages 1–2 against the planner's hints.
 
+### E-118 (2026-11-22) Planner curves (J6): split-tree extra steps flat; blend partners 4 near saturation; the MRCM budget does not saturate (16x 8.3% cheaper, mixtures 20%)
+coe9, commit `d338c99`, val sets (322 problems), plain and MRCM bases: `justify_planner.py`
+curves → `outputs/ablation/j6.jsonl` (logs `curves_plain.log`, `curves_mrcm.log`); read with
+`summary=outputs/ablation/j6.jsonl`. Planner alone, no search; ratios to the base (ours).
+- **Split-tree extra steps (ours 4).** 1, 2, 3, 5, 6, 8: identical cost on every problem, both
+  bases (1.0000, worse/better 0/0); saturates at 1. The tree never needs more than one extra
+  step on these sets; 4 costs nothing (time ratio 0.8-1.0). Flat, case (a).
+- **Blend partners (ours 4).** Plain base, all: 0 1.025 (worse), 1 1.016, 2 1.010, 3 1.003, **4**,
+  6 0.995, 8 0.994, 12 0.993, every droplet 0.992 (better, 6-20 better of 322). MRCM base, all:
+  6 0.997, every droplet 0.9965; curve saturates at **4** (MRCM base) and 6 (plain base). The
+  gain past 4 is all on s4-s5 and mixtures (plain s4-s5 still 1.4% from the end at 4; s1-s3
+  flat from 3). Time: plain 1.03-1.13x, MRCM base no extra time. Within 0.8% of exhaustive in
+  the planner alone, inside D-98's band for s4-s5 (1.6%) and mixtures (6.3%): case (a) on the
+  MRCM base; `leaf_blend8` in the search checks it (queued).
+- **MRCM budget (ours 2,000,000).** MRCM base, all: 0.25x 1.100, 0.5x 1.053 (worse), 4x **0.944**
+  [0.924, 0.961], 16x **0.917** [0.893, 0.940] (better 48, worse 0). By group at 16x: mixtures
+  0.800, s1-s2 0.966, s3 0.964, s4-s5 0.980. Curve per group: saturates at 4x on s3 and s4-s5,
+  not by 16x on s1-s2 and mixtures. Time on mixtures: 4x 2.5x (61.7 s/problem, 17 of 120 hit
+  the planner cap), 16x 8.5x (171.7 s/problem, 29 capped); elsewhere about 1x. The budget binds
+  on 114 of 120 mixtures (E-113). **Not justified yet**: the largest planner gain left. Like
+  chain depth (E-115), the question is whether it pays inside the search at 900 s:
+  `leaf_mrcm_budget4x`, `leaf_mrcm_budget16x` added to `ablation.py` (read at equal time).
+- **Also in this file (repeats of E-109, E-113):** lookahead 2-10 within 0.01%; chain 1-6 and
+  recipes as before.
+
+### E-117 (2026-11-22) C_PUCT curve (J2's second curve): 1.5 is the lowest mean; every other value is level, 8 is dearer on s4-s5
+coe9, commit `d338c99`, dev subset of 110, 256 sims, 900 s CPU, 12 workers: `ablation.py
+runs=sims256_c0.5,sims256_c1,sims256_c3,sims256_c8` → `outputs/ablation/night1.jsonl` (439 runs
+plus the one kept from the crashed start, E-116); read with `summary=… noise=outputs/ablation/j1.jsonl`
+against the file's v3 run (C_PUCT 1.5).
+- **Mean ratio to v3 (all 110), D-98 verdict.** 0.5: 1.014 [1.000, 1.031]; 1: 1.015 [1.001,
+  1.033]; 3: 1.010 [0.994, 1.029]; 8: 1.024 [1.005, 1.045]. All level overall; 8 is worse on
+  s4-s5 (1.019 [1.001, 1.042]). No value is cheaper than 1.5 in any group by more than 0.2%
+  (s3 at 3: 0.998).
+- **Curve (cost / best of the curve, all):** 0.5 1.033, 1 1.035, **1.5 1.020**, 3 1.028, 8
+  1.043; plateau (within 0.5% of the best) = 1.5 only. s3: 0.5-3 all within 0.5%; s4-s5:
+  0.5-1.5 within 0.5%, 3 and 8 dearer. Depth and leaves barely move (median depth 4-6).
+- **Reading.** A flat optimum with 1.5 at its low point: smaller values are 1-1.5% dearer,
+  larger values 1-2.4% dearer, all inside D-98's band. C_PUCT 1.5 is justified as case (a).
+  0.25, 2 and 4 not run: the curve already has both sides of the minimum.
+
 ### E-116 (2026-11-22) Finisher switch (J5): method-v3's settings sit in a flat region; C_PUCT run crashed on a config-list bug
 coe9, commit `27de74a`, 12 workers: `ablation.py runs=J5` → `outputs/ablation/night1.jsonl`,
 read against the file's v3 run. Only the 42 dev-subset problems where the switch fires (20
